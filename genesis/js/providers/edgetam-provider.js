@@ -1,0 +1,130 @@
+/**
+ * EdgeTAMGateProvider: wraps any live provider (MODNet etc.) and removes stray blobs from its matte (a second person, a chair,
+ * a lamp) using EdgeTAM (Apache-2.0). Keeps or drops WHOLE blobs of the base matte, so it never cuts holes into the person and the
+ * base model's soft hair edges stay untouched.
+ *
+ * The EdgeTAM encoder is the expensive part, so it runs only every `refreshEvery` frames in the background; in between, the last
+ * EdgeTAM mask (grown a little to tolerate motion) is re-intersected with the CURRENT base matte every frame, which is cheap.
+ * If EdgeTAM cannot load or fails, the wrapper silently passes the base matte through unchanged: it can only ever improve things.
+ *
+ * The wrapper is a Proxy: every property/method not overridden here is read from and written to the base provider, and
+ * `instanceof` still matches the base class, so the rest of the app treats it exactly like the base provider.
+ */
+(function (root) {
+  'use strict';
+  const V = root.VS = root.VS || {};
+  const G = 256;                                  // gate grid
+
+  function create(base, options) {
+    const o = Object.assign({ refreshEvery: 8, dilate: 2, keepDilate: 3, feather: 2, minOverlap: 0.3 }, options || {});
+    const own = {
+      status: 'idle', gateError: null, gate: null, gateAge: 0, frame: 0, busy: false, enc: null, dec: null, ortRef: null,
+      info: null, frameCanvas: null, frameCtx: null, baseCanvas: null, baseCtx: null, outCanvas: null, outCtx: null, gateCanvas: null, gateCtx: null, gateImg: null
+    };
+    const C = () => V.EdgeTAMCore;
+
+    function ensureCanvases() {
+      if (own.frameCanvas) return;
+      const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+      own.frameCanvas = mk(1024, 1024); own.frameCtx = own.frameCanvas.getContext('2d', { willReadFrequently: true });
+      own.baseCanvas = mk(G, G); own.baseCtx = own.baseCanvas.getContext('2d', { willReadFrequently: true });
+      own.gateCanvas = mk(G, G); own.gateCtx = own.gateCanvas.getContext('2d'); own.gateImg = own.gateCtx.createImageData(G, G);
+      own.outCanvas = mk(2, 2); own.outCtx = own.outCanvas.getContext('2d');
+    }
+
+    function alphaAtGate(maskCanvas) {
+      own.baseCtx.clearRect(0, 0, G, G);
+      own.baseCtx.drawImage(maskCanvas, 0, 0, G, G);
+      const d = own.baseCtx.getImageData(0, 0, G, G).data, a = new Uint8Array(G * G);
+      for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3];
+      return a;
+    }
+
+    async function load(opts) {
+      own.status = 'loading';
+      try {
+        await V.loadOrt();
+        if (typeof ort === 'undefined') throw new Error('onnxruntime-web unavailable');
+        const gpu = typeof navigator !== 'undefined' && !!navigator.gpu;
+        const id = gpu ? 'edgetam' : 'edgetam-fp32';                   // fp16 encoder needs WebGPU; fp32 runs on wasm
+        const { bytes, entry } = await V.ModelStore.load(id, { onProgress: opts && opts.onProgress });
+        const ext = Object.keys(entry.external).map((path) => ({ path, data: bytes[entry.external[path]] }));
+        const mkExt = (name) => ext.filter((e) => e.path === name);
+        own.enc = await ort.InferenceSession.create(bytes[entry.encoder], { executionProviders: gpu ? ['webgpu', 'wasm'] : ['wasm'], graphOptimizationLevel: 'all', externalData: mkExt(Object.keys(entry.external).find((k) => /vision_encoder/.test(k))) });
+        own.dec = await ort.InferenceSession.create(bytes[entry.decoder], { executionProviders: ['wasm'], graphOptimizationLevel: 'all', externalData: mkExt('prompt_encoder_mask_decoder.onnx_data') });
+        own.ortRef = ort; own.status = 'ready';
+      } catch (e) { own.status = 'failed'; own.gateError = String((e && e.message) || e); }
+    }
+
+    async function refresh(video, baseAlpha) {
+      if (own.busy || own.status !== 'ready') return;
+      own.busy = true;
+      try {
+        ensureCanvases();
+        own.frameCtx.drawImage(video, 0, 0, 1024, 1024);
+        const rgba = own.frameCtx.getImageData(0, 0, 1024, 1024).data;
+        const r = await C().refreshGate(own.ortRef, own.enc, own.dec, rgba, baseAlpha, G, G);
+        if (!r) { own.gate = null; return; }
+        const grown = C().softGate(r.gate, G, G, o.dilate, 0);          // the SAME mask that is used every frame, so the safety check matches reality
+        const keep = C().componentGate(baseAlpha, grown, G, G, 128, o.minOverlap);
+        let baseArea = 0, kept = 0; for (let i = 0; i < baseAlpha.length; i++) if (baseAlpha[i] >= 128) { baseArea++; if (keep[i]) kept++; }
+        const safe = C().gateIsSafe(baseArea, kept, r.obj);
+        let gateFg = 0; for (let i = 0; i < r.gate.length; i++) if (r.gate[i]) gateFg++;
+        own.info = { iou: r.iou, obj: r.obj, gateFrac: gateFg / r.gate.length, baseArea, kept, safe, box: [r.bbox.x0, r.bbox.y0, r.bbox.x1, r.bbox.y1] };
+        own.gate = safe ? grown : null;
+        own.gateAge = 0;
+      } catch (e) { own.gateError = String((e && e.message) || e); own.gate = null; }
+      finally { own.busy = false; }
+    }
+
+    function compose(mask) {
+      const w = mask.width, h = mask.height;
+      if (own.outCanvas.width !== w || own.outCanvas.height !== h) { own.outCanvas.width = w; own.outCanvas.height = h; }
+      const baseAlpha = alphaAtGate(mask);
+      const keep = C().componentGate(baseAlpha, own.gate, G, G, 128, o.minOverlap);
+      const soft = C().softGate(keep, G, G, o.keepDilate, o.feather), d = own.gateImg.data;
+      for (let i = 0, j = 0; i < soft.length; i++, j += 4) { d[j] = d[j + 1] = d[j + 2] = 255; d[j + 3] = soft[i]; }
+      own.gateCtx.putImageData(own.gateImg, 0, 0);
+      own.outCtx.globalCompositeOperation = 'copy'; own.outCtx.drawImage(mask, 0, 0, w, h);
+      own.outCtx.globalCompositeOperation = 'destination-in'; own.outCtx.drawImage(own.gateCanvas, 0, 0, w, h);
+      own.outCtx.globalCompositeOperation = 'source-over';
+      return own.outCanvas;
+    }
+
+    const overrides = {
+      async initialize(...args) {
+        const r = await base.initialize(...args);
+        await load({ onProgress: base.onProgress });
+        return r;
+      },
+      async segment(video) {
+        const res = await base.segment(video);
+        if (own.status !== 'ready' || !res || !res.segmentationMask) return res;
+        ensureCanvases();
+        own.frame++; own.gateAge++;
+        const first = own.frame === 1, due = own.gateAge >= o.refreshEvery || !own.gate;
+        if (first || (due && !own.busy)) {
+          const alpha = alphaAtGate(res.segmentationMask);
+          const p = refresh(video, alpha);
+          if (first) await p;                                         // the first picture must not show a stray blob
+        }
+        return own.gate ? Object.assign({}, res, { segmentationMask: compose(res.segmentationMask) }) : res;
+      },
+      dispose() { try { own.enc && own.enc.release && own.enc.release(); own.dec && own.dec.release && own.dec.release(); } catch (e) { /* ignore */ } own.enc = own.dec = null; own.status = 'idle'; return base.dispose && base.dispose(); },
+      get label() { return String(base.label || 'Matte') + ' + EdgeTAM cleanup' + (own.status === 'failed' ? ' (cleanup unavailable)' : ''); },
+      set label(v) { base.label = v; },
+      get edgetam() { return { status: own.status, error: own.gateError, gateActive: !!own.gate, refreshEvery: o.refreshEvery, info: own.info }; }
+    };
+
+    return new Proxy(base, {
+      get(t, k) { if (k in overrides || Object.getOwnPropertyDescriptor(overrides, k)) return Object.getOwnPropertyDescriptor(overrides, k).get ? Object.getOwnPropertyDescriptor(overrides, k).get() : overrides[k]; const v = t[k]; return typeof v === 'function' ? v.bind(t) : v; },
+      set(t, k, v) { if (k === 'label') { t.label = v; return true; } t[k] = v; return true; },
+      has(t, k) { return k in overrides || k in t; },
+      getPrototypeOf(t) { return Object.getPrototypeOf(t); }
+    });
+  }
+
+  const api = { create };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  V.EdgeTAMGate = api;
+})(typeof window !== 'undefined' ? window : globalThis);

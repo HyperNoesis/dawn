@@ -1,0 +1,23 @@
+node_modules/
+www/
+android/app/build/
+android/build/
+android/.gradle/
+gate_report.json
+gate_last_frame.png
+
+# Studio Export: models are fetched from GitHub releases (server/studio-export/fetch_models.sh), never committed (GitHub blocks files over 100 MB)
+server/studio-export/weights/*.pth
+server/studio-export/weights/*.onnx
+server/studio-export/vendor/
+__pycache__/
+*.pyc
+*.mp4
+
+# Engine weights are downloaded by scripts/fetch-models.js (registry in models/registry.json), never committed
+# (v0.97 repo keeps the weights in git: models/edgetam*)
+models/birefnet*
+models/sam21*
+models/*.part
+
+# (v0.97 repo keeps the weights in git: models/ppmatting*.onnx)

@@ -1,0 +1,378 @@
+{
+ "sway": {
+  "modnet@384": {
+   "mad": 8.05,
+   "edge": 72.6,
+   "soft": 259.4,
+   "dtssd": 7.719,
+   "flick_bg": 0.0,
+   "ms": 52.0,
+   "worst": 10.2
+  },
+  "modnet@512": {
+   "mad": 7.13,
+   "edge": 64.3,
+   "soft": 238.2,
+   "dtssd": 7.46,
+   "flick_bg": 0.0,
+   "ms": 112.0,
+   "worst": 9.9
+  },
+  "rvm@384(recurrent)": {
+   "mad": 6.62,
+   "edge": 59.7,
+   "soft": 223.0,
+   "dtssd": 6.883,
+   "flick_bg": 0.0012,
+   "ms": 52.0,
+   "worst": 9.8
+  },
+  "pp-v2@384": {
+   "mad": 7.78,
+   "edge": 68.7,
+   "soft": 250.5,
+   "dtssd": 7.525,
+   "flick_bg": 0.0037,
+   "ms": 33.0,
+   "worst": 9.3
+  },
+  "pp-v2@512": {
+   "mad": 6.42,
+   "edge": 57.4,
+   "soft": 219.2,
+   "dtssd": 7.167,
+   "flick_bg": 0.0032,
+   "ms": 63.0,
+   "worst": 8.1
+  }
+ },
+ "fast": {
+  "modnet@384": {
+   "mad": 8.29,
+   "edge": 55.0,
+   "soft": 158.2,
+   "dtssd": 6.678,
+   "flick_bg": 0.0153,
+   "ms": 55.0,
+   "worst": 18.0
+  },
+  "modnet@512": {
+   "mad": 8.38,
+   "edge": 55.7,
+   "soft": 162.4,
+   "dtssd": 6.73,
+   "flick_bg": 0.0126,
+   "ms": 114.0,
+   "worst": 17.9
+  },
+  "rvm@384(recurrent)": {
+   "mad": 9.43,
+   "edge": 63.4,
+   "soft": 202.3,
+   "dtssd": 7.458,
+   "flick_bg": 0.0004,
+   "ms": 54.0,
+   "worst": 17.7
+  },
+  "pp-v2@384": {
+   "mad": 9.59,
+   "edge": 62.6,
+   "soft": 197.0,
+   "dtssd": 7.568,
+   "flick_bg": 0.0426,
+   "ms": 33.0,
+   "worst": 18.5
+  },
+  "pp-v2@512": {
+   "mad": 9.55,
+   "edge": 63.7,
+   "soft": 207.7,
+   "dtssd": 7.825,
+   "flick_bg": 0.0082,
+   "ms": 69.0,
+   "worst": 17.8
+  }
+ },
+ "lowlight": {
+  "modnet@384": {
+   "mad": 48.84,
+   "edge": 95.3,
+   "soft": 169.5,
+   "dtssd": 12.015,
+   "flick_bg": 1.7385,
+   "ms": 56.0,
+   "worst": 87.7
+  },
+  "modnet@512": {
+   "mad": 11.28,
+   "edge": 55.2,
+   "soft": 160.7,
+   "dtssd": 7.366,
+   "flick_bg": 0.362,
+   "ms": 117.0,
+   "worst": 40.2
+  },
+  "rvm@384(recurrent)": {
+   "mad": 5.55,
+   "edge": 40.7,
+   "soft": 172.2,
+   "dtssd": 4.313,
+   "flick_bg": 0.0026,
+   "ms": 50.0,
+   "worst": 6.3
+  },
+  "pp-v2@384": {
+   "mad": 4.31,
+   "edge": 30.0,
+   "soft": 138.6,
+   "dtssd": 4.396,
+   "flick_bg": 0.0654,
+   "ms": 36.0,
+   "worst": 10.4
+  },
+  "pp-v2@512": {
+   "mad": 3.22,
+   "edge": 23.9,
+   "soft": 125.7,
+   "dtssd": 3.414,
+   "flick_bg": 0.0007,
+   "ms": 67.0,
+   "worst": 4.0
+  }
+ },
+ "backlit": {
+  "modnet@384": {
+   "mad": 2.76,
+   "edge": 20.5,
+   "soft": 64.2,
+   "dtssd": 2.489,
+   "flick_bg": 0.0004,
+   "ms": 57.0,
+   "worst": 5.0
+  },
+  "modnet@512": {
+   "mad": 2.6,
+   "edge": 19.4,
+   "soft": 57.9,
+   "dtssd": 2.176,
+   "flick_bg": 0.0,
+   "ms": 120.0,
+   "worst": 3.9
+  },
+  "rvm@384(recurrent)": {
+   "mad": 3.04,
+   "edge": 22.4,
+   "soft": 73.4,
+   "dtssd": 2.213,
+   "flick_bg": 0.0015,
+   "ms": 47.0,
+   "worst": 3.6
+  },
+  "pp-v2@384": {
+   "mad": 4.14,
+   "edge": 30.4,
+   "soft": 108.8,
+   "dtssd": 2.642,
+   "flick_bg": 0.002,
+   "ms": 34.0,
+   "worst": 4.9
+  },
+  "pp-v2@512": {
+   "mad": 2.16,
+   "edge": 15.9,
+   "soft": 58.1,
+   "dtssd": 1.756,
+   "flick_bg": 0.001,
+   "ms": 60.0,
+   "worst": 2.5
+  }
+ },
+ "similar": {
+  "modnet@384": {
+   "mad": 3.53,
+   "edge": 30.4,
+   "soft": 126.5,
+   "dtssd": 3.611,
+   "flick_bg": 0.0007,
+   "ms": 55.0,
+   "worst": 6.7
+  },
+  "modnet@512": {
+   "mad": 2.68,
+   "edge": 23.1,
+   "soft": 97.0,
+   "dtssd": 2.911,
+   "flick_bg": 0.0005,
+   "ms": 130.0,
+   "worst": 4.1
+  },
+  "rvm@384(recurrent)": {
+   "mad": 3.39,
+   "edge": 28.1,
+   "soft": 137.4,
+   "dtssd": 3.494,
+   "flick_bg": 0.008,
+   "ms": 46.0,
+   "worst": 5.0
+  },
+  "pp-v2@384": {
+   "mad": 3.05,
+   "edge": 26.2,
+   "soft": 128.2,
+   "dtssd": 3.461,
+   "flick_bg": 0.0009,
+   "ms": 32.0,
+   "worst": 4.7
+  },
+  "pp-v2@512": {
+   "mad": 2.2,
+   "edge": 18.8,
+   "soft": 107.0,
+   "dtssd": 2.66,
+   "flick_bg": 0.0029,
+   "ms": 63.0,
+   "worst": 3.3
+  }
+ },
+ "zoom": {
+  "modnet@384": {
+   "mad": 3.22,
+   "edge": 21.9,
+   "soft": 136.5,
+   "dtssd": 3.348,
+   "flick_bg": 0.0009,
+   "ms": 55.0,
+   "worst": 4.3
+  },
+  "modnet@512": {
+   "mad": 2.25,
+   "edge": 15.1,
+   "soft": 110.1,
+   "dtssd": 2.674,
+   "flick_bg": 0.0063,
+   "ms": 117.0,
+   "worst": 3.2
+  },
+  "rvm@384(recurrent)": {
+   "mad": 3.05,
+   "edge": 20.8,
+   "soft": 130.2,
+   "dtssd": 3.334,
+   "flick_bg": 0.0002,
+   "ms": 48.0,
+   "worst": 4.0
+  },
+  "pp-v2@384": {
+   "mad": 2.91,
+   "edge": 19.3,
+   "soft": 122.3,
+   "dtssd": 3.077,
+   "flick_bg": 0.0023,
+   "ms": 29.0,
+   "worst": 3.9
+  },
+  "pp-v2@512": {
+   "mad": 1.91,
+   "edge": 12.8,
+   "soft": 98.7,
+   "dtssd": 2.327,
+   "flick_bg": 0.0007,
+   "ms": 61.0,
+   "worst": 2.4
+  }
+ },
+ "sway2": {
+  "modnet@384": {
+   "mad": 2.25,
+   "edge": 24.2,
+   "soft": 145.3,
+   "dtssd": 2.642,
+   "flick_bg": 0.0001,
+   "ms": 57.0,
+   "worst": 2.6
+  },
+  "modnet@512": {
+   "mad": 1.77,
+   "edge": 19.1,
+   "soft": 133.7,
+   "dtssd": 2.424,
+   "flick_bg": 0.0,
+   "ms": 109.0,
+   "worst": 2.6
+  },
+  "rvm@384(recurrent)": {
+   "mad": 2.11,
+   "edge": 22.7,
+   "soft": 152.3,
+   "dtssd": 2.619,
+   "flick_bg": 0.0,
+   "ms": 54.0,
+   "worst": 2.3
+  },
+  "pp-v2@384": {
+   "mad": 2.36,
+   "edge": 24.0,
+   "soft": 163.9,
+   "dtssd": 2.827,
+   "flick_bg": 0.0044,
+   "ms": 32.0,
+   "worst": 2.7
+  },
+  "pp-v2@512": {
+   "mad": 1.62,
+   "edge": 17.1,
+   "soft": 142.6,
+   "dtssd": 2.276,
+   "flick_bg": 0.0006,
+   "ms": 70.0,
+   "worst": 2.0
+  }
+ },
+ "fast2": {
+  "modnet@384": {
+   "mad": 7.63,
+   "edge": 53.7,
+   "soft": 149.3,
+   "dtssd": 5.683,
+   "flick_bg": 0.0009,
+   "ms": 63.0,
+   "worst": 17.4
+  },
+  "modnet@512": {
+   "mad": 8.01,
+   "edge": 56.5,
+   "soft": 157.3,
+   "dtssd": 5.894,
+   "flick_bg": 0.0011,
+   "ms": 122.0,
+   "worst": 15.5
+  },
+  "rvm@384(recurrent)": {
+   "mad": 9.43,
+   "edge": 66.7,
+   "soft": 221.1,
+   "dtssd": 7.801,
+   "flick_bg": 0.0,
+   "ms": 46.0,
+   "worst": 17.8
+  },
+  "pp-v2@384": {
+   "mad": 10.47,
+   "edge": 73.8,
+   "soft": 255.4,
+   "dtssd": 8.973,
+   "flick_bg": 0.0058,
+   "ms": 34.0,
+   "worst": 20.1
+  },
+  "pp-v2@512": {
+   "mad": 10.92,
+   "edge": 75.8,
+   "soft": 259.1,
+   "dtssd": 9.503,
+   "flick_bg": 0.041,
+   "ms": 69.0,
+   "worst": 21.3
+  }
+ }
+}

@@ -1,0 +1,93 @@
+{
+ "note": "CPU onnxruntime; no ground truth unless gt_dir given; agreement is not accuracy",
+ "images": {
+  "p0001": {
+   "modnet": {
+    "ms": 734.7,
+    "fractional_pct": 2.405381944444444,
+    "edge_energy": 0.029019741341471672
+   },
+   "rvm": {
+    "ms": 187.6,
+    "fractional_pct": 1.9210069444444442,
+    "edge_energy": 0.02899186499416828
+   },
+   "ppmatting-v2": {
+    "ms": 189.6,
+    "fractional_pct": 1.2482638888888888,
+    "edge_energy": 0.030837781727313995
+   },
+   "ppmatting-hrnet": {
+    "ms": 1728.2,
+    "fractional_pct": 1.0998263888888888,
+    "edge_energy": 0.029472626745700836
+   }
+  },
+  "p0500": {
+   "modnet": {
+    "ms": 679.7,
+    "fractional_pct": 2.2973090277777777,
+    "edge_energy": 0.029920225962996483
+   },
+   "rvm": {
+    "ms": 198.8,
+    "fractional_pct": 1.8810763888888888,
+    "edge_energy": 0.028741715475916862
+   },
+   "ppmatting-v2": {
+    "ms": 174.3,
+    "fractional_pct": 1.4635416666666667,
+    "edge_energy": 0.031176645308732986
+   },
+   "ppmatting-hrnet": {
+    "ms": 1569.7,
+    "fractional_pct": 1.2764756944444444,
+    "edge_energy": 0.030689751729369164
+   }
+  },
+  "p1000": {
+   "modnet": {
+    "ms": 752.5,
+    "fractional_pct": 2.162326388888889,
+    "edge_energy": 0.03141147643327713
+   },
+   "rvm": {
+    "ms": 236.3,
+    "fractional_pct": 1.8220486111111112,
+    "edge_energy": 0.028892243281006813
+   },
+   "ppmatting-v2": {
+    "ms": 184.4,
+    "fractional_pct": 1.5520833333333333,
+    "edge_energy": 0.03228859230875969
+   },
+   "ppmatting-hrnet": {
+    "ms": 1549.3,
+    "fractional_pct": 1.5425347222222223,
+    "edge_energy": 0.03159036487340927
+   }
+  },
+  "p1500": {
+   "modnet": {
+    "ms": 768.3,
+    "fractional_pct": 2.7265625,
+    "edge_energy": 0.02999347634613514
+   },
+   "rvm": {
+    "ms": 181.2,
+    "fractional_pct": 2.224392361111111,
+    "edge_energy": 0.029507294297218323
+   },
+   "ppmatting-v2": {
+    "ms": 191.1,
+    "fractional_pct": 1.4618055555555556,
+    "edge_energy": 0.031259436160326004
+   },
+   "ppmatting-hrnet": {
+    "ms": 1648.4,
+    "fractional_pct": 1.3276909722222223,
+    "edge_energy": 0.030636193230748177
+   }
+  }
+ }
+}
