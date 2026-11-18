@@ -24,6 +24,7 @@ jobs:
           cat Genesis-v0.97-DEPLOY-www.zip.0* > /tmp/site.zip
           echo "$(cut -d' ' -f1 JOIN_CHECK.sha256)  /tmp/site.zip" | sha256sum -c -
           mkdir -p /tmp/_site && unzip -q /tmp/site.zip -d /tmp/_site
+          cp -r "$GITHUB_WORKSPACE/genesis/patch/." /tmp/_site/   # post-zip fixes (v0.97.1)
           touch /tmp/_site/.nojekyll
           test -f /tmp/_site/studio.html && test -f /tmp/_site/models/modnet.onnx
       - uses: actions/configure-pages@v5

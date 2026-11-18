@@ -38,7 +38,7 @@
     const st = (typeof window.VS.diagState === 'function') ? (window.VS.diagState() || {}) : {};
     const out = {
       time: new Date().toISOString(),
-      build: 'genesis v0.92 (ordered RVM frames, analysis-edge profiling, export resize safety, hair-wisp cleanup)',
+      build: 'genesis v0.97 (graded quality governor, MODNet/PP-MattingV2 engines, slideshow + no-gain rules)',
       userAgent: navigator.userAgent,
       device: (navigator.userAgentData && navigator.userAgentData.mobile != null ? 'mobile=' + navigator.userAgentData.mobile : '') +
         (navigator.userAgentData && navigator.userAgentData.platform ? ' platform=' + navigator.userAgentData.platform : ''),
@@ -75,6 +75,7 @@
       'GPU renderer: ' + r.gpuRenderer + ' | WebGL2 ' + r.webgl2 + ' | WebGPU ' + r.webgpu,
       'Network: ' + (r.online ? 'online' : 'OFFLINE') + ' | ' + r.connection,
       'Battery: ' + r.battery + ' | Compute pressure: ' + r.pressure,
+      'Where this runs: ' + (/; wv\)/.test(navigator.userAgent) ? 'ANDROID WEBVIEW (the Genesis app or another app\u2019s in-app browser) - browsers inside a WebView usually cannot become cross-origin isolated, so the models run on ONE thread and the app falls back to the light engine. Open ' + location.origin + location.pathname.replace(/[^\/]*$/, '') + 'studio.html in Chrome instead.' : (self.crossOriginIsolated ? 'a normal browser, cross-origin isolated (multi-thread matting available)' : 'a normal browser but NOT isolated yet - reload once; if this stays, the host is blocking the service worker')),
       'Engine now: ' + (s.engine || 'not running') + ' | delegate/backend: ' + (s.delegate || 'n/a') + ' | remembered: ' + r.rememberedEngine,
       'LIVE MATTING: ' + (function () {
         try {
