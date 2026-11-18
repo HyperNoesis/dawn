@@ -41,24 +41,33 @@ Reading: PP-MattingV2 at 320 px costs about the same as MODNet at 256 px, so it 
 3. Decontamination stage (switchable) and WebGPU compositor.
 
 ---
-# Update 2026-11-19 (session 2): Phases 4 and 5/7 modules
+# Update 2026-11-19 (session 2): phase status against the mandate (supersedes the table above where they differ)
 
-| Mandate item | What was done | Evidence | Status |
+## Corrections to the first audit
+- Section 7 (decontamination) was marked NOT IMPLEMENTED. Wrong: `MatteRefine.estimateForeground` exists (export, opt-in) and the live WebGL compositor already does guided upsample plus despill (gl-matte.js). A second module written this session (fg-decontaminate.js) was measured against `estimateForeground` on the same synthetic soft edge (colour error after compositing over a new background: none 6.74, new module 4.27, existing 0.09), was clearly worse, and was DELETED. Do not re-add it.
+- Section 6 guided upsampling exists in gl-matte.js (live). Its real-GPU quality is still NOT TESTED (NEXT.md item H).
+- Section 3/14 routing and release gates exist (engine-policy.js: liveOrder, placement, evaluateGate, canPromote). Default stays Auto/MODNet; promotePPMatting = 0.
+- BiRefNet-Lite aspect handling is already fixed (letterbox, v0.94) with tests; weights are NOT bundled.
+
+## Phase table
+| Phase | Result | Evidence | Status |
 |---|---|---|---|
-| Section 5 motion-aware temporal stabilisation | NEW js/providers/temporal-flow.js (MotionTemporalMatte): pyramidal block Lucas-Kanade on camera luma, warp previous alpha, per-pixel flow-confidence + alpha-agreement fusion, history capped at 0.25, resets on size change / timestamp gap / scene cut / reset(). Wired into PPMattingV2/HRNet providers as OPT-IN: localStorage vs_ppm_temporal = 'motion'. Default stays 'refined'. | tools/unit/temporal-flow.test.js (7 groups) passes; 11 ms/frame at 320x240 on 1 CPU core (server, not a phone) | PASS (synthetic) / NOT TESTED on real footage and phones |
-| Section 7 colour decontamination | NEW js/providers/fg-decontaminate.js (blur fusion, boundary band only, bounded shift, strength 0 = off, alpha never modified). NOT yet connected to the live compositor. | tools/unit/fg-decontaminate.test.js passes; synthetic edge colour error after compositing over a new background 6.74 -> 4.79 (strength 0.8) / 4.27 (1.0); 12 ms/frame at 320x240 on 1 CPU core | PASS (synthetic) / NOT WIRED / NOT TESTED on real footage |
-| Regression | unit 14/14 files, e2e unit 44/44 | node tools/unit/run-all.js; tools/e2e/unit_*.js | PASS |
+| 0 Baseline audit | done (above) | unit 14 files (incl. new), e2e unit 44/44 | PASS |
+| 1 Benchmark harness | exists: tools/matting-bench (bench.py MAD/SAD/gradient/dtSSD/flicker/latency, score_gt.py, video_gate.py), ppmatting-lab.html | bench.py --selftest passes | PASS (harness); real-footage runs BLOCKED |
+| 2 PP-MattingV2 | provider, registry, SHA-256 verified; registry now carries upstream commit b812d276f789 (repo HEAD checked 2026-11-19), release tag `weights`, release page | `node tools/model-manifest.js`: 9 bundled files PASS (size + SHA-256) | PASS (integrity); numeric match to upstream was recorded in v0.94 (6e-8); phone speed NOT TESTED |
+| 3 Routing | exists (engine-policy.js); unchanged | engine-policy tests | PASS (logic); on-device warm-up measurement NOT TESTED |
+| 4 Temporal | NEW temporal-flow.js (pyramidal block LK, warp previous alpha, flow-confidence + agreement fusion, history <= 0.25, resets on size/gap/cut), opt-in via vs_ppm_temporal='motion' | temporal-flow.test.js, 11 ms/frame 320x240 on 1 server core | PASS (synthetic); real footage NOT TESTED. On the synthetic set it is NOT measurably better than TemporalMatte (see below) |
+| 5 Edge refinement | existing gl-matte.js guided upsample, matte-refine.js, mask-clean.js; nothing new added | existing tests | NOT TESTED on a GPU |
+| 6 GPU compositor | NEW gpu-composite.js (WebGPU, linear-light, texture reuse, device-lost handling, returns null so WebGL stays) opt-in vs_webgpu_composite='1'; NOT wired into render-core | CPU reference test passes; shader never run (no GPU here) | IMPLEMENTED, NOT TESTED |
+| 7 Export | exists (ppmatting-export.js, HRNet 1376 ms/frame at 448 px on 1 CPU thread: export only) | audit above | PASS "not live"; decode-and-inspect of a real export NOT TESTED |
+| 8 Release certification | model manifest + checksum report generated (docs/MODEL_MANIFEST.md); licences: RVM GPL-3.0 stays off | model-manifest.js | PARTIAL: device matrix, 10-20 min sustained run, physical-device evidence BLOCKED |
 
-## Honest findings (do not over-read the synthetic numbers)
-- On a synthetic moving bar with noisy edges, MotionTemporalMatte is NOT measurably better than the existing TemporalMatte: while moving, edge noise is larger than the agreement window so both pass the model output through (instability 9.72 vs 9.71 vs raw 9.71 at 4 px/frame), and when static it smooths less (0.257 vs 0.216, raw 0.311) because the mandate caps history at 0.25 while TemporalMatte follows at 0.35 with up to 0.65 history. Its value (aligning history to moving edges) can only be judged on real labelled footage. Keep it opt-in until a phone/real-footage A/B (ppmatting-lab.html) shows an advantage.
-- A bug found by the tests and fixed: a first frame without luma left no luma history, and the next frame crashed. It now resets cleanly.
-- The decontamination gain is measured on a perfectly known synthetic edge (known F and B). Real hair over a real background will be worse; the claim is limited to "reduces fringe on this synthetic case, bounded and switchable".
+## Honest findings
+- MotionTemporalMatte vs TemporalMatte on the synthetic moving bar with noisy edges: error against truth equal to within 0.04 MAE; instability while moving 9.72 vs 9.71 (raw 9.71); static 0.257 vs 0.216 (raw 0.311) because the mandate caps history at 0.25. No demonstrated gain. Keep opt-in; decide on real labelled footage via ppmatting-lab.html.
+- A bug found by the tests and fixed: first frame without luma crashed the next frame.
 
-## Still BLOCKED / NOT DONE
-- WebGPU compositor (section 8): NOT IMPLEMENTED; cannot be exercised in this sandbox (no GPU). WebGL path unchanged.
-- Edge-aware full-resolution guided upsampling (section 6): existing matte-refine.js/mask-refine.js untouched; needs a real GPU test (NEXT.md item H).
-- Wiring decontamination into gl-matte.js / render-core.js and A/B toggle in the UI.
-- Phone benchmarks, consented footage and reference alphas (SAD/MAD/dtSSD), 10-20 min sustained session, thermal: BLOCKED (physical device).
-- Model manifest gaps from the first audit: revision/commit and download URL per file in models/registry.json.
-- Auto/Balanced promotion of PP-MattingV2: only after the phone A/B (promotePPMatting stays 0).
-- BiRefNet-Lite aspect handling and weights, BEN2: NOT TESTED (weights not bundled).
+## BLOCKED (needs you, a phone, or a decision)
+- Phone A/B (MODNet 256 vs PP-MattingV2 320, and motion vs refined temporal) on identical consented footage with reference alphas.
+- WebGPU shader and WebGPU ONNX runtime checks on a real adapter; wiring gpu-composite into render-core only after that.
+- BiRefNet-Lite / BEN2 weights (not bundled; the 4 GB sandbox ran out of memory on 1024 inference), MatAnyone/SAM2Matting stay research-only.
+- RVM commercial licence decision (GPL-3.0).
