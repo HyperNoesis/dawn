@@ -32,3 +32,18 @@ jobs:
           path: /tmp/_site
       - id: deployment
         uses: actions/deploy-pages@v4
+  verify-live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the live site from GitHub's servers
+        run: |
+          sleep 25
+          B=https://hypernoesis.github.io/dawn
+          bad=0
+          for p in "" studio.html index.html sw.js manifest.json models/modnet.onnx models/ppmatting_v2.onnx js/app.js; do
+            code=$(curl -s -o /dev/null -L -w '%{http_code} %{size_download}B %{content_type}' "$B/$p")
+            echo "::notice title=live check::/dawn/$p -> $code"
+            case "$code" in 200*) ;; *) bad=1;; esac
+          done
+          exit $bad
