@@ -37,7 +37,7 @@
       return b && b.v === 3 && b.key === deviceKey() ? b : null;   // v3 = per-engine results (rvmMs / modnetMs); older results are ignored
     } catch (e) { return null; }
   }
-  function writeBench(b) { try { if (typeof batteryRef !== 'undefined' && batteryRef && batteryRef.level < 0.2) return; /* v0.97.2: a throttled low-battery reading must never pin the phone to the light engine */ } catch (e0) {} try { localStorage.setItem(BENCH_KEY, JSON.stringify(Object.assign({ v: 3, key: deviceKey(), at: Date.now() }, b))); } catch (e) {} }
+  function writeBench(b) { try { localStorage.setItem(BENCH_KEY, JSON.stringify(Object.assign({ v: 3, key: deviceKey(), at: Date.now() }, b))); } catch (e) {} }
   function showBenchNote(text) { if (els.modelBenchNote) els.modelBenchNote.textContent = text; }
   // v0.88: while the cutout engine loads (the first visit downloads about 19 MB) show a real message on the stage, not a black rectangle.
   let loadOverlayTimer = null, loadOverlayEl = null;
