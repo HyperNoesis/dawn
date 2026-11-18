@@ -1,0 +1,414 @@
+{
+ "version": 2,
+ "note": "Single source of truth for pretrained weights. Download with: node scripts/fetch-models.js (see models/README.txt). Hashes come from the models-candidates release SHA256SUMS written by .github/workflows/fetch-models.yml. v0.94: files may carry an absolute 'url' (used instead of release + file), e.g. the PP-Matting weights from yakhyo/ppmatting.",
+ "release": "https://github.com/HyperNoesis/bible/releases/download/models-candidates/",
+ "models": {
+  "modnet": {
+   "title": "MODNet",
+   "role": "live-matte",
+   "runtime": "onnx-web",
+   "web": true,
+   "default": true,
+   "licence": "Apache-2.0",
+   "commercial": true,
+   "verified": "already shipped in models/modnet.onnx (v0.17+)",
+   "files": []
+  },
+  "birefnet-lite": {
+   "title": "BiRefNet lite (fp16)",
+   "role": "best-edge-matte",
+   "runtime": "onnx-web",
+   "web": true,
+   "licence": "MIT",
+   "commercial": true,
+   "input": {
+    "name": "input_image",
+    "shape": [
+     1,
+     3,
+     1024,
+     1024
+    ],
+    "mean": [
+     0.485,
+     0.456,
+     0.406
+    ],
+    "std": [
+     0.229,
+     0.224,
+     0.225
+    ]
+   },
+   "output": {
+    "name": "output_image",
+    "shape": [
+     1,
+     1,
+     1024,
+     1024
+    ]
+   },
+   "needs": "WebGPU (1024x1024 fixed input; desktop-class GPU)",
+   "verified": "file hash + tensor names/shapes checked with onnxruntime 1.31. A full 1024 inference was NOT run here (4 GB sandbox ran out of memory).",
+   "files": [
+    {
+     "file": "birefnet_lite_fp16.onnx",
+     "local": "birefnet_lite_fp16.onnx",
+     "bytes": 114538221,
+     "sha256": "d39b897ceb16ae654c1731f3dba0cf9b368d9cae74b5a57459b455cc8bfec402"
+    }
+   ]
+  },
+  "birefnet-lite-fp32": {
+   "title": "BiRefNet lite (fp32)",
+   "role": "best-edge-matte",
+   "runtime": "onnx-web",
+   "web": true,
+   "licence": "MIT",
+   "commercial": true,
+   "verified": "hash only",
+   "files": [
+    {
+     "file": "birefnet_lite.onnx",
+     "local": "birefnet_lite.onnx",
+     "bytes": 224005088,
+     "sha256": "5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333"
+    }
+   ]
+  },
+  "edgetam": {
+   "title": "EdgeTAM (fp16 encoder + prompt decoder)",
+   "role": "tracker-gate",
+   "runtime": "onnx-web",
+   "web": true,
+   "licence": "Apache-2.0",
+   "commercial": true,
+   "external": {
+    "vision_encoder_fp16.onnx_data": "edgetam_vision_encoder_fp16.onnx_data",
+    "prompt_encoder_mask_decoder.onnx_data": "edgetam_mask_decoder.onnx_data"
+   },
+   "encoder": "edgetam_vision_encoder_fp16.onnx",
+   "decoder": "edgetam_mask_decoder.onnx",
+   "verified": "run end to end on CPU with onnxruntime 1.31 on a real portrait (box + point prompts)",
+   "files": [
+    {
+     "file": "edgetam_vision_encoder_fp16.onnx",
+     "local": "edgetam_vision_encoder_fp16.onnx",
+     "bytes": 167617,
+     "sha256": "d8f560849085892866a5c652a600cafbbd301e11c15ff0d89c81e15fe91264ac"
+    },
+    {
+     "file": "edgetam_vision_encoder_fp16.onnx_data",
+     "local": "edgetam_vision_encoder_fp16.onnx_data",
+     "bytes": 9739536,
+     "sha256": "6a6741eb00b3049939675569818b207953cb13113a80ca9580c9c714d8646b38"
+    },
+    {
+     "file": "edgetam_mask_decoder.onnx",
+     "local": "edgetam_mask_decoder.onnx",
+     "bytes": 213114,
+     "sha256": "d3668299ec3edf70fbb139ec642b54bf3d4be453fd1b688a6b5938e0856fe546"
+    },
+    {
+     "file": "edgetam_mask_decoder.onnx_data",
+     "local": "edgetam_mask_decoder.onnx_data",
+     "bytes": 20958208,
+     "sha256": "dfa2125e30d08d388732f20c18fb63ab0f0f590cd270eb307f0c2b65919d1be8"
+    }
+   ]
+  },
+  "edgetam-fp32": {
+   "title": "EdgeTAM (fp32 encoder)",
+   "role": "tracker-gate",
+   "runtime": "onnx-web",
+   "web": true,
+   "licence": "Apache-2.0",
+   "commercial": true,
+   "external": {
+    "vision_encoder.onnx_data": "edgetam_vision_encoder.onnx_data",
+    "prompt_encoder_mask_decoder.onnx_data": "edgetam_mask_decoder.onnx_data"
+   },
+   "encoder": "edgetam_vision_encoder.onnx",
+   "decoder": "edgetam_mask_decoder.onnx",
+   "verified": "hash only",
+   "files": [
+    {
+     "file": "edgetam_vision_encoder.onnx",
+     "local": "edgetam_vision_encoder.onnx",
+     "bytes": 192225,
+     "sha256": "ed068218eba96760fe02d04ce899c449660ac813a088d80ed7f42c8bb01e7cec"
+    },
+    {
+     "file": "edgetam_vision_encoder.onnx_data",
+     "local": "edgetam_vision_encoder.onnx_data",
+     "bytes": 19532576,
+     "sha256": "21e75dba7077dfcb53e8c9a6e99977156f2240ff3f1f9cddc43d66aa1ecb528e"
+    },
+    {
+     "file": "edgetam_mask_decoder.onnx",
+     "local": "edgetam_mask_decoder.onnx",
+     "bytes": 213114,
+     "sha256": "d3668299ec3edf70fbb139ec642b54bf3d4be453fd1b688a6b5938e0856fe546"
+    },
+    {
+     "file": "edgetam_mask_decoder.onnx_data",
+     "local": "edgetam_mask_decoder.onnx_data",
+     "bytes": 20958208,
+     "sha256": "dfa2125e30d08d388732f20c18fb63ab0f0f590cd270eb307f0c2b65919d1be8"
+    }
+   ]
+  },
+  "sam21-tiny": {
+   "title": "SAM 2.1 tiny (encoder + prompt decoder)",
+   "role": "tracker-gate",
+   "runtime": "onnx-web",
+   "web": true,
+   "licence": "Apache-2.0",
+   "commercial": true,
+   "external": {
+    "vision_encoder.onnx_data": "sam21t_vision_encoder.onnx_data",
+    "prompt_encoder_mask_decoder.onnx_data": "sam21t_mask_decoder.onnx_data"
+   },
+   "encoder": "sam21t_vision_encoder.onnx",
+   "decoder": "sam21t_mask_decoder.onnx",
+   "verified": "hash only (134 MB encoder; heavier than EdgeTAM)",
+   "files": [
+    {
+     "file": "sam21t_vision_encoder.onnx",
+     "local": "sam21t_vision_encoder.onnx",
+     "bytes": 354238,
+     "sha256": "4f30aacd3aaefbca81a0b7fe4c1fc96345570ea0a6f80ced599493d1b3be2e8c"
+    },
+    {
+     "file": "sam21t_vision_encoder.onnx_data",
+     "local": "sam21t_vision_encoder.onnx_data",
+     "bytes": 134084864,
+     "sha256": "e83df9866a5afe68ea7f0f721f18f65137fc3acbf0da1c74e946d363e09c69cc"
+    },
+    {
+     "file": "sam21t_mask_decoder.onnx",
+     "local": "sam21t_mask_decoder.onnx",
+     "bytes": 213114,
+     "sha256": "874414704c5d686db7d206a35f6e15d26563d50c8c4468fccc6739bd7e491dcf"
+    },
+    {
+     "file": "sam21t_mask_decoder.onnx_data",
+     "local": "sam21t_mask_decoder.onnx_data",
+     "bytes": 20958208,
+     "sha256": "e9874d900dd4134ed60eab1e97910327c2419e0b2954485d8fd6e7f1a1470f47"
+    }
+   ]
+  },
+  "depth-anything-v2-small": {
+   "title": "Depth Anything V2 Small",
+   "role": "depth",
+   "runtime": "offline",
+   "web": false,
+   "licence": "Apache-2.0 (Small only)",
+   "commercial": true,
+   "verified": "used offline by tools/scenes",
+   "files": [
+    {
+     "file": "depth_anything_v2_vits.onnx",
+     "local": "depth_anything_v2_vits.onnx",
+     "bytes": 99373606,
+     "sha256": "d2b11a11c1d4a12b47608fa65a17ee9a4c605b55ee1730c8e3b526304f2562be"
+    }
+   ]
+  },
+  "matanyone2": {
+   "title": "MatAnyone 2 (GPU server)",
+   "role": "video-matte-reference",
+   "runtime": "pytorch-gpu",
+   "web": false,
+   "licence": "NTU S-Lab licence (non-commercial)",
+   "commercial": false,
+   "verified": "hash only; used by server/studio-export as a measuring reference",
+   "files": [
+    {
+     "file": "matanyone2.pth",
+     "local": "matanyone2.pth",
+     "bytes": 141429115,
+     "sha256": "5e9821e4087231427376b437c85bb6e072b41e582314f06fd524f75bc4af5914"
+    }
+   ]
+  },
+  "sam2matting-tiny": {
+   "title": "SAM2Matting (SAM 2.1 tiny, GPU server)",
+   "role": "video-matte-reference",
+   "runtime": "pytorch-gpu",
+   "web": false,
+   "licence": "CC-BY-NC-SA-4.0 (non-commercial)",
+   "commercial": false,
+   "verified": "hash only",
+   "files": [
+    {
+     "file": "SAM2Matting-SAM2.1Tiny.pt",
+     "local": "SAM2Matting-SAM2.1Tiny.pt",
+     "bytes": 215569778,
+     "sha256": "5b9321e3b51bc20f5b84c208746cc083dd3053dd701590f2e88dc8640afcc39d"
+    }
+   ]
+  },
+  "sam2matting-base": {
+   "title": "SAM2Matting (SAM 2.1 base+, GPU server)",
+   "role": "video-matte-reference",
+   "runtime": "pytorch-gpu",
+   "web": false,
+   "licence": "CC-BY-NC-SA-4.0 (non-commercial)",
+   "commercial": false,
+   "verified": "hash only",
+   "files": [
+    {
+     "file": "SAM2Matting-SAM2.1Base+.pt",
+     "local": "SAM2Matting-SAM2.1Base+.pt",
+     "bytes": 383180506,
+     "sha256": "1f0eb2eda3e8bc9101eafc0b30b8b8fcae1ff83d8fd3adc18e2f3b410fdaae60"
+    }
+   ]
+  },
+  "edgetam-pt": {
+   "title": "EdgeTAM PyTorch checkpoint",
+   "role": "tracker-train",
+   "runtime": "pytorch-gpu",
+   "web": false,
+   "licence": "Apache-2.0",
+   "commercial": true,
+   "verified": "not hashed in SHA256SUMS",
+   "files": [
+    {
+     "file": "edgetam.pt",
+     "local": "edgetam.pt",
+     "bytes": 56116523,
+     "sha256": null
+    }
+   ]
+  },
+  "sam21-tiny-pt": {
+   "title": "SAM 2.1 hiera tiny PyTorch checkpoint",
+   "role": "tracker-train",
+   "runtime": "pytorch-gpu",
+   "web": false,
+   "licence": "Apache-2.0",
+   "commercial": true,
+   "verified": "not hashed in SHA256SUMS",
+   "files": [
+    {
+     "file": "sam2.1_hiera_tiny.pt",
+     "local": "sam2.1_hiera_tiny.pt",
+     "bytes": 156008466,
+     "sha256": null
+    }
+   ]
+  },
+  "ppmatting-v2": {
+   "title": "PP-MattingV2 (STDC1, live beta)",
+   "role": "live-matte-beta",
+   "runtime": "onnx-web",
+   "web": true,
+   "licence": "Apache-2.0",
+   "commercial": true,
+   "source": "https://github.com/yakhyo/ppmatting (PaddleSeg human_512 weights converted to ONNX; Apache-2.0)",
+   "input": {
+    "name": "img",
+    "shape": [
+     "batch",
+     3,
+     "height",
+     "width"
+    ],
+    "mean": [
+     0.5,
+     0.5,
+     0.5
+    ],
+    "std": [
+     0.5,
+     0.5,
+     0.5
+    ],
+    "multipleOf": 32,
+    "maxShortSide": 512
+   },
+   "output": {
+    "name": "alpha",
+    "shape": [
+     "batch",
+     1,
+     "height",
+     "width"
+    ],
+    "range": [
+     0,
+     1
+    ]
+   },
+   "needs": "WASM or WebGPU; any size with sides multiple of 32 (short side <= 512)",
+   "verified": "v0.94: downloaded from the upstream release, SHA-256 recorded, tensor names/shapes and alpha range checked with onnxruntime 1.29 (CPU) on real portraits; JS preprocessing matches upstream to 6e-8. NOT run in a browser on a phone.",
+   "files": [
+    {
+     "file": "ppmatting_v2.onnx",
+     "local": "ppmatting_v2.onnx",
+     "url": "https://github.com/yakhyo/ppmatting/releases/download/weights/ppmatting_v2.onnx",
+     "bytes": 35816468,
+     "sha256": "7846bea9cd2ad94a81b44deeddfa1521bbcfd15bb297c181116eecb25c6f0335"
+    }
+   ]
+  },
+  "ppmatting-hrnet": {
+   "title": "PP-Matting HRNet-W18 (export quality)",
+   "role": "export-matte",
+   "runtime": "onnx-web",
+   "web": true,
+   "licence": "Apache-2.0",
+   "commercial": true,
+   "source": "https://github.com/yakhyo/ppmatting (PaddleSeg human_512 weights converted to ONNX; Apache-2.0)",
+   "input": {
+    "name": "img",
+    "shape": [
+     "batch",
+     3,
+     "height",
+     "width"
+    ],
+    "mean": [
+     0.5,
+     0.5,
+     0.5
+    ],
+    "std": [
+     0.5,
+     0.5,
+     0.5
+    ],
+    "multipleOf": 32,
+    "maxShortSide": 512
+   },
+   "output": {
+    "name": "alpha",
+    "shape": [
+     "batch",
+     1,
+     "height",
+     "width"
+    ],
+    "range": [
+     0,
+     1
+    ]
+   },
+   "needs": "WASM or WebGPU; heavier, for stills/post-capture export",
+   "verified": "v0.94: downloaded from the upstream release, SHA-256 recorded, tensor names/shapes and alpha range checked with onnxruntime 1.29 (CPU) on real portraits; JS preprocessing matches upstream to 6e-8. NOT run in a browser on a phone.",
+   "files": [
+    {
+     "file": "ppmatting_v1.onnx",
+     "local": "ppmatting_v1.onnx",
+     "url": "https://github.com/yakhyo/ppmatting/releases/download/weights/ppmatting_v1.onnx",
+     "bytes": 98335400,
+     "sha256": "24639937f579f1cc06d3b1206c5305f8bb93db6951de30da475f880d72e0a4f4"
+    }
+   ]
+  }
+ }
+}

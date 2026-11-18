@@ -1,0 +1,3 @@
+PP-Matting / PP-MattingV2 ONNX weights (models/ppmatting_v2.onnx, models/ppmatting_v1.onnx)
+Source: https://github.com/yakhyo/ppmatting (Apache-2.0, see ppmatting-LICENSE-Apache-2.0.txt), converted from PaddleSeg human_512 weights (PaddleSeg upstream: Apache-2.0).
+SHA-256 values are in models/registry.json. Keep this notice and the licence file with the app. Not legal advice; dataset provenance of upstream weights is a separate diligence item.
