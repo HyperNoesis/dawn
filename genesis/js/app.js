@@ -22,6 +22,10 @@
   // ---- Model choice + one-time device speed test ----
   const MODNET_LOAD_TIMEOUT_MS = 45000;   // the model is bundled now; this only matters for the web version's first load
   const MODNET_MAX_MS = 100;              // slower than this per mask -> use the lighter model (was 70: too strict, a phone at 72-100 ms still beats the light model's blocky edges; the fps ladder steps down if the picture gets choppy). localStorage vs_max_ms overrides.
+  // v0.98 QUALITY FIRST (default on): the good model never gives way to the weak one. MODNet is the live engine at a 256 px floor; when a phone is slow the
+  // mask is refreshed less often (stride) instead. The weak MediaPipe engine is only used if MODNet cannot load at all. localStorage vs_quality_first = 0 restores the old ladder.
+  function qualityFirst() { try { return localStorage.getItem('vs_quality_first') !== '0'; } catch (e) { return true; } }
+  const QF_EDGE = 256;
   function maxMs() {
     try { const v = +localStorage.getItem('vs_max_ms'); if (v >= 20 && v <= 2000) return v; } catch (e) {}
     // v0.80: a camera that only delivers 10-15 fps (dim room, auto exposure) gives the model more time per mask before it counts as "too slow" (a mask is only needed once per camera frame).
@@ -1014,7 +1018,7 @@
     // and upgrades to MODNet in the background. Only an explicit "MODNet" choice waits for it.
     if (pref === 'rvm' && VSNS.RVMSegmentationProvider) {
       segProvider = new VSNS.RVMSegmentationProvider();
-    } else if (pref === 'modnet' && VSNS.MODNetSegmentationProvider) {
+    } else if ((pref === 'modnet' || (pref === 'auto' && qualityFirst())) && VSNS.MODNetSegmentationProvider) {
       segProvider = makeModnet();
     } else if (warm && VSNS.MediaPipeSegmentationProvider) {
       segProvider = warm.provider;      // already downloaded and warmed up while the page was idle
@@ -1027,7 +1031,7 @@
     const slowNet = /^(slow-2g|2g|3g)$/.test(cn0.effectiveType || '') || (cn0.downlink > 0 && cn0.downlink < 5) || cn0.saveData === true;
     // v0.89: a hard 15 s limit made every first start on a slow phone connection fail ("Timed out ... Press Stop"). The one-time engine download now
     // gets up to 3 minutes on a slow link (progress is shown on the stage) and 30 s on a fast one; it carries on by itself as soon as it finishes.
-    const loadTimeout = (VSNS.MODNetSegmentationProvider && segProvider instanceof VSNS.MODNetSegmentationProvider) ? MODNET_LOAD_TIMEOUT_MS : (slowNet ? 180000 : 30000);
+    const loadTimeout = (VSNS.MODNetSegmentationProvider && segProvider instanceof VSNS.MODNetSegmentationProvider) ? (slowNet ? 180000 : MODNET_LOAD_TIMEOUT_MS) : (slowNet ? 180000 : 30000);
     segProvider.lowLightBoost = lowLightBoostEnabled;
     if (els.previewHint) els.previewHint.textContent = 'Camera on · loading cutout model';
     showStageLoading('Camera is on. Loading the cutout engine...');
@@ -1037,6 +1041,7 @@
         loadTimeout,
         `Timed out after ${loadTimeout / 1000}s loading the high-quality model — your connection may be slow.`
       );
+      if (qualityFirst() && typeof segProvider.longEdge === 'number' && segProvider.longEdge > 0) { segProvider.longEdge = QF_EDGE; resetSegCache(); }
       updateStudioChrome();
     } catch (err) {
       // RVM needs onnxruntime-web + (ideally) WebGPU/WASM support. If that
@@ -1988,6 +1993,14 @@
   /** @returns {boolean} true when the governor handled this tick (skip the older banner logic). */
   function runLadder() {
     const V = window.VS;
+    if (qualityFirst() && !(segProvider instanceof V.MediaPipeSegmentationProvider) && segProvider && /MODNet/.test(segProvider.label || '')) {
+      // v0.98: never step down below 256 px and never swap to the weak engine. Adapt the refresh rate to the model instead.
+      if (!upgrading && !benchBusy && segMsEma > 0 && !saverOn) {
+        const want = segMsEma > 260 ? 3 : segMsEma > 110 ? 2 : 1;
+        if (want !== segStride) { segStride = want; strideTick = 0; }
+      }
+      return true;
+    }
     if (!V.QualityGovernor || govOff()) return runLadderLegacy();
     if (ladderSwapping) return true;
     if (upgrading || benchBusy) { govStalls = 0; return false; }
