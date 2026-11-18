@@ -55,7 +55,7 @@ const SHELL_ASSETS = [
   'js/prompter-core.js', 'js/prompter-remote.js', 'js/providers/auth-provider.js', 'js/providers/captions-provider.js',
   'js/providers/composition-engine.js', 'js/providers/environment-provider.js', 'js/providers/face-provider.js', 'js/providers/gl-matte.js',
   'js/providers/groq-transcription.js', 'js/providers/hands-provider.js', 'js/providers/lufs-meter.js', 'js/providers/mask-clean.js',
-  'js/providers/mask-refine.js', 'js/providers/matte-refine.js', 'js/providers/video-guard.js', 'js/providers/engine-policy.js', 'js/providers/temporal-matte.js', 'js/providers/ppmatting-core.js', 'js/providers/ppmatting-provider.js', 'js/providers/ppmatting-worker.js', 'js/providers/modnet-provider.js', 'js/providers/roi-track.js', 'js/providers/modnet-worker.js', 'js/providers/perf-profile.js', 'js/providers/quality-governor.js',
+  'js/providers/mask-refine.js', 'js/providers/matte-refine.js', 'js/providers/video-guard.js', 'js/providers/engine-policy.js', 'js/providers/temporal-matte.js', 'js/providers/temporal-flow.js', 'js/providers/fg-decontaminate.js', 'js/providers/ppmatting-core.js', 'js/providers/ppmatting-provider.js', 'js/providers/ppmatting-worker.js', 'js/providers/modnet-provider.js', 'js/providers/roi-track.js', 'js/providers/modnet-worker.js', 'js/providers/perf-profile.js', 'js/providers/quality-governor.js',
   'js/providers/pose-gate.js', 'js/providers/realism-engine.js', 'js/providers/render-provider.js', 'js/providers/rvm-lite-provider.js',
   'js/providers/rvm-provider.js', 'js/providers/rvm-worker.js', 'js/providers/scene-engine.js', 'js/providers/scene-library.js',
   'js/providers/scene-meta.js', 'js/providers/segmentation-provider.js', 'js/providers/storage-provider.js', 'js/providers/stream-provider.js',

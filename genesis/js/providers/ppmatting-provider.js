@@ -7,7 +7,7 @@
  * Built on the existing MODNet provider (camera sizing, person-ROI crop, low-light boost, mask canvas hand-over), because both models take
  * the same input (RGB, mean 0.5 / std 0.5, sides multiple of 32) and return alpha in [0,1]. Only model loading, the worker and temporal refinement differ.
  *
- * Temporal modes (localStorage vs_ppm_temporal): 'refined' (default, TemporalMatte per-region smoothing) or 'raw' (model output untouched).
+ * Temporal modes (localStorage vs_ppm_temporal): 'refined' (default, TemporalMatte per-region smoothing), 'raw' (model output untouched) or 'motion' (v0.98 opt-in, temporal-flow.js: LK flow + warped-alpha fusion, history <= 0.25).
  * Both mattes are always kept: provider.lastRaw / provider.lastRefined (Uint8Array, provider.lastSize = [w,h]) for A/B review.
  *
  * Self-check: initialize() runs one synthetic frame through the model and records provider.selfCheck = { ms, ok }. A model that errors,
@@ -25,7 +25,9 @@
   function guardOn() { try { return localStorage.getItem('vs_ppm_guard') !== '0'; } catch (e) { return true; } }
   /** 32x18 grayscale thumbnail of the model input (box-sampled) for scene-cut detection. */
   function thumb(rgba, w, h, out) { const TW = 32, TH = 18; for (let ty = 0; ty < TH; ty++) { const y = Math.min(h - 1, Math.floor((ty + 0.5) * h / TH)); for (let tx = 0; tx < TW; tx++) { const x = Math.min(w - 1, Math.floor((tx + 0.5) * w / TW)), i = (y * w + x) * 4; out[ty * TW + tx] = (rgba[i] * 77 + rgba[i + 1] * 150 + rgba[i + 2] * 29) >> 8; } } return out; }
-  function temporalMode() { try { return localStorage.getItem(TEMPORAL_KEY) === 'raw' ? 'raw' : 'refined'; } catch (e) { return 'refined'; } }
+  function temporalMode() { try { const v = localStorage.getItem(TEMPORAL_KEY); return v === 'raw' ? 'raw' : v === 'motion' ? 'motion' : 'refined'; } catch (e) { return 'refined'; } }
+  /** Camera luma at matte size for the motion-aware temporal stage (v0.98, opt-in: vs_ppm_temporal = 'motion'). */
+  function lumaPlane(rgba, n, out) { for (let i = 0; i < n; i++) { const o = i * 4; out[i] = (rgba[o] * 77 + rgba[o + 1] * 150 + rgba[o + 2] * 29) >> 8; } return out; }
 
   class PPMattingBase extends Base {
     constructor(modelId, title, edges) {
@@ -49,6 +51,7 @@
       if (!V.ModelStore) await V.loadScript('js/providers/model-store.js');
       if (!V.PPMattingCore) await V.loadScript('js/providers/ppmatting-core.js');
       if (!V.TemporalMatte) await V.loadScript('js/providers/temporal-matte.js');
+      if (temporalMode() === 'motion' && !V.MotionTemporalMatte) { try { await V.loadScript('js/providers/temporal-flow.js'); } catch (e) { /* optional: falls back to TemporalMatte */ } }
       if (!V.MatteRefine) { try { await V.loadScript('js/providers/matte-refine.js'); } catch (e) { /* optional */ } }
       if (!V.VideoGuard) { try { await V.loadScript('js/providers/video-guard.js'); } catch (e) { /* guard is optional: without it the provider behaves as before */ } }
       const { bytes } = await V.ModelStore.load(this.modelId, { onProgress: (f, l) => { if (this.onProgress) this.onProgress(f, l); if (opts.onProgress) opts.onProgress(f, l); } });
@@ -62,6 +65,7 @@
       this.label = this.title + ' (beta, local, ' + (this.usingWebGPU ? 'WebGPU' : 'WASM' + (this.threads > 1 ? ' x' + this.threads : '')) + ')';
       this._mw = 0; this._mh = 0;
       this.tm = V.TemporalMatte.create();
+      this.mtm = V.MotionTemporalMatte ? V.MotionTemporalMatte.create() : null;   // v0.98 opt-in motion-aware fusion
       this.guard = V.VideoGuard && guardOn() ? V.VideoGuard.create() : null;   // scene cut / subject loss / recovery (video-guard.js); vs_ppm_guard = 0 turns it off
       await this._selfCheck();
     }
@@ -87,7 +91,7 @@
       if (!this._ready) throw new Error(this.title + ' worker not ready');
       this._configure(vw, vh);
       const rk = this._rect ? [this._rect.sx, this._rect.sy, this._rect.sw, this._rect.sh, this._mw, this._mh].join(',') : '';
-      if (rk !== this._lastRectKey) { this._lastRectKey = rk; if (this.tm) this.tm.reset(); }   // crop or size changed: never blend across different coordinate frames
+      if (rk !== this._lastRectKey) { this._lastRectKey = rk; if (this.tm) this.tm.reset(); if (this.mtm) this.mtm.reset(); }   // crop or size changed: never blend across different coordinate frames
       const data = this._draw(video);
       const copy = new Uint8ClampedArray(data).buffer;
       const r = await this._send({ type: 'run', w: this._mw, h: this._mh, rgba: copy }, [copy]);
@@ -99,11 +103,14 @@
         if (!this._thumb) this._thumb = new Uint8Array(32 * 18);
         gd = this.guard.step({ alpha: raw, w: ow, h: oh, luma: thumb(data, this._mw, this._mh, this._thumb) });
         this.lastGuard = gd;
-        if (gd.resetTemporal && this.tm) this.tm.reset();     // scene cut or subject recovered: old frames must not ghost into the new picture
+        if (gd.resetTemporal) { if (this.tm) this.tm.reset(); if (this.mtm) this.mtm.reset(); }     // scene cut or subject recovered: old frames must not ghost into the new picture
       }
       if (gd && gd.useHeld && this.guard.held()) {            // subject lost: show the last good matte fading out, never a stuck or black frame
         const hd = this.guard.held(); shown = new Uint8Array(raw.length); for (let i = 0; i < shown.length; i++) shown[i] = (hd[i] * gd.fade + 0.5) | 0; this.lastRefined = null;
-      } else if (temporalMode() === 'refined' && this.tm) { const s = this.tm.step(raw, ow, oh); shown = s.refined; this.lastRefined = Uint8Array.from(shown); }
+      } else if (temporalMode() === 'motion' && this.mtm && ow === this._mw && oh === this._mh) {   // alpha and camera frame share one grid, so the flow can be measured on the camera luma
+        if (!this._luma || this._luma.length !== ow * oh) this._luma = new Uint8Array(ow * oh);
+        const s = this.mtm.step(raw, lumaPlane(data, ow * oh, this._luma), ow, oh, performance.now()); shown = s.refined; this.lastRefined = Uint8Array.from(shown); this.lastTemporalStats = s.stats;
+      } else if ((temporalMode() === 'refined' || temporalMode() === 'motion') && this.tm) { const s = this.tm.step(raw, ow, oh); shown = s.refined; this.lastRefined = Uint8Array.from(shown); }
       else { this.lastRefined = null; }
       this.lastRaw = raw; this.lastSize = [ow, oh];
       if (this._outCanvas.width !== ow || this._outCanvas.height !== oh || !this._outImageData) { this._outCanvas.width = ow; this._outCanvas.height = oh; this._outImageData = this._outCtx.createImageData(ow, oh); }
@@ -114,8 +121,8 @@
     }
 
     /** Camera restart / orientation change: forget the temporal state so an old matte can never ghost onto a new frame. */
-    resetTemporal() { if (this.tm) this.tm.reset(); if (this.guard) this.guard.reset(); }
-    dispose() { super.dispose(); this.tm = null; this.lastRaw = this.lastRefined = null; }
+    resetTemporal() { if (this.tm) this.tm.reset(); if (this.mtm) this.mtm.reset(); if (this.guard) this.guard.reset(); }
+    dispose() { super.dispose(); this.tm = null; this.mtm = null; this.lastRaw = this.lastRefined = null; }
   }
 
   class PPMattingV2Provider extends PPMattingBase {
