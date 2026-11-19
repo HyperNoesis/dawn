@@ -40,6 +40,8 @@
       this._cache = new Map(); this._prevOut = null; this._prevLuma = null; this._ow = 0; this._oh = 0; this._tileMs = 0; this._frames = 0;
     }
 
+    /** Tracker-first mode (EdgeTAM): the hook cleans the coarse matte BEFORE the uncertainty band is built, so stray blobs never cost refinement tiles. */
+    setTrackerHook(h) { this.trackerHook = h || null; }
     resetTemporal() { super.resetTemporal(); this._hyReset(); }
     dispose() { this._hyReset(); this._tc = this._lc = this._oc = null; return super.dispose(); }
 
@@ -50,6 +52,7 @@
 
     async segment(video) {
       const t0 = performance.now();
+      this.hy.tracked = false;
       const res = await super.segment(video);
       const coarseMs = performance.now() - t0;
       if (!hyOn() || this.hy.off || this._rect) return res;                 // crop mode moves the coordinate frame: leave the parent's matte alone
@@ -97,6 +100,8 @@
       if (OW !== this._ow || OH !== this._oh) { this._hyReset(); this._ow = OW; this._oh = OH; this._up = new Uint8Array(OW * OH); this._wp = new Uint8Array(OW * OH); }
       this._frames++;
       const up = PC.resizeAlpha(coarse, cw, ch, OW, OH, this._up);
+      const T = this.trackerHook;
+      if (T && T.ready()) { try { this.hy.tracked = !!(await T.step(video, up, OW, OH)); } catch (e) { this.hy.tracked = false; } }   // tracker mask first, then band + tiles
       const band = B.buildBand(up, OW, OH, { dilate: 3 }), soft = B.feather(band, OW, OH, 2);
       const cands = B.pickTiles(band, OW, OH, TILE, { minCount: 24 });
       const target = lsNum('vs_hy_target_ms', 70, 20, 400), maxTiles = lsNum('vs_hy_tiles', 3, 0, 8);

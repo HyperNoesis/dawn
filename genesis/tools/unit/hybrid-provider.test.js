@@ -32,6 +32,20 @@ require('../../js/providers/hybrid-provider.js');
   assert.ok(P.hy.refined > 0 && P.hy.rejected === 0, 'faithful tiles are accepted: ' + JSON.stringify(P.hy));
   const n1 = sends.length; await P.segment(video);
   assert.ok(P.hy.cached > 0 || sends.length === n1 || P.hy.refined >= 0, 'second frame runs');
+  // tracker-first: a hook that removes everything except the person must run BEFORE the band, so a stray blob costs no tiles
+  {
+    const blobParent = Parent.prototype.segment;
+    Parent.prototype.segment = async function () { const a = coarseMatte(); for (let y = 150; y < 190; y++) for (let x = 10; x < 60; x++) a[y * CW + x] = x % 2 ? 128 : 255; this.lastRaw = a; this.lastRefined = null; this.lastSize = [CW, CH]; this.lastGuard = null; return { segmentationMask: { tag: 'parent' } }; };
+    const plain = new VS.GenesisHybridProvider(); await plain.segment(video);
+    const tr = new VS.GenesisHybridProvider(); let called = 0;
+    tr.setTrackerHook({ ready: () => true, async step(v, alpha, w, h) { called++; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < w * 0.25) alpha[y * w + x] = 0; return true; } });
+    await tr.segment(video);
+    assert.ok(called === 1 && tr.hy.tracked === true, 'tracker hook ran and reported tracked');
+    assert.ok(tr.hy.tiles < plain.hy.tiles, 'stray blob removed before the band: tiles ' + plain.hy.tiles + ' -> ' + tr.hy.tiles);
+    const bad = new VS.GenesisHybridProvider(); bad.setTrackerHook({ ready: () => true, async step() { throw new Error('tam down'); } });
+    const rb = await bad.segment(video); assert.ok(rb.segmentationMask.width >= 192 && bad.hy.tracked === false && bad.hy.errors === 0, 'a failing tracker never breaks the hybrid');
+    Parent.prototype.segment = blobParent;
+  }
   // bad model output (all zero) must be rejected and never crash
   mode = 'bad'; const Q = new VS.GenesisHybridProvider(); await Q.segment(video);
   assert.ok(Q.hy.rejected > 0 || Q.hy.budget === 0, 'garbage tile rejected: ' + JSON.stringify(Q.hy));

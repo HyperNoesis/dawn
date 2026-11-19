@@ -91,6 +91,25 @@
       return own.outCanvas;
     }
 
+    /** Tracker-first hook (used by the hybrid engine): gates the coarse matte in place BEFORE its edge band is built. Returns true when a gate was applied. */
+    const tracker = {
+      ready: () => own.status === 'ready',
+      async step(video, alpha, w, h) {
+        ensureCanvases();
+        own.frame++; own.gateAge++;
+        const grid = V.PPMattingCore.resizeAlpha(alpha, w, h, G, G);
+        const first = own.frame === 1, due = own.gateAge >= o.refreshEvery || !own.gate;
+        if (first || (due && !own.busy)) { const p = refresh(video, grid); if (first) await p; }
+        if (!own.gate) return false;
+        const keep = C().componentGate(grid, own.gate, G, G, 128, o.minOverlap);
+        const soft = V.PPMattingCore.resizeAlpha(C().softGate(keep, G, G, o.keepDilate, o.feather), G, G, w, h);
+        for (let i = 0; i < alpha.length; i++) alpha[i] = (alpha[i] * soft[i] / 255 + 0.5) | 0;
+        return true;
+      }
+    };
+    own.hooked = !!(base && typeof base.setTrackerHook === 'function' && V.PPMattingCore);
+    if (own.hooked) base.setTrackerHook(tracker);
+
     const overrides = {
       async initialize(...args) {
         const r = await base.initialize(...args);
@@ -99,6 +118,7 @@
       },
       async segment(video) {
         const res = await base.segment(video);
+        if (own.hooked && base.hy && base.hy.tracked) return res;       // hybrid already applied the tracker mask before refining: do not gate twice
         if (own.status !== 'ready' || !res || !res.segmentationMask) return res;
         ensureCanvases();
         own.frame++; own.gateAge++;
