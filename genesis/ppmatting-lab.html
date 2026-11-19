@@ -31,7 +31,7 @@
   <div class="row">
     <label>Engine <select id="engine"><option value="modnet">MODNet (shipped baseline: run this first)</option><option value="ppmatting-v2" selected>PP-MattingV2 (live beta)</option><option value="ppmatting-hrnet">PP-Matting HRNet (export quality)</option></select></label>
     <label>Quality <select id="quality"><option value="fast">fast (320)</option><option value="balanced" selected>balanced (384)</option><option value="quality">quality (512)</option></select></label>
-    <label>Backend <select id="backend"><option value="auto">auto</option><option value="wasm">WASM only</option></select></label>
+    <label>Backend <select id="backend"><option value="auto">auto</option><option value="wasm">WASM only</option><option value="webgpu">WebGPU (force on phone)</option></select></label>
   </div>
   <div class="row" style="margin-top:8px">
     <input type="file" id="file" accept="image/*,video/*">
@@ -39,8 +39,10 @@
     <button id="startCam" disabled>Live camera</button>
     <button id="startVid" disabled>Live on video file</button>
     <button id="stop" disabled>Stop</button>
+    <button id="gpuCheck">WebGPU check</button>
   </div>
   <p class="note" id="status">Loading…</p>
+  <pre id="gpuinfo" class="note" style="display:none;white-space:pre-wrap;word-break:break-word;overflow:visible;max-height:none"></pre>
 </div>
 
 <div class="card">
@@ -68,6 +70,7 @@
 <script src="js/loader.js"></script>
 <script src="js/providers/model-store.js"></script>
 <script src="js/providers/ppmatting-core.js"></script>
+<script src="js/providers/gpu-probe.js"></script>
 <script src="js/providers/temporal-matte.js"></script>
 <script src="js/providers/matting-metrics.js"></script>
 <script src="js/providers/engine-policy.js"></script>

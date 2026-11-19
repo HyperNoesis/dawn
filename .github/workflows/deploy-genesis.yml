@@ -18,19 +18,19 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Rebuild the site from the zip parts and verify the checksum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build the site from source (scripts/build-site.sh) and verify it
         run: |
-          cd genesis/dist
-          cat Genesis-v0.97-DEPLOY-www.zip.0* > /tmp/site.zip
-          echo "$(cut -d' ' -f1 JOIN_CHECK.sha256)  /tmp/site.zip" | sha256sum -c -
-          mkdir -p /tmp/_site && unzip -q /tmp/site.zip -d /tmp/_site
-          cp -r "$GITHUB_WORKSPACE/genesis/patch/." /tmp/_site/
-          touch /tmp/_site/.nojekyll
-          test -f /tmp/_site/studio.html && test -f /tmp/_site/models/modnet.onnx
+          cd genesis
+          sh scripts/build-site.sh
+          test -f www/studio.html && test -f www/models/modnet.onnx
+          test -f www/vendor/ort/ort-wasm-simd-threaded.asyncify.wasm && test -f www/js/providers/hybrid-provider.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/_site
+          path: genesis/www
       - id: deployment
         uses: actions/deploy-pages@v4
   verify-live:
@@ -42,7 +42,7 @@ jobs:
           sleep 25
           B=https://hypernoesis.github.io/dawn
           bad=0
-          for p in "" studio.html index.html sw.js manifest.json models/modnet.onnx models/ppmatting_v2.onnx js/app.js; do
+          for p in "" studio.html index.html sw.js manifest.json models/modnet.onnx models/ppmatting_v2.onnx js/app.js js/providers/hybrid-provider.js vendor/ort/ort-wasm-simd-threaded.asyncify.wasm; do
             code=$(curl -s -o /dev/null -L -w '%{http_code} %{size_download}B %{content_type}' "$B/$p")
             echo "::notice title=live check::/dawn/$p -> $code"
             case "$code" in 200*) ;; *) bad=1;; esac
