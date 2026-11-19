@@ -18,6 +18,7 @@
     ['birefnet', 'BiRefNet lite (best edges, needs WebGPU, +115 MB, MIT)'],
     ['ppmatting-v2', 'PP-MattingV2 (BETA, live matting, +34 MB, Apache-2.0)'],
     ['genesis-hybrid', 'Genesis Hybrid (BETA: PP-MattingV2 + edge refinement, +34 MB, Apache-2.0)'],
+    ['genesis-hybrid-tam', 'Genesis Hybrid + EdgeTAM (BETA, cleanest: tracker keeps the subject, hybrid refines hair/fingers, +64 MB, Apache-2.0)'],
     ['ppmatting-hrnet', 'PP-Matting HRNet (benchmark only, heavy, +94 MB, Apache-2.0)']
   ];
   const PP_DEPS = ['js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/video-guard.js', 'js/providers/engine-policy.js', 'js/providers/ppmatting-provider.js'];
@@ -41,7 +42,7 @@
     } catch (e) { return false; }
   }
   function labOn() { try { return localStorage.getItem('vs_ppm_lab') === '1'; } catch (e) { return false; } }
-  function visibleEngines() { return ENGINES.filter((e) => ((e[0] === 'ppmatting-v2' || e[0] === 'genesis-hybrid') ? betaOn() : e[0] === 'ppmatting-hrnet' ? betaOn() && labOn() : true)); }
+  function visibleEngines() { return ENGINES.filter((e) => ((e[0] === 'ppmatting-v2' || e[0] === 'genesis-hybrid' || e[0] === 'genesis-hybrid-tam') ? betaOn() : e[0] === 'ppmatting-hrnet' ? betaOn() && labOn() : true)); }
 
   function pref() { try { const v = localStorage.getItem(KEY); return visibleEngines().some((e) => e[0] === v) ? v : 'modnet'; } catch (e) { return 'modnet'; } }   // a hidden/removed engine (flag turned off) silently becomes MODNet
   function setPref(v) { try { localStorage.setItem(KEY, v); } catch (e) { /* private mode */ } }
@@ -60,6 +61,7 @@
       if (engine !== 'modnet' && depsReady()) {
         if (engine === 'birefnet') return new V.BiRefNetSegmentationProvider();
         if (engine === 'genesis-hybrid' && V.GenesisHybridProvider && V.GenesisHybridProvider.isSupported() && ppAllowed('ppmatting-v2')) return new V.GenesisHybridProvider();
+        if (engine === 'genesis-hybrid-tam' && V.GenesisHybridProvider && V.GenesisHybridProvider.isSupported() && ppAllowed('ppmatting-v2')) return V.EdgeTAMGate.create(new V.GenesisHybridProvider());   // EdgeTAM drops stray blobs from the hybrid output; if EdgeTAM fails it passes the hybrid matte through
         if (engine === 'ppmatting-v2' && V.PPMattingV2Provider && V.PPMattingV2Provider.isSupported() && ppAllowed('ppmatting-v2')) return new V.PPMattingV2Provider();
         if (engine === 'ppmatting-hrnet' && V.PPMattingHRNetProvider && V.PPMattingHRNetProvider.isSupported() && ppAllowed('ppmatting-hrnet')) return new V.PPMattingHRNetProvider();
         if (engine === 'edgetam') return V.EdgeTAMGate.create(makeOrig());

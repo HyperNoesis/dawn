@@ -33,3 +33,9 @@ setNav({ userAgent: 'Mozilla/5.0 (X11; Linux)', hardwareConcurrency: 8, deviceMe
 delete globalThis.navigator; delete V.EnginePolicy;
 M.setPref('garbage'); assert.strictEqual(M.pref(), 'modnet'); assert.strictEqual(new R().kind, 'worker');
 console.log('matte-engines: all assertions passed');
+{
+  const ids = M.ENGINES.map((e) => e[0]);
+  assert.ok(ids.includes('genesis-hybrid') && ids.includes('genesis-hybrid-tam'), 'hybrid engines are registered');
+  assert.ok(M.visibleEngines().some((e) => e[0] === 'genesis-hybrid-tam') === M.betaOn(), 'hybrid+EdgeTAM follows the beta flag');
+  console.log('matte-engines: hybrid engines registered');
+}
