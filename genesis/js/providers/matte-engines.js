@@ -17,10 +17,12 @@
     ['edgetam', 'MODNet + EdgeTAM cleanup (Apache-2.0, +30 MB)'],
     ['birefnet', 'BiRefNet lite (best edges, needs WebGPU, +115 MB, MIT)'],
     ['ppmatting-v2', 'PP-MattingV2 (BETA, live matting, +34 MB, Apache-2.0)'],
+    ['genesis-hybrid', 'Genesis Hybrid (BETA: PP-MattingV2 + edge refinement, +34 MB, Apache-2.0)'],
     ['ppmatting-hrnet', 'PP-Matting HRNet (benchmark only, heavy, +94 MB, Apache-2.0)']
   ];
   const PP_DEPS = ['js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/video-guard.js', 'js/providers/engine-policy.js', 'js/providers/ppmatting-provider.js'];
   const DEPS = ['js/providers/model-store.js', 'js/providers/temporal-mask.js', 'js/providers/edgetam-core.js', 'js/providers/birefnet-provider.js', 'js/providers/edgetam-provider.js'].concat(PP_DEPS);
+  const HY_DEPS = ['js/providers/band-refine-core.js', 'js/providers/hybrid-provider.js'];
 
   /** Which engines the picker may show. The PP-Matting beta follows the remote flag (default on) and a local override localStorage vs_pp_beta = 0 / 1. */
   function betaOn() {
@@ -39,11 +41,11 @@
     } catch (e) { return false; }
   }
   function labOn() { try { return localStorage.getItem('vs_ppm_lab') === '1'; } catch (e) { return false; } }
-  function visibleEngines() { return ENGINES.filter((e) => (e[0] === 'ppmatting-v2' ? betaOn() : e[0] === 'ppmatting-hrnet' ? betaOn() && labOn() : true)); }
+  function visibleEngines() { return ENGINES.filter((e) => ((e[0] === 'ppmatting-v2' || e[0] === 'genesis-hybrid') ? betaOn() : e[0] === 'ppmatting-hrnet' ? betaOn() && labOn() : true)); }
 
   function pref() { try { const v = localStorage.getItem(KEY); return visibleEngines().some((e) => e[0] === v) ? v : 'modnet'; } catch (e) { return 'modnet'; } }   // a hidden/removed engine (flag turned off) silently becomes MODNet
   function setPref(v) { try { localStorage.setItem(KEY, v); } catch (e) { /* private mode */ } }
-  async function loadDeps() { for (const d of DEPS) await V.loadScript(d); }
+  async function loadDeps() { for (const d of DEPS) await V.loadScript(d); for (const d of HY_DEPS) { try { await V.loadScript(d); } catch (e) { /* hybrid is optional */ } } }
   const depsReady = () => !!(V.EdgeTAMGate && V.BiRefNetSegmentationProvider && V.ModelStore && V.EdgeTAMCore && V.TemporalMask && V.PPMattingV2Provider);
 
   let installed = false;
@@ -57,6 +59,7 @@
       const engine = pref();
       if (engine !== 'modnet' && depsReady()) {
         if (engine === 'birefnet') return new V.BiRefNetSegmentationProvider();
+        if (engine === 'genesis-hybrid' && V.GenesisHybridProvider && V.GenesisHybridProvider.isSupported() && ppAllowed('ppmatting-v2')) return new V.GenesisHybridProvider();
         if (engine === 'ppmatting-v2' && V.PPMattingV2Provider && V.PPMattingV2Provider.isSupported() && ppAllowed('ppmatting-v2')) return new V.PPMattingV2Provider();
         if (engine === 'ppmatting-hrnet' && V.PPMattingHRNetProvider && V.PPMattingHRNetProvider.isSupported() && ppAllowed('ppmatting-hrnet')) return new V.PPMattingHRNetProvider();
         if (engine === 'edgetam') return V.EdgeTAMGate.create(makeOrig());
@@ -82,7 +85,7 @@
     const note = document.createElement('div'); note.className = 'honesty-note'; note.style.marginTop = '6px';
     wrap.appendChild(lab); wrap.appendChild(s); wrap.appendChild(note);
     field.parentNode.insertBefore(wrap, field.nextSibling);
-    const msg = () => { note.textContent = s.value === 'birefnet' && !(navigator.gpu) ? 'This browser has no WebGPU, so BiRefNet cannot run here; the normal engine is used instead.' : /^ppmatting/.test(s.value) ? 'Beta: your default engine is unchanged. If this engine cannot start or is too slow, the normal engine is used instead. Everything runs on this device; no frames are uploaded.' : ''; };
+    const msg = () => { note.textContent = s.value === 'birefnet' && !(navigator.gpu) ? 'This browser has no WebGPU, so BiRefNet cannot run here; the normal engine is used instead.' : /^(ppmatting|genesis-hybrid)/.test(s.value) ? 'Beta: your default engine is unchanged. If this engine cannot start or is too slow, the normal engine is used instead. Everything runs on this device; no frames are uploaded.' : ''; };
     msg();
     s.addEventListener('change', async () => {
       setPref(s.value); msg();
