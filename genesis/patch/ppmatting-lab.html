@@ -39,8 +39,10 @@
     <button id="startCam" disabled>Live camera</button>
     <button id="startVid" disabled>Live on video file</button>
     <button id="stop" disabled>Stop</button>
+    <button id="gpuCheck">WebGPU check</button>
   </div>
   <p class="note" id="status">Loading…</p>
+  <pre id="gpuinfo" class="note" style="display:none"></pre>
 </div>
 
 <div class="card">
@@ -68,6 +70,7 @@
 <script src="js/loader.js"></script>
 <script src="js/providers/model-store.js"></script>
 <script src="js/providers/ppmatting-core.js"></script>
+<script src="js/providers/gpu-probe.js"></script>
 <script src="js/providers/temporal-matte.js"></script>
 <script src="js/providers/matting-metrics.js"></script>
 <script src="js/providers/engine-policy.js"></script>

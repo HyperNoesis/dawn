@@ -52,6 +52,7 @@
     dispose() { try { this.p.dispose && this.p.dispose(); } catch (e) { /* ignore */ } }
   }
 
+  function showGpuInfo(lines) { const el = $('gpuinfo'); el.style.display = 'block'; el.textContent = lines.join('\n'); }
   async function makeProvider() {
     if (st.provider) { try { st.provider.dispose(); } catch (e) { /* ignore */ } st.provider = null; }
     const id = $('engine').value, P = id === 'modnet' ? ModnetBaseline : id === 'ppmatting-hrnet' ? V.PPMattingHRNetProvider : V.PPMattingV2Provider;
@@ -59,7 +60,14 @@
     { const bv = $('backend').value; try { if (bv === 'wasm') localStorage.setItem('vs_webgpu', '0'); else if (bv === 'webgpu') localStorage.setItem('vs_webgpu', '1'); else localStorage.removeItem('vs_webgpu'); } catch (e) { /* ignore */ } }   // v0.98: 'webgpu' forces WebGPU on phones (the app default keeps phones on WASM)
     const p = new P(); p.onProgress = (f) => status('Loading model… ' + Math.round(f * 100) + ' %');
     await p.initialize($('quality').value);
-    st.provider = p; return p;
+    st.provider = p;
+    // v0.98: a WebGPU request that silently fell back to WASM must say why (the worker keeps the error in initNote)
+    st.fallbackReason = '';
+    if ($('backend').value === 'webgpu' && id !== 'modnet' && !p.usingWebGPU) {
+      st.fallbackReason = p.initNote || ('WebGPU was not attempted (navigator.gpu present: ' + !!(typeof navigator !== 'undefined' && navigator.gpu) + ')');
+      showGpuInfo(['WebGPU was requested but the engine is running on WASM.', 'fallback reason: ' + st.fallbackReason]);
+    } else if ($('backend').value === 'webgpu' && p.usingWebGPU) showGpuInfo(['WebGPU is active for this engine.']);
+    return p;
   }
 
   async function matteStillModnet(src) {
@@ -146,7 +154,7 @@
 
   function buildReport() {
     const L = M.latency(st.times), s = st.stats, d = device();
-    const report = { engine: $('engine').value, quality: $('quality').value, device: d, tier: V.EnginePolicy.tier(d), backend: st.provider ? (st.provider.usingWebGPU ? 'webgpu' : 'wasm') : null,
+    const report = { engine: $('engine').value, quality: $('quality').value, device: d, tier: V.EnginePolicy.tier(d), backend: st.provider ? (st.provider.usingWebGPU ? 'webgpu' : 'wasm') : null, backendRequested: $('backend').value, fallbackReason: st.fallbackReason || undefined, gpuProbe: st.gpuProbe || undefined,
       fps: L.n >= 30 ? L.fps : undefined, p95Ms: L.n >= 30 ? L.p95 : undefined, flickerRatio: s.flickerRatio != null ? s.flickerRatio : undefined,
       sadRatio: undefined, gradRatio: undefined, memGrowthMB: s.memGrowthMB != null ? s.memGrowthMB : undefined,
       sessionMinutes: L.n ? (st.times.reduce((a, b) => a + b, 0) / 60000) : undefined, recoveryFailures: s.failures, blackFrames: s.blackFrames, uploadsFrames: st.uploads,
@@ -195,6 +203,11 @@
   $('stop').addEventListener('click', () => { st.running = false; $('stop').disabled = true; });
   $('mkReport').addEventListener('click', showGate);
   $('dl').addEventListener('click', () => { $('cCut').toBlob((b) => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'genesis-cutout.png'; a.click(); }); });
+  $('gpuCheck').addEventListener('click', async () => {
+    showGpuInfo(['Checking WebGPU\u2026']);
+    try { const r = await V.GpuProbe.run(navigator, localStorage); st.gpuProbe = r.lines; showGpuInfo(r.lines.concat(st.fallbackReason ? ['fallback reason (last run): ' + st.fallbackReason] : [])); }
+    catch (e) { showGpuInfo(['WebGPU check failed: ' + String((e && e.message) || e)]); }
+  });
   for (const id of ['engine', 'backend', 'quality']) $(id).addEventListener('change', () => { if (st.provider) { st.provider.dispose(); st.provider = null; } });   // v0.98: a backend/quality change must rebuild the model, not reuse the old session
 
   window.__lab = { st, matteStill, live, makeProvider, buildReport, showGate, summarise };
