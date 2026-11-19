@@ -33,7 +33,7 @@ Generated with Depth Anything V2 Small (Apache-2.0), ONNX from fabio-sim/Depth-A
 - Depth Anything V2 Small (offline tool only, Apache-2.0): used to bake scene depth maps; not shipped to phones.
 
 ## onnxruntime-web 1.25.1 (vendor/ort/)
-Microsoft onnxruntime-web, MIT licence (npm package onnxruntime-web@1.25.1). Shipped inside the app so the matting engine works offline. Files: ort.min.js, ort.webgpu.min.js, ort-wasm-simd-threaded(.jsep).wasm, and the two helper modules renamed from .mjs to .js (same content; Android WebViews may not know the .mjs MIME type). Loaded by js/ort-loader.js, CDN only as fallback.
+Microsoft onnxruntime-web, MIT licence (npm package onnxruntime-web@1.25.1). Shipped inside the app so the matting engine works offline. Files: ort.min.js, ort.webgpu.min.js, ort-wasm-simd-threaded(.asyncify).wasm, and the two helper modules renamed from .mjs to .js (same content; Android WebViews may not know the .mjs MIME type). Loaded by js/ort-loader.js, CDN only as fallback.
 ## MODNet weights now ship in models/modnet.onnx
 Same file and sha256 as above (modnet_webcam.onnx, Apache-2.0), committed so the APK always has it.
 

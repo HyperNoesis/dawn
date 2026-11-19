@@ -16,7 +16,7 @@ async function init(m) {
   importScripts(base + 'vendor/ort/' + (gpu ? 'ort.webgpu.min.js' : 'ort.min.js'));
   importScripts(base + 'js/providers/ppmatting-core.js');
   core = self.VS.PPMattingCore;
-  const stem = gpu ? 'ort-wasm-simd-threaded.jsep' : 'ort-wasm-simd-threaded';
+  const stem = gpu ? 'ort-wasm-simd-threaded.asyncify' : 'ort-wasm-simd-threaded';
   ort.env.wasm.wasmPaths = { mjs: base + 'vendor/ort/' + stem + '.js', wasm: base + 'vendor/ort/' + stem + '.wasm' };
   ort.env.wasm.numThreads = (m.threads | 0) > 1 ? (m.threads | 0) : 1; ort.env.wasm.proxy = false;
   const bytes = new Uint8Array(m.bytes);

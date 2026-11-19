@@ -20,7 +20,7 @@
   function configure(ort, local, gpuBuild) {
     if (!ort || !ort.env || !ort.env.wasm) return;
     const base = local ? absolute(LOCAL) : CDN;
-    const stem = gpuBuild ? 'ort-wasm-simd-threaded.jsep' : 'ort-wasm-simd-threaded';
+    const stem = gpuBuild ? 'ort-wasm-simd-threaded.asyncify' : 'ort-wasm-simd-threaded';
     ort.env.wasm.wasmPaths = local
       ? { mjs: base + stem + '.js', wasm: base + stem + '.wasm' }
       : base;

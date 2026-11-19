@@ -3,7 +3,7 @@
 # Used by .github/workflows/pages.yml (GitHub Pages) and by Cloudflare Pages / Netlify (build command: sh scripts/build-site.sh, output folder: www).
 set -e
 cd "$(dirname "$0")/.."
-for f in models/modnet.onnx models/rvm_mobilenetv3_fp32.onnx vendor/ort/ort-wasm-simd-threaded.wasm vendor/ort/ort-wasm-simd-threaded.jsep.wasm; do
+for f in models/modnet.onnx models/rvm_mobilenetv3_fp32.onnx vendor/ort/ort-wasm-simd-threaded.wasm vendor/ort/ort-wasm-simd-threaded.asyncify.wasm; do
   [ -f "$f" ] || { echo "missing $f, restoring big files"; sh scripts/restore-big-files.sh; break; }
 done
 # Bundle the MediaPipe Tasks engine (wasm + loader + selfie models) INTO the site. Without it every cold start downloads about 10 MB from a CDN,

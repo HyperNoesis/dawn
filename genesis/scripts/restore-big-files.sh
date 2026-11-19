@@ -6,9 +6,9 @@
 set -e
 B=https://raw.githubusercontent.com/HyperNoesis/Beggining-/main
 mkdir -p models vendor/ort
-for f in vendor/ort/ort-wasm-simd-threaded.wasm vendor/ort/ort-wasm-simd-threaded.jsep.wasm; do
-  [ -f "$f" ] || curl -fL --retry 3 -o "$f" "$B/$f"
-done
+[ -f vendor/ort/ort-wasm-simd-threaded.wasm ] || curl -fL --retry 3 -o vendor/ort/ort-wasm-simd-threaded.wasm "$B/vendor/ort/ort-wasm-simd-threaded.wasm"
+# WebGPU runtime (onnxruntime-web 1.25.1 uses the asyncify build; the old jsep build has no webgpuInit)
+[ -f vendor/ort/ort-wasm-simd-threaded.asyncify.wasm ] || curl -fL --retry 3 -o vendor/ort/ort-wasm-simd-threaded.asyncify.wasm https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/ort-wasm-simd-threaded.asyncify.wasm
 T=$(mktemp -d)
 if [ ! -f models/modnet.onnx ]; then
   curl -fL --retry 3 -o "$T/modnet.onnx" "$B/models/modnet.onnx"
