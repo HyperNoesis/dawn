@@ -27,4 +27,13 @@ assert.deepStrictEqual([s[0].x, s[0].y, s[0].w, s[0].h], [32, 32, 256, 256]);
 const dst = new Uint8Array(W * H).fill(0), tile = { x: 20, y: 20, w: 40, h: 40 }, src = new Uint8Array(40 * 40).fill(200);
 B.pasteTile(dst, W, H, tile, src, 4);
 assert.strictEqual(dst[40 * W + 40], 200); assert(dst[20 * W + 20] > 0 && dst[20 * W + 20] < 200); assert.strictEqual(dst[10 * W + 10], 0);
-console.log('matte-band.test.js PASS');
+// refineTiles: accepts a faithful refinement, rejects one that rewrites confident pixels, survives a throwing runner, respects the deadline
+(async () => {
+  const t0 = B.plan(a, W, H, { budget: 4 }).tiles, same = async (t) => { const o = new Uint8Array(t.w * t.h); for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) o[y * t.w + x] = a[(t.y + y) * W + t.x + x]; return o; };
+  let r = await B.refineTiles(a, W, H, t0, same); assert.strictEqual(r.accepted, t0.length); assert.deepStrictEqual(Array.from(r.alpha), Array.from(a), 'identity refinement changes nothing');
+  r = await B.refineTiles(a, W, H, t0, async (t) => new Uint8Array(t.w * t.h).fill(255)); assert.strictEqual(r.rejected, t0.length); assert.deepStrictEqual(Array.from(r.alpha), Array.from(a), 'bad tiles never reach the matte');
+  r = await B.refineTiles(a, W, H, t0, async () => { throw new Error('x'); }); assert.strictEqual(r.failed, t0.length);
+  let clock = 0; r = await B.refineTiles(a, W, H, t0, async (t) => { clock += 30; return same(t); }, { deadlineMs: 50, now: () => clock }); assert(r.accepted >= 1 && r.skipped >= 1, 'deadline stops new tiles');
+  assert(a.every((v, i) => v === Array.from(a)[i])); // raw untouched
+  console.log('matte-band.test.js PASS');
+})().catch((e) => { console.error(e); process.exit(1); });

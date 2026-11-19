@@ -22,6 +22,9 @@
   const TEMPORAL_KEY = 'vs_ppm_temporal';
 
   function mainOn() { try { return localStorage.getItem('vs_ppm_main') === '1'; } catch (e) { return false; } }
+  /** Edge-tile refinement (v0.99 task 2). OPT-IN until measured on a phone: localStorage vs_ppm_tiles = '1'. */
+  function tilesOn() { try { return localStorage.getItem('vs_ppm_tiles') === '1'; } catch (e) { return false; } }
+  const r32 = (v) => Math.max(64, Math.round(v / 32) * 32);
   function guardOn() { try { return localStorage.getItem('vs_ppm_guard') !== '0'; } catch (e) { return true; } }
   /** 32x18 grayscale thumbnail of the model input (box-sampled) for scene-cut detection. */
   function thumb(rgba, w, h, out) { const TW = 32, TH = 18; for (let ty = 0; ty < TH; ty++) { const y = Math.min(h - 1, Math.floor((ty + 0.5) * h / TH)); for (let tx = 0; tx < TW; tx++) { const x = Math.min(w - 1, Math.floor((tx + 0.5) * w / TW)), i = (y * w + x) * 4; out[ty * TW + tx] = (rgba[i] * 77 + rgba[i + 1] * 150 + rgba[i + 2] * 29) >> 8; } } return out; }
@@ -53,6 +56,7 @@
       if (!V.TemporalMatte) await V.loadScript('js/providers/temporal-matte.js');
       if (temporalMode() === 'motion' && !V.MotionTemporalMatte) { try { await V.loadScript('js/providers/temporal-flow.js'); } catch (e) { /* optional: falls back to TemporalMatte */ } }
       if (!V.MatteRefine) { try { await V.loadScript('js/providers/matte-refine.js'); } catch (e) { /* optional */ } }
+      if (tilesOn() && !V.MatteBand) { try { await V.loadScript('js/providers/matte-band.js'); } catch (e) { /* optional: no tile pass */ } }
       if (!V.VideoGuard) { try { await V.loadScript('js/providers/video-guard.js'); } catch (e) { /* guard is optional: without it the provider behaves as before */ } }
       const { bytes } = await V.ModelStore.load(this.modelId, { onProgress: (f, l) => { if (this.onProgress) this.onProgress(f, l); if (opts.onProgress) opts.onProgress(f, l); } });
       const file = Object.keys(bytes)[0], buf = bytes[file];
@@ -98,6 +102,10 @@
       this.lastMs = r.ms || 0;
       const ow = r.w, oh = r.h; let raw = new Uint8Array(r.alpha);
       if (mainOn() && V.MatteRefine) raw = V.MatteRefine.keepMainSubject(raw, ow, oh).alpha;   // v0.95 opt-in for live (localStorage vs_ppm_main = 1): drops stray blobs; default OFF until phone-tested
+      this.lastCoarse = raw; this.lastTileStats = null;
+      if (tilesOn() && V.MatteBand && !this._rect) {           // not with the person-ROI crop: the matte grid is not the full frame then
+        try { const t = await this._refineEdges(video, raw, ow, oh); raw = t.alpha; this.lastTileStats = t; } catch (e) { /* the coarse matte is always a valid answer */ }
+      }
       let shown = raw, gd = null;
       if (this.guard) {
         if (!this._thumb) this._thumb = new Uint8Array(32 * 18);
@@ -112,12 +120,32 @@
         const s = this.mtm.step(raw, lumaPlane(data, ow * oh, this._luma), ow, oh, performance.now()); shown = s.refined; this.lastRefined = Uint8Array.from(shown); this.lastTemporalStats = s.stats;
       } else if ((temporalMode() === 'refined' || temporalMode() === 'motion') && this.tm) { const s = this.tm.step(raw, ow, oh); shown = s.refined; this.lastRefined = Uint8Array.from(shown); }
       else { this.lastRefined = null; }
-      this.lastRaw = raw; this.lastSize = [ow, oh];
+      this.lastRaw = this.lastCoarse || raw; this.lastSize = [ow, oh];
       if (this._outCanvas.width !== ow || this._outCanvas.height !== oh || !this._outImageData) { this._outCanvas.width = ow; this._outCanvas.height = oh; this._outImageData = this._outCtx.createImageData(ow, oh); }
       const px = this._outImageData.data;
       for (let i = 0, n = ow * oh; i < n; i++) { const o = i * 4; px[o] = 255; px[o + 1] = 255; px[o + 2] = 255; px[o + 3] = shown[i]; }
       this._outCtx.putImageData(this._outImageData, 0, 0);
       return { segmentationMask: this._emit() };
+    }
+
+    /** Rerun the hardest edge tiles on a higher-resolution camera crop and paste them back (matte-band.js). Budget: this.tileBudget (default 4). */
+    async _refineEdges(video, raw, ow, oh) {
+      const B = V.MatteBand, vw = video.videoWidth, vh = video.videoHeight, budget = this.tileBudget != null ? this.tileBudget : 4;
+      const plan = B.plan(raw, ow, oh, { budget, tile: 64, pad: 8 });
+      if (!plan.tiles.length) return { alpha: raw, accepted: 0, rejected: 0, failed: 0, skipped: 0, ms: 0, plan: plan.stats };
+      const cam = B.scaleTiles(plan.tiles, ow, oh, vw, vh), core = V.PPMattingCore, CAP = this.tileCap || 256;
+      if (!this._tileCv) { this._tileCv = document.createElement('canvas'); this._tileCtx = this._tileCv.getContext('2d', { willReadFrequently: true }); }
+      let k = 0;
+      const run = async (tile) => {
+        const c = cam[k++], s = Math.min(1, CAP / Math.max(c.w, c.h)), rw = r32(c.w * s), rh = r32(c.h * s);
+        this._tileCv.width = rw; this._tileCv.height = rh;
+        this._tileCtx.drawImage(video, c.x, c.y, c.w, c.h, 0, 0, rw, rh);
+        const buf = new Uint8ClampedArray(this._tileCtx.getImageData(0, 0, rw, rh).data).buffer;
+        const r = await this._send({ type: 'run', w: rw, h: rh, rgba: buf }, [buf]);
+        return core.resizeAlpha(new Uint8Array(r.alpha), r.w, r.h, tile.w, tile.h);
+      };
+      const res = await B.refineTiles(raw, ow, oh, plan.tiles, run, { deadlineMs: this.tileDeadlineMs || 40 });
+      res.plan = plan.stats; return res;
     }
 
     /** Camera restart / orientation change: forget the temporal state so an old matte can never ghost onto a new frame. */
