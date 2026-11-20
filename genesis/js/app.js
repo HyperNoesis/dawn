@@ -184,6 +184,7 @@
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
+            if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
             resetSegCache();
             rendererSend({ type: 'setMatte', state: {} });
             updateStudioChrome();
@@ -2048,6 +2049,7 @@
       await cand.initialize(runningQuality);
       if (!running || token !== loopToken) { cand.dispose?.(); return; }
       const old = segProvider; segProvider = cand; cand = null;
+      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, 'Performance governor switched to MediaPipe because the selected matting engine could not sustain the target frame rate.');
       resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);
       segLogPush('light-active'); showBenchNote('Light model active: this device could not hold a steady frame rate with the high-quality model.');
@@ -2178,6 +2180,7 @@
       if (!running || token !== loopToken) { cand.dispose?.(); cand = null; return; }
       const old = segProvider; segProvider = cand; cand = null;
       govProvider = segProvider; govLight = !!a.emergency;
+      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, a.emergency ? 'Performance governor switched to the lightweight MediaPipe fallback.' : null);
       resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);   // disposing a hung worker terminates it
       gv.applied(a, performance.now()); govSave(a);
