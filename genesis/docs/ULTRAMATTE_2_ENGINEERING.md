@@ -51,6 +51,12 @@ The inspector offers Original, Alpha, Edges and Checkerboard Cutout modes. The c
 
 The preview is a downsampled diagnostic visual only. It is not used as the recording output and does not alter the mask.
 
+### 5. Clean-plate validity
+
+Genesis already had an empty-room capture control and a GPU clean-plate assist. This branch improves the validity contract: the renderer reports whether a plate is actually loaded; a new output-size change invalidates the plate with a reason; and camera changes, camera stop/restart, zoom and pan clear the old reference. The Studio UI reflects the real plate state rather than leaving a stale “saved” message visible.
+
+Lighting and physical background changes cannot be detected reliably from the existing implementation. The UI continues to instruct the user to recapture when lighting or the room changes.
+
 ## What is intentionally not claimed as complete
 
 The following still require a separate model and validation effort:
