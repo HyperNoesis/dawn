@@ -11,7 +11,7 @@
     gridWidth: 64, gridHeight: 36, blockSize: 8, searchRadius: 2,
     minTextureStd: 3.5, maxSad: 38, minBlockConfidence: 0.12,
     neighbourRadius: 2, minCoverage: 0.08, minMeanConfidence: 0.10,
-    sceneCutMean: 46, maxFrameGapMs: 280, maxMaskAgeMs: 520
+    sceneCutMean: 46, maxFrameGapMs: 1200, maxMaskAgeMs: 1500
   };
 
   function meanAbsDiff(a, b) {
@@ -217,7 +217,12 @@
       for (let i = 0, p = 3; i < this.alpha.length; i++, p += 4) this.alpha[i] = data[p];
       this.previousLuma = sourceFrame ? this._readLuma(sourceFrame) : null;
       this.suspended = false;
-      this.seededAt = this.previousAt = Number.isFinite(timestamp) ? timestamp : performance.now();
+      // The frame timestamp belongs to the model input, but the mask only
+      // becomes available after inference completes. Measure matte age from
+      // delivery time, while retaining the source timestamp for first-frame
+      // motion catch-up.
+      this.previousAt = Number.isFinite(timestamp) ? timestamp : performance.now();
+      this.seededAt = performance.now();
       this.metrics = { status: this.previousLuma ? 'seeded' : 'unpaired-seed', ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
       return this._writeCanvas();
     }
