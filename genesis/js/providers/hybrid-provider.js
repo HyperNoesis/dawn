@@ -154,8 +154,15 @@
       const cands = B.pickTiles(band, OW, OH, TILE, { minCount: 12 });
       // Incremental detail allowance, independent of coarse inference latency.
       const target = lsNum('vs_hy_target_ms', 60, 15, 300), maxTiles = lsNum('vs_hy_tiles', 3, 0, 8);
-      if (!this._tileMs) this._tileMs = Math.max(8, coarseMs * 0.25);
-      const budget = B.tileBudget({ budgetMs: target, tileMs: this._tileMs, maxTiles });
+      // Start from a conservative independent tile estimate. Deriving it from
+      // coarseMs can set the initial estimate above the entire detail allowance
+      // on a slow phone, leaving no tile to measure and therefore no way to learn.
+      if (!this._tileMs) this._tileMs = 24;
+      let budget = B.tileBudget({ budgetMs: target, tileMs: this._tileMs, maxTiles });
+      // Keep a very occasional one-tile probe when the measured tile cost is
+      // above the allowance. Without exploration, a pessimistic estimate could
+      // permanently switch refinement off for the rest of the session.
+      if (budget === 0 && maxTiles > 0 && this._frames % 30 === 0) budget = 1;
       const frame = this._readFrameLuma(video, vw, vh);
       const cores = cands.map((core) => ({
         core,
