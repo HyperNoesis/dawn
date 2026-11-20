@@ -482,12 +482,16 @@
     } else if (data.type === 'matteStatus') {
       if (els.matteStatus) {
         if (!data.ok) {
+          cleanPlateRequested = false;
           els.matteStatus.textContent = 'GPU sharp edges unavailable on this device' + (data.error ? ' (' + data.error + ')' : '') + ' — using the standard edge path.';
         } else if (data.plateNotice) {
+          cleanPlateRequested = false;
           els.matteStatus.textContent = data.plateNotice;
         } else if (data.hasPlate) {
+          cleanPlateRequested = true;
           els.matteStatus.textContent = 'GPU sharp edges active · Clean plate active. Keep the camera, crop and lighting unchanged.';
         } else {
+          cleanPlateRequested = false;
           els.matteStatus.textContent = 'GPU sharp edges active · No clean plate loaded.';
         }
       }
@@ -577,6 +581,12 @@
   // Sharp GPU matte (see js/providers/gl-matte.js). Falls back to the legacy
   // canvas edge path automatically if WebGL2 is unavailable.
   const matteState = { mode: 'gl', radius: 1, crisp: 0.5, despill: 0.6 };
+  let cleanPlateRequested = false;
+  function invalidateCleanPlate(reason) {
+    if (!cleanPlateRequested) return;
+    cleanPlateRequested = false;
+    rendererSend({ type: 'clearPlate', reason: reason || 'Clean plate cleared; capture a new empty-room frame.' });
+  }
   function pushMatte() {
     if (!(renderWorker || localCore)) return;
     const c = matteState.crisp;
@@ -1170,6 +1180,7 @@
   function stopCamera() {
     hideStageLoading();
     clearInterval(blackWatchTimer);
+    invalidateCleanPlate('Camera stopped; capture a new clean plate after restarting.');
     running = false;
     try { stopGestures(); } catch (e) {}
     updateStudioChrome();
@@ -1211,6 +1222,7 @@
 
   els.flipCamBtn.addEventListener('click', async () => {
     if (!running) return;
+    invalidateCleanPlate('Camera changed; capture a new clean plate.');
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     els.cameraSelect.value = ''; // explicit facingMode should win over a stale device pick
     els.flipCamBtn.disabled = true;
@@ -3107,11 +3119,18 @@
   renderAspectSegControl();
 
   els.zoomRange.addEventListener('input', () => {
+    invalidateCleanPlate('Zoom changed; capture a new clean plate for the new framing.');
     compositionEngine.setZoom(parseFloat(els.zoomRange.value));
     els.zoomVal.textContent = compositionEngine.zoom.toFixed(1) + 'x';
   });
-  els.panXRange.addEventListener('input', () => compositionEngine.setPan(parseFloat(els.panXRange.value), compositionEngine.panY));
-  els.panYRange.addEventListener('input', () => compositionEngine.setPan(compositionEngine.panX, parseFloat(els.panYRange.value)));
+  els.panXRange.addEventListener('input', () => {
+    invalidateCleanPlate('Framing changed; capture a new clean plate.');
+    compositionEngine.setPan(parseFloat(els.panXRange.value), compositionEngine.panY);
+  });
+  els.panYRange.addEventListener('input', () => {
+    invalidateCleanPlate('Framing changed; capture a new clean plate.');
+    compositionEngine.setPan(compositionEngine.panX, parseFloat(els.panYRange.value));
+  });
   // ---- v0.53 "Fit me in frame": read the face for about a second, then set zoom/pan so the head sits like a normal talking-head shot.
   // One-shot on a button press (never continuous), so it cannot fight the person or burn battery. Maths: js/face-fit-core.js (tested).
   let fitBusy = false;
@@ -3402,14 +3421,16 @@
       const cw = outW, ch = outH;
       const crop = compositionEngine.computeFrame(videoNativeW || cw, videoNativeH || ch, Math.max(cw, ch));
       const bmp = await createImageBitmap(els.video, crop.sx, crop.sy, crop.sw, crop.sh, { resizeWidth: cw, resizeHeight: ch, resizeQuality: 'medium' });
+      cleanPlateRequested = true;
       rendererSend({ type: 'setPlate', bitmap: bmp }, [bmp]);
-      els.matteStatus.textContent = 'Clean plate saved. Keep the camera still. Re-capture if you change zoom, framing or lighting.';
+      els.matteStatus.textContent = 'Clean plate captured. Keep the camera, crop and lighting unchanged.';
     } catch (err) {
       els.matteStatus.textContent = 'Could not capture the plate: ' + err.message;
     }
     plateBusy = false;
   });
   els.clearPlateBtn.addEventListener('click', () => {
+    cleanPlateRequested = false;
     rendererSend({ type: 'clearPlate' });
     els.matteStatus.textContent = 'Clean plate cleared.';
   });
