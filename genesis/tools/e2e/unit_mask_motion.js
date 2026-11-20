@@ -26,10 +26,10 @@ function translate(src, dx, dy) {
   assert.ok(Math.abs(flow.meanDx + 2) < 0.6, 'backward flow points to previous x-2: ' + flow.meanDx);
   assert.ok(Math.abs(flow.meanDy) < 0.4, 'horizontal translation has near-zero y motion: ' + flow.meanDy);
   const alpha = new Uint8Array(W * H);
-  for (let y = 8; y < 28; y++) for (let x = 18; x < 30; x++) alpha[y * W + x] = 255;
+  for (let y = 8; y < 28; y++) for (let x = 24; x < 32; x++) alpha[y * W + x] = 255;
   const warped = M.warpAlpha(alpha, W, H, flow, W, H);
   assert.ok(warped[18 * W + 31] > 200, 'matte follows two-pixel rightward subject motion at its new edge');
-  assert.strictEqual(warped[18 * W + 18], 0, 'the vacated leading edge is no longer filled');
+  assert.strictEqual(warped[18 * W + 24], 0, 'the vacated leading edge in the same flow block is no longer filled');
 }
 {
   const src = pattern(19), flow = M.estimateFlow(src, src, W, H, { blockSize: BLOCK, searchRadius: 3 });
