@@ -19,6 +19,12 @@
   });
   det.appendChild(motionToggle);
   anchor.parentNode.insertBefore(det, anchor.nextSibling);
+  window.VS = window.VS || {};
+  window.VS.segmentationPreviewEnabled = false;
+  det.addEventListener('toggle', function () {
+    window.VS.segmentationPreviewEnabled = !!det.open;
+    if (det.open) renderPreview();
+  });
   var visual = document.createElement('section');
   visual.className = 'seg-alpha-inspector';
   visual.style.cssText = 'margin-top:12px;padding:10px;border:1px solid var(--line,#555);border-radius:12px;background:rgba(120,130,150,.06);';
