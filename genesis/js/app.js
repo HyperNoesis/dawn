@@ -3159,6 +3159,7 @@
   });
 
   els.resetPanBtn.addEventListener('click', () => {
+    invalidateCleanPlate('Framing reset; capture a new clean plate.');
     compositionEngine.resetPan();
     els.panXRange.value = '0.5'; els.panYRange.value = '0.5';
   });
