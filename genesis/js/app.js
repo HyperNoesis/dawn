@@ -2185,7 +2185,8 @@
     }
     // When the emergency light model is active, recovery must retry the
     // originally selected advanced engine—not an unrelated plain MODNet tier.
-    governor = G.create({ chain: govChainFor(preferred), startEngine: preferred, startEdge: 224, now: performance.now() });
+    const startEdge = /^(ppmatting|genesis-hybrid)/.test(preferred) ? 320 : 224;
+    governor = G.create({ chain: govChainFor(preferred), startEngine: preferred, startEdge, now: performance.now() });
     governor.applied({ emergency: true, rungIndex: -1, type: 'emergency' }, performance.now());
     govProvider = segProvider; govLight = true;
   }
