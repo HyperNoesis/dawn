@@ -3110,6 +3110,7 @@
       </button>`).join('');
     els.aspectSegControl.querySelectorAll('.seg-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        invalidateCleanPlate('Aspect changed; capture a new clean plate for this output shape.');
         compositionEngine.setAspect(btn.dataset.aspect);
         renderAspectSegControl();
         setCanvasSize(els.qualitySelect.value);
@@ -3148,6 +3149,7 @@
       if (!m) { showBenchNote('Could not see one clear face. Face the camera in good light and try again.'); return; }
       const r = window.VS.FaceFit.fitHead(m, els.video.videoWidth, els.video.videoHeight, compositionEngine.aspect.ratio);
       if (!r) { showBenchNote('Could not work out a fit.'); return; }
+      invalidateCleanPlate('Fit me changed the framing; capture a new clean plate.');
       compositionEngine.setZoom(r.zoom); compositionEngine.setPan(r.panX, r.panY);
       try { window.VS.frameApi.syncUi(); } catch (e) {}
       resetSegCache();
@@ -4150,6 +4152,9 @@
   function applyConfigSnapshot(cfg) {
     if (cfg.env) { els.envSelect.value = cfg.env; renderEnvMiniGrid(); pushEnvironment(cfg.env); }
     if (cfg.quality) { els.qualitySelect.value = cfg.quality; renderQualitySegControl(); }
+    if (cfg.aspect || typeof cfg.zoom === 'number' || (typeof cfg.panX === 'number' && typeof cfg.panY === 'number')) {
+      invalidateCleanPlate('Studio framing preset changed; capture a new clean plate.');
+    }
     if (cfg.aspect) { compositionEngine.setAspect(cfg.aspect); renderAspectSegControl(); }
     if (typeof cfg.zoom === 'number') { compositionEngine.setZoom(cfg.zoom); els.zoomRange.value = cfg.zoom; els.zoomVal.textContent = cfg.zoom.toFixed(1) + 'x'; }
     if (typeof cfg.panX === 'number' && typeof cfg.panY === 'number') {
