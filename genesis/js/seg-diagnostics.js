@@ -74,7 +74,7 @@
   function engineLog() {
     var L = (window.VS && window.VS.segLog) || [];
     if (!L.length) return 'no changes this session';
-    return L.slice(-4).map(function (e) { return e.ev + (e.why ? ' (' + e.why + ')' : '') + ' [out ' + e.fps + ', cam ' + e.cam + ', mask ' + e.seg + ' ms' + (e.edge ? ', ' + e.edge + ' px' : '') + (e.ms ? ', bench ' + e.ms + ' ms' : '') + ']'; }).join('<br>');
+    return L.slice(-4).map(function (e) { return esc(e.ev) + (e.why ? ' (' + esc(e.why) + ')' : '') + ' [out ' + esc(e.fps) + ', cam ' + esc(e.cam) + ', mask ' + esc(e.seg) + ' ms' + (e.edge ? ', ' + esc(e.edge) + ' px' : '') + (e.ms ? ', bench ' + esc(e.ms) + ' ms' : '') + ']'; }).join('<br>');
   }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
   function row(k, v) { return '<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd></div>'; }
