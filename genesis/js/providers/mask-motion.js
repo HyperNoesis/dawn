@@ -8,7 +8,7 @@
   'use strict';
   const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   const DEFAULTS = {
-    gridWidth: 64, gridHeight: 36, blockSize: 8, searchRadius: 3,
+    gridWidth: 64, gridHeight: 36, blockSize: 8, searchRadius: 2,
     minTextureStd: 3.5, maxSad: 38, minBlockConfidence: 0.12,
     neighbourRadius: 2, minCoverage: 0.08, minMeanConfidence: 0.10,
     sceneCutMean: 46, maxFrameGapMs: 280, maxMaskAgeMs: 520
@@ -241,7 +241,7 @@
       else {
         flow = estimateFlow(this.previousLuma, luma, this.options.gridWidth, this.options.gridHeight, this.options);
         if (flow.coverage < this.options.minCoverage || flow.meanConfidence < this.options.minMeanConfidence) {
-          status = 'low-confidence';
+          status = 'low-confidence'; this.suspended = true;
         } else {
           this.alpha = warpAlpha(this.alpha, this.width, this.height, flow, this.options.gridWidth, this.options.gridHeight);
           status = 'warped'; warped = true;
