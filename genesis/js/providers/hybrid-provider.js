@@ -31,7 +31,7 @@
     constructor() {
       super();
       this.title = 'Genesis UltraMatte';
-      this.label = 'Genesis UltraMatte (beta, local)';
+      this.label = 'Genesis UltraMatte · PP-MattingV2 (beta, local)';
       this.hy = { tiles: 0, budget: 0, bandPct: 0, refined: 0, cached: 0, rejected: 0, warped: 0, ms: 0, size: null, errors: 0, lastError: '', snapshotFailures: 0, lastSnapshotError: '', off: false };
       this._hyReset();
     }
