@@ -22,22 +22,22 @@
     },
     'ppmatting-v2': {
       label: 'PP-MattingV2',
-      scripts: ['js/providers/model-store.js', 'js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/video-guard.js', 'js/providers/ppmatting-provider.js'],
+      scripts: ['js/providers/model-store.js', 'js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/ppmatting-provider.js'],
       requires: ['ModelStore', 'PPMattingCore', 'TemporalMatte', 'PPMattingV2Provider']
     },
     'ppmatting-hrnet': {
       label: 'PP-Matting HRNet',
-      scripts: ['js/providers/model-store.js', 'js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/video-guard.js', 'js/providers/ppmatting-provider.js'],
+      scripts: ['js/providers/model-store.js', 'js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/ppmatting-provider.js'],
       requires: ['ModelStore', 'PPMattingCore', 'TemporalMatte', 'PPMattingHRNetProvider']
     },
     'genesis-hybrid': {
       label: 'Genesis Hybrid',
-      scripts: ['js/providers/model-store.js', 'js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/video-guard.js', 'js/providers/ppmatting-provider.js', 'js/providers/band-refine-core.js', 'js/providers/hybrid-provider.js'],
+      scripts: ['js/providers/model-store.js', 'js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/ppmatting-provider.js', 'js/providers/band-refine-core.js', 'js/providers/hybrid-provider.js'],
       requires: ['ModelStore', 'PPMattingCore', 'TemporalMatte', 'PPMattingV2Provider', 'BandRefineCore', 'GenesisHybridProvider']
     },
     'genesis-hybrid-tam': {
       label: 'Genesis UltraMatte',
-      scripts: ['js/providers/model-store.js', 'js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/video-guard.js', 'js/providers/ppmatting-provider.js', 'js/providers/band-refine-core.js', 'js/providers/hybrid-provider.js', 'js/providers/edgetam-core.js', 'js/providers/edgetam-provider.js'],
+      scripts: ['js/providers/model-store.js', 'js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/ppmatting-provider.js', 'js/providers/band-refine-core.js', 'js/providers/hybrid-provider.js', 'js/providers/edgetam-core.js', 'js/providers/edgetam-provider.js'],
       requires: ['ModelStore', 'PPMattingCore', 'TemporalMatte', 'PPMattingV2Provider', 'BandRefineCore', 'GenesisHybridProvider', 'EdgeTAMCore', 'EdgeTAMGate']
     }
   };
