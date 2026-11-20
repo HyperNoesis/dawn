@@ -148,7 +148,7 @@
   function reportActive(provider, reason) {
     activeLabel = provider ? String(provider.current || provider.label || 'Unknown engine') : null;
     fallbackReason = reason || null;
-    if (reason) lastError = reason;
+    lastError = reason || null;
   }
 
   function getStatus(provider) {
