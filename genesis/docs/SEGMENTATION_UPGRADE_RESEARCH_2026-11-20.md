@@ -184,3 +184,8 @@ The source-frame catch-up window is 1.2 seconds and the maximum matte lifetime a
 ### User-facing engine name
 
 The existing opt-in `genesis-hybrid-tam` engine is now presented in the picker as **Genesis UltraMatte**. It combines the local PP-MattingV2 coarse alpha, EdgeTAM subject gate, uncertainty-band high-resolution tile refinement, and the app-level MaskMotion stage. The underlying engine identifier is preserved for backward compatibility. This remains a beta profile and is not automatically promoted on low-tier devices.
+
+
+### Async recovery guard
+
+Background matte refreshes now pass through the same segmentation watchdog used by the main inference path. A worker that stops responding is counted as a stall and cannot leave the async refresh state permanently busy; the existing quality governor can then recover or downshift the engine.
