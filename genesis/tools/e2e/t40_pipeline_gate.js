@@ -1,5 +1,5 @@
-// CI GATE A (Prompt 1): real camera path (Chromium fake device fed by fixtures/webcam_clip.mjpeg) + real default engine (MediaPipe legacy, offline) + full compositor.
-// MODNet is gated in t41 (a slow CI CPU cannot hold MODNet at a steady FPS, so mixing them would make this gate meaningless).
+// CI GATE A: real camera path (Chromium fake device fed by fixtures/webcam_clip.mjpeg) + current offline local segmentation engine + full compositor.
+// MODNet and RVM also have focused model/quality gates in t41/t43; this gate verifies the complete default app path and compositor.
 // Fails on: low FPS, alpha/edge flicker, composite differs from reference, blank or frozen preview.
 // Usage: node tools/e2e/t40_pipeline_gate.js   (UPDATE_REF=1 rewrites fixtures/ref_composite.png after you have looked at it)
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -22,7 +22,7 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
   // 1) real camera + default engine must be live
   await page.waitForFunction(() => /Provider: /.test((document.getElementById('stats')||{}).textContent||''), null, { timeout: 120000 });
   const stats = await page.evaluate(() => (document.getElementById('stats') || {}).textContent || ''); R.info.stats = stats;
-  ok('default engine live (MediaPipe legacy, offline)', /Provider: [^|]*MediaPipe/i.test(stats), stats);
+  ok('default local engine live (MediaPipe or MODNet, offline)', /Provider: [^|]*(MediaPipe|MODNet)/i.test(stats), stats);
   // 2) pick a background (real environment photo), let it settle
   await page.evaluate(() => { const s = document.getElementById('envSelect'); const id = [...s.options].map((o) => o.value).find((v) => v === 'concrete-studio') || s.options[0].value; s.value = id; s.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.waitForTimeout(3000);
