@@ -1680,9 +1680,11 @@
     const make = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
     const sourceCanvas = make(), alphaCanvas = make(), edgeCanvas = make();
     if (source) {
-      const sx = source.videoWidth || source.width || mask.width;
-      const sy = source.videoHeight || source.height || mask.height;
-      if (sx > 0 && sy > 0) sourceCanvas.getContext('2d').drawImage(source, 0, 0, sx, sy, 0, 0, w, h);
+      try {
+        const sx = source.videoWidth || source.width || mask.width;
+        const sy = source.videoHeight || source.height || mask.height;
+        if (sx > 0 && sy > 0) sourceCanvas.getContext('2d').drawImage(source, 0, 0, sx, sy, 0, 0, w, h);
+      } catch (sourcePreviewError) { /* original-frame preview is optional; alpha inspection must still work */ }
     }
     const maskCanvas = make(), maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
     maskCtx.drawImage(mask, 0, 0, w, h);
