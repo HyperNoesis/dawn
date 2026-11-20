@@ -26,13 +26,20 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
     const G = rd(gt, false); const masks = []; const segMs = [];
     for (let i = 0; i < N; i++) { const t1 = performance.now(); const res = await w.segment(v); segMs.push(performance.now() - t1); masks.push(rd(res.segmentationMask, true)); await new Promise((r2) => setTimeout(r2, 120)); }
     clearInterval(tick); stream.getTracks().forEach((t) => t.stop());
-    let inter = 0, uni = 0; const M = masks[masks.length - 1]; for (let i = 0; i < SW * SH; i++) { const a = M[i] > 127, b = G[i] > 127; if (a && b) inter++; if (a || b) uni++; }
+    const ious = masks.map((M) => {
+      let inter = 0, uni = 0;
+      for (let i = 0; i < SW * SH; i++) { const a = M[i] > 127, b = G[i] > 127; if (a && b) inter++; if (a || b) uni++; }
+      return inter / Math.max(1, uni);
+    });
+    const iou = ious.reduce((sum, v) => sum + v, 0) / ious.length;
+    const minFrameIou = Math.min(...ious);
     let fl = 0; for (let k = 1; k < masks.length; k++) { let s = 0; for (let i = 0; i < SW * SH; i++) s += Math.abs(masks[k][i] - masks[k - 1][i]); fl += s / (SW * SH); } fl /= (masks.length - 1);
-    return { label: w.label, iou: inter / Math.max(1, uni), maskFlicker: fl, mainGapMs: Math.round(worst), worstAt, loadMs, segMsMedian: Math.round(segMs.sort((a, b) => a - b)[N >> 1]) };
+    return { label: w.label, iou, minFrameIou, maskFlicker: fl, mainGapMs: Math.round(worst), worstAt, loadMs, segMsMedian: Math.round(segMs.sort((a, b) => a - b)[N >> 1]) };
   }, { N: TH.modnetFrames, gtUrl: base + '/tools/e2e/fixtures/gt_alpha_640x480.png' });
   console.log('info', JSON.stringify(r));
   ok('RVM runs in a worker, offline', /RVM.*worker/i.test(r.label), r.label);
-  ok('mask IoU vs ground truth >= ' + TH.rvmMinIou, r.iou >= TH.rvmMinIou, +r.iou.toFixed(3));
+  ok('mean mask IoU across frames >= ' + TH.rvmMinIou, r.iou >= TH.rvmMinIou, +r.iou.toFixed(3));
+  ok('worst-frame IoU >= 0.97', r.minFrameIou >= 0.97, +r.minFrameIou.toFixed(3));
   ok('raw mask frame-to-frame flicker <= ' + TH.rvmMaxMaskFlicker + ' (of 255)', r.maskFlicker <= TH.rvmMaxMaskFlicker, +r.maskFlicker.toFixed(3));
   ok('page main thread never blocked > ' + TH.rvmMaxMainGapMs + ' ms', r.mainGapMs <= TH.rvmMaxMainGapMs, r.mainGapMs);
   ok('no page errors', errs.filter((e) => !/MediaPipe|net::|ERR_FAILED/.test(e)).length === 0, errs.slice(0, 3));
