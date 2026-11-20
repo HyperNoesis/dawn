@@ -31,3 +31,5 @@ MaskMotion now distinguishes source-frame time from model-result delivery time. 
 - The opt-in composite profile is now presented in the Studio picker as Genesis UltraMatte; the existing stored engine ID remains compatible.
 
 - Async mask refreshes now use the existing inference watchdog so a hung worker cannot keep the refresh loop permanently busy.
+
+- The optical-flow analysis grid now preserves the input camera aspect ratio for landscape, 4:3 and portrait capture.
