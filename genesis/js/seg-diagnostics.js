@@ -8,6 +8,16 @@
   var FRIENDLY = { fast: 'Performance', balanced: 'Balanced', quality: 'Detail', ultra: 'Ultra' };
   var det = document.createElement('details'); det.className = 'seg-diag';
   det.innerHTML = '<summary>Diagnostics</summary><dl id="segDiag"></dl><p class="seg-note">Measured in this session. Frame time is sampled once a second.</p>';
+  var motionToggle = document.createElement('button');
+  motionToggle.type = 'button';
+  motionToggle.className = 'seg-motion-toggle';
+  motionToggle.style.cssText = 'display:block;width:100%;margin-top:8px;padding:9px 12px;border:1px solid var(--line, #777);border-radius:9px;background:transparent;color:inherit;font:inherit;text-align:left;';
+  motionToggle.addEventListener('click', function () {
+    var enabled = window.VS && window.VS.maskMotionEnabled ? window.VS.maskMotionEnabled() : false;
+    if (window.VS && window.VS.setMaskMotionEnabled) window.VS.setMaskMotionEnabled(!enabled);
+    render();
+  });
+  det.appendChild(motionToggle);
   anchor.parentNode.insertBefore(det, anchor.nextSibling);
   var dl = $('segDiag'), samples = [], fps = null, lat = null, stride = 1, low = false, prov = '';
   function read() {
@@ -41,8 +51,17 @@
     if (pill) { pill.textContent = s.pill; pill.dataset.tone = s.tone; }
     if (run && lat != null) { samples.push(lat); if (samples.length > 120) samples.shift(); } if (!run) samples.length = 0;
     var cv = $('canvas'), m = $('modelSelect'), q = $('qualitySelect'), e = $('sharpQuality');
+    var diag = window.VS && window.VS.diagState ? window.VS.diagState() : {};
+    var mm = diag.maskMotion || null;
+    var motionEnabled = window.VS && window.VS.maskMotionEnabled ? window.VS.maskMotionEnabled() : false;
+    motionToggle.textContent = 'Motion alignment: ' + (motionEnabled ? 'ON — tap to disable' : 'OFF — tap to enable');
+    motionToggle.disabled = !window.VS || !window.VS.setMaskMotionEnabled;
     dl.innerHTML =
       row('Background removal', run ? s.pill : 'Camera off') +
+      row('Motion alignment', mm ? mm.status : '--') +
+      row('Mask age', mm && mm.ageMs != null ? mm.ageMs + ' ms' : '--') +
+      row('Motion confidence / coverage', mm ? mm.meanConfidence + ' / ' + mm.coverage : '--') +
+      row('Propagation cost', mm && mm.durationMs != null ? mm.durationMs + ' ms' : '--') +
       row('Preset model', m ? (m.options[m.selectedIndex] ? m.options[m.selectedIndex].text.replace(/\s*\(.*\)/, '') : m.value) : '--') +
       row('Engine in use', ($('renderHud') && $('renderHud').textContent.trim()) || '--') +
       row('Model', prov || '--') +
