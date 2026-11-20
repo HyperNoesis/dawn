@@ -1684,10 +1684,10 @@
 
   function publishSegmentationPreview(source, mask) {
     if (!mask || !(mask.width > 0 && mask.height > 0)) return;
-    const long = 192, scale = Math.min(1, long / Math.max(mask.width, mask.height));
+    const long = 320, scale = Math.min(1, long / Math.max(mask.width, mask.height));
     const w = Math.max(1, Math.round(mask.width * scale)), h = Math.max(1, Math.round(mask.height * scale));
     const make = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-    const sourceCanvas = make(), alphaCanvas = make(), edgeCanvas = make();
+    const sourceCanvas = make(), alphaCanvas = make(), edgeCanvas = make(), checkerCanvas = make();
     if (source) {
       try {
         const sx = source.videoWidth || source.width || mask.width;
@@ -1717,8 +1717,25 @@
     }
     alphaCtx.putImageData(alphaImage, 0, 0);
     edgeCtx.putImageData(edgeImage, 0, 0);
+
+    // Composite the actual source RGB through the model alpha over a neutral
+    // checkerboard. This makes pinholes, missing hair and retained background
+    // visible without changing the production compositor.
+    const cutoutCanvas = make(), cutoutCtx = cutoutCanvas.getContext('2d');
+    try {
+      cutoutCtx.drawImage(sourceCanvas, 0, 0, w, h);
+      cutoutCtx.globalCompositeOperation = 'destination-in';
+      cutoutCtx.drawImage(maskCanvas, 0, 0, w, h);
+      cutoutCtx.globalCompositeOperation = 'source-over';
+    } catch (compositePreviewError) { /* alpha and edge previews remain available */ }
+    const checkerCtx = checkerCanvas.getContext('2d'), cell = Math.max(8, Math.round(w / 24));
+    for (let y = 0; y < h; y += cell) for (let x = 0; x < w; x += cell) {
+      checkerCtx.fillStyle = (((x / cell) | 0) + ((y / cell) | 0)) % 2 ? '#b7bbc2' : '#e5e7eb';
+      checkerCtx.fillRect(x, y, cell, cell);
+    }
+    checkerCtx.drawImage(cutoutCanvas, 0, 0, w, h);
     window.VS = window.VS || {};
-    window.VS.segmentationPreview = { source: sourceCanvas, alpha: alphaCanvas, edge: edgeCanvas, width: w, height: h, updatedAt: Date.now() };
+    window.VS.segmentationPreview = { source: sourceCanvas, alpha: alphaCanvas, edge: edgeCanvas, checker: checkerCanvas, width: w, height: h, updatedAt: Date.now() };
     window.dispatchEvent(new CustomEvent('vs:segmentation-preview'));
   }
 
