@@ -12,10 +12,20 @@
     st.textContent = '.stage-loading,#degradeBanner,.degrade-toast{display:none !important}';
     (document.head || document.documentElement).appendChild(st);
   } catch (e) { /* cosmetic only */ }
-  // v0.93: optional matte engines (EdgeTAM cleanup, BiRefNet). Loaded after the page's own scripts; a failure here changes nothing.
-  document.addEventListener('DOMContentLoaded', function () {
-    setTimeout(function () { window.VS.loadScript('js/providers/matte-engines.js').catch(function () {}); }, 0);
-  });
+  // Advanced matting is loaded after the page's own providers. Expose a readiness
+  // promise so a fast tap on Start cannot race the optional engine router.
+  let resolveMatteEngines;
+  window.VS.matteEnginesReady = new Promise((resolve) => { resolveMatteEngines = resolve; });
+  function startMatteEngines() {
+    setTimeout(function () {
+      window.VS.loadScript('js/providers/matte-engines.js')
+        .then(function () { return window.VS.MatteEngines ? window.VS.MatteEngines.ready : null; })
+        .then(function (status) { resolveMatteEngines(status || { ready: true }); })
+        .catch(function (error) { resolveMatteEngines({ ready: false, error: String(error && error.message || error) }); });
+    }, 0);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startMatteEngines, { once: true });
+  else startMatteEngines();
   const cache = new Map();
   function inject(url) {
     return new Promise((resolve, reject) => {
