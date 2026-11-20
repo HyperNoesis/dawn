@@ -19,6 +19,37 @@
   });
   det.appendChild(motionToggle);
   anchor.parentNode.insertBefore(det, anchor.nextSibling);
+  var visual = document.createElement('section');
+  visual.className = 'seg-alpha-inspector';
+  visual.style.cssText = 'margin-top:12px;padding:10px;border:1px solid var(--line,#555);border-radius:12px;background:rgba(120,130,150,.06);';
+  visual.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px"><b>Live alpha inspection</b><span id="segPreviewState" style="font-size:11px;opacity:.7">Waiting for matte…</span></div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:8px" role="group" aria-label="Matte preview mode">' +
+      '<button type="button" data-seg-preview="source" aria-pressed="false">Original</button>' +
+      '<button type="button" data-seg-preview="alpha" aria-pressed="true">Alpha</button>' +
+      '<button type="button" data-seg-preview="edge" aria-pressed="false">Edges</button></div>' +
+    '<canvas id="segPreviewCanvas" width="192" height="108" style="display:block;width:100%;max-height:220px;object-fit:contain;background:#111;border-radius:8px"></canvas>' +
+    '<p style="font-size:11px;opacity:.7;margin:7px 0 0">Alpha is grayscale: white = foreground, black = transparent. Edges highlights uncertain and changing boundaries.</p>';
+  det.appendChild(visual);
+  var previewMode = 'alpha', previewCanvas = visual.querySelector('#segPreviewCanvas'), previewState = visual.querySelector('#segPreviewState');
+  function renderPreview() {
+    var p = window.VS && window.VS.segmentationPreview;
+    if (!p || !p[previewMode] || !previewCanvas) { if (previewState) previewState.textContent = 'Waiting for matte…'; return; }
+    var src = p[previewMode], w = src.width || p.width, h = src.height || p.height;
+    if (!(w > 0 && h > 0)) return;
+    if (previewCanvas.width !== w || previewCanvas.height !== h) { previewCanvas.width = w; previewCanvas.height = h; }
+    var ctx = previewCanvas.getContext('2d'); ctx.clearRect(0, 0, w, h); ctx.drawImage(src, 0, 0, w, h);
+    if (previewState) previewState.textContent = 'Updated ' + new Date(p.updatedAt).toLocaleTimeString();
+  }
+  visual.querySelectorAll('[data-seg-preview]').forEach(function (button) {
+    button.style.cssText = 'flex:1;min-height:32px;border:1px solid var(--line,#777);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:12px;';
+    button.addEventListener('click', function () {
+      previewMode = button.getAttribute('data-seg-preview');
+      visual.querySelectorAll('[data-seg-preview]').forEach(function (b) { b.setAttribute('aria-pressed', String(b === button)); });
+      renderPreview();
+    });
+  });
+  window.addEventListener('vs:segmentation-preview', renderPreview);
   var dl = $('segDiag'), samples = [], fps = null, lat = null, stride = 1, low = false, prov = '';
   function read() {
     var t = ($('stats') && $('stats').textContent) || '';
@@ -45,7 +76,8 @@
     if (!L.length) return 'no changes this session';
     return L.slice(-4).map(function (e) { return e.ev + (e.why ? ' (' + e.why + ')' : '') + ' [out ' + e.fps + ', cam ' + e.cam + ', mask ' + e.seg + ' ms' + (e.edge ? ', ' + e.edge + ' px' : '') + (e.ms ? ', bench ' + e.ms + ' ms' : '') + ']'; }).join('<br>');
   }
-  function row(k, v) { return '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>'; }
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+  function row(k, v) { return '<div><dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd></div>'; }
   function render() {
     var run = camera(), s = status();
     if (pill) { pill.textContent = s.pill; pill.dataset.tone = s.tone; }
@@ -53,6 +85,8 @@
     var cv = $('canvas'), m = $('modelSelect'), q = $('qualitySelect'), e = $('sharpQuality');
     var diag = window.VS && window.VS.diagState ? window.VS.diagState() : {};
     var mm = diag.maskMotion || null;
+    var hy = diag.hybrid || null;
+    var route = diag.matteRoute || null;
     var motionEnabled = window.VS && window.VS.maskMotionEnabled ? window.VS.maskMotionEnabled() : false;
     motionToggle.textContent = 'Motion alignment: ' + (motionEnabled ? 'ON — tap to disable' : 'OFF — tap to enable');
     motionToggle.disabled = !window.VS || !window.VS.setMaskMotionEnabled;
@@ -63,8 +97,16 @@
       row('Motion confidence / coverage', mm ? mm.meanConfidence + ' / ' + mm.coverage : '--') +
       row('Propagation cost', mm && mm.durationMs != null ? mm.durationMs + ' ms' : '--') +
       row('Preset model', m ? (m.options[m.selectedIndex] ? m.options[m.selectedIndex].text.replace(/\s*\(.*\)/, '') : m.value) : '--') +
+      row('Selected high-quality engine', route ? route.selectedLabel || route.selected : '--') +
+      row('Actually active engine', route ? route.active || 'Starting' : (($('renderHud') && $('renderHud').textContent.trim()) || '--')) +
+      row('Fallback reason', route && route.fallbackReason ? route.fallbackReason : 'None reported') +
       row('Engine in use', ($('renderHud') && $('renderHud').textContent.trim()) || '--') +
       row('Model', prov || '--') +
+      row('Model long edge', diag.modelLongEdge ? diag.modelLongEdge + ' px' : '--') +
+      row('Hybrid tiles refined / budget', hy ? hy.refined + ' / ' + hy.budget : '--') +
+      row('Boundary tiles / cached', hy ? hy.tiles + ' / ' + hy.cached : '--') +
+      row('Boundary band', hy ? hy.bandPct + '%' : '--') +
+      row('Hybrid errors', hy ? hy.errors + (hy.lastError ? ' · ' + hy.lastError : '') : '--') +
       row('Edge quality', e ? (e.value === '2' ? 'High' : 'Fast') : '--') +
       row('Quality mode', q ? (FRIENDLY[q.value] || q.value) : '--') +
       row('Output size', cv ? cv.width + ' x ' + cv.height : '--') +
@@ -77,6 +119,7 @@
       row('Person crop', run ? ((window.VS && window.VS.segLog) ? 'see log' : 'active only when it helps') : '--') +
       row('Why the engine changed', run ? engineLog() : '--');
     var qh = $('qualityHud'); if (qh && q && FRIENDLY[q.value] && qh.textContent !== FRIENDLY[q.value]) qh.textContent = FRIENDLY[q.value];
+    renderPreview();
   }
   setInterval(function () { try { read(); render(); } catch (e) {} }, 1000);
   render();
