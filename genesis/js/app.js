@@ -1087,7 +1087,13 @@
         loadTimeout,
         `Timed out after ${loadTimeout / 1000}s loading the high-quality model — your connection may be slow.`
       );
-      if (qualityFirst() && typeof segProvider.longEdge === 'number' && segProvider.longEdge > 0) { segProvider.longEdge = QF_EDGE; resetSegCache(); }
+      // Quality-first sizing was introduced for MODNet's expensive live path.
+      // Do not apply that legacy clamp to PP-MattingV2, RVM or Genesis Hybrid:
+      // each provider owns its own trained resolution ladder.
+      if (qualityFirst() && /MODNet/.test(segProvider.label || '') && !/PP-Matting|RVM|Genesis UltraMatte/.test(segProvider.label || '') &&
+          typeof segProvider.longEdge === 'number' && segProvider.longEdge > 0) {
+        segProvider.longEdge = QF_EDGE; resetSegCache();
+      }
       updateStudioChrome();
       if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
     } catch (err) {
