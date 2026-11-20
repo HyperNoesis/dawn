@@ -1652,7 +1652,7 @@
     let sourceFrame = null;
     try { sourceFrame = captureSegmentationFrame(els.video); }
     catch (e) { if (maskMotion) maskMotion.reset(); }
-    asyncSegPromise = Promise.resolve().then(() => segProvider.segment(sourceFrame || els.video)).then(async (r) => {
+    asyncSegPromise = Promise.resolve().then(() => segWithWatchdog(segProvider, sourceFrame || els.video)).then(async (r) => {
       if (token !== loopToken || !r || !r.segmentationMask) return;
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
