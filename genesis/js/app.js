@@ -195,6 +195,9 @@
           }
           showBenchNote((isLast || clearlySlow) ? 'Staying on the light model: even the smallest ' + c.name + ' size needs ' + Math.round(ms) + ' ms per mask here.'
                                : c.name + ' needs ' + Math.round(ms) + ' ms per mask here, which is too slow. Trying the next model...');
+          if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
+            V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' measured ' + Math.round(ms) + ' ms per mask, above this device\'s live budget of ' + Math.round(maxMs()) + ' ms. MediaPipe remains active for this session.');
+          }
           cand.dispose?.(); cand = null;
         } catch (e) {
           showBenchNote('High-quality model unavailable (' + c.name + ': ' + (e && e.message ? e.message : e) + '). ' + (isLast ? 'Staying on the light model.' : 'Trying the next model...'));
