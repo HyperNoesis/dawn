@@ -172,3 +172,10 @@ Do not describe MaskMotion as a new segmentation model or as a solution to missi
 ### Fail-safe compositing
 
 If MaskMotion detects a scene cut, long capture gap, or expired matte, the renderer temporarily passes through the real camera instead of compositing an obviously stale silhouette onto a new scene. A fresh model result reseeds the matte and returns to cutout mode. Low-confidence motion does not cause a guessed warp; it holds the unwarped base matte while waiting for the next inference.
+
+
+### Inference delivery-time accounting
+
+MaskMotion keeps two clocks separate: the original camera timestamp is retained for the first source-to-current motion estimate, while mask staleness begins when the model result is delivered, not when inference started.
+
+The source-frame catch-up window is 1.2 seconds and the maximum matte lifetime after delivery is 1.5 seconds. The flow search remains local and conservative; if a large movement cannot be matched confidently, propagation suspends instead of guessing.
