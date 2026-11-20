@@ -124,11 +124,22 @@
           // One bad reading must never decide a phone's model. Rules: 3 warm-up frames, lower-quartile timing, and when the result is too slow we
           // (1) try again with ONE thread (extra threads can lose to the camera and renderer on phones), (2) wait for things to settle and measure once more.
           const measureLadder = async () => {
+            // v0.98: phones start the test at <=320 px (a 448 px test costs ~800 ms/frame on a Mali-G52 and freezes the preview for ~10 s) and the ladder JUMPS to the
+            // size predicted to fit the budget (cost ~ edge^2) instead of walking every step. Each skipped step was 8 slow frames of frozen preview.
+            const mobileTest = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+            if (mobileTest && typeof cand.longEdge === 'number' && cand.longEdge > 320) cand.longEdge = 320;
             let m = await timeProvider(cand, 6, 3, 600), edge = cand.longEdge;
-            for (const e of [448, 384, 320, 256, 224]) {   // v0.96: fine steps (was 320, 256): the good model at the right size beats the light model
-              if (m <= maxMs() || e >= edge) continue;
+            const steps = [448, 384, 320, 256, 224].filter((e) => e < edge);
+            let i = 0;
+            if (m > maxMs() && steps.length) {
+              const j = steps.findIndex((e) => m * (e / edge) * (e / edge) <= maxMs() * 0.95);
+              i = j < 0 ? steps.length - 1 : j;
+            }
+            for (; i < steps.length; i++) {
+              const e = steps[i];
+              if (m <= maxMs()) break;
               if (stale()) return null;
-              showBenchNote('Too slow at full size (' + Math.round(m) + ' ms). Trying a lighter ' + c.name + ' size (' + e + ' px)...');
+              showBenchNote('Too slow at ' + edge + ' px (' + Math.round(m) + ' ms). Trying ' + c.name + ' at ' + e + ' px...');
               cand.longEdge = e; edge = e;
               m = await timeProvider(cand, 5, 3, 600);
             }
