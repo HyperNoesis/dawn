@@ -1,4 +1,7 @@
 (async function () {
+  // Shared Genesis runtime namespace. Several async engine-upgrade and diagnostics paths
+  // use V; keeping it bound at bootstrap prevents ReferenceError during live upgrades.
+  const V = window.VS;
   const ic = window.VS.icon;
 
   // A model load (RVM's ONNX weights + onnxruntime-web, or MediaPipe's Tasks
