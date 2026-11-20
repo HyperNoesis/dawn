@@ -167,3 +167,8 @@ The current search radius is deliberately small (2 analysis-grid pixels) to boun
 Passing pure-logic and synthetic motion tests is necessary but insufficient. The browser gates, export checks and site build still need to pass on the current branch. No target Android device, consented real-person footage, labelled hair/finger alpha set, thermal session, or commercial licence audit has been completed here.
 
 Do not describe MaskMotion as a new segmentation model or as a solution to missing upstream alpha detail. It only aligns an already-produced matte during short asynchronous gaps. It cannot reconstruct strands the model never detected, repair a completely wrong subject mask, or recover transparency from a single ambiguous frame.
+
+
+### Fail-safe compositing
+
+If MaskMotion detects a scene cut, long capture gap, or expired matte, the renderer temporarily passes through the real camera instead of compositing an obviously stale silhouette onto a new scene. A fresh model result reseeds the matte and returns to cutout mode. Low-confidence motion does not cause a guessed warp; it holds the unwarped base matte while waiting for the next inference.
