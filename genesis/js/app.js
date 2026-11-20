@@ -184,7 +184,7 @@
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
-            if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
+            if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, null);
             resetSegCache();
             rendererSend({ type: 'setMatte', state: {} });
             updateStudioChrome();
