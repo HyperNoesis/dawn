@@ -1757,7 +1757,17 @@
       if (useAsync && !results && maskMotion && maskMotionEnabled()) {
         try {
           const aligned = maskMotion.advance(els.video, frameStart);
-          if (aligned) maskSource = aligned;
+          if (aligned) {
+            const motionStatus = maskMotion.getMetrics().status;
+            // Never composite a stale subject mask over a different scene or
+            // after a long capture gap. Briefly pass through the real camera
+            // until the next model result reseeds the matte.
+            if (motionStatus === 'stale-mask' || motionStatus === 'scene-cut' || motionStatus === 'frame-gap') {
+              maskSource = passCanvas;
+            } else {
+              maskSource = aligned;
+            }
+          }
         } catch (e) { /* keep the last good cached matte */ }
       }
       if (!maskSource) { dropPerson(); scheduleNext(); return; }
