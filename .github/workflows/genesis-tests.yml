@@ -14,7 +14,7 @@ on:
 # Cancel superseded validation runs for the same branch; keep push and PR runs
 # on the same head ref from consuming the full browser/model matrix twice.
 concurrency:
-  group: genesis-segmentation-${{ github.event.pull_request.head.ref || github.ref }}
+  group: genesis-segmentation-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
