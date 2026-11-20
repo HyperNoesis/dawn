@@ -27,9 +27,10 @@
     '<div style="display:flex;gap:6px;margin-bottom:8px" role="group" aria-label="Matte preview mode">' +
       '<button type="button" data-seg-preview="source" aria-pressed="false">Original</button>' +
       '<button type="button" data-seg-preview="alpha" aria-pressed="true">Alpha</button>' +
-      '<button type="button" data-seg-preview="edge" aria-pressed="false">Edges</button></div>' +
+      '<button type="button" data-seg-preview="edge" aria-pressed="false">Edges</button>' +
+      '<button type="button" data-seg-preview="checker" aria-pressed="false">Cutout</button></div>' +
     '<canvas id="segPreviewCanvas" width="192" height="108" style="display:block;width:100%;max-height:220px;object-fit:contain;background:#111;border-radius:8px"></canvas>' +
-    '<p style="font-size:11px;opacity:.7;margin:7px 0 0">Alpha is grayscale: white = foreground, black = transparent. Edges highlights uncertain and changing boundaries.</p>';
+    '<p style="font-size:11px;opacity:.7;margin:7px 0 0">Alpha is grayscale: white = foreground, black = transparent. Edges highlights uncertain boundaries. Cutout composites the source through the actual alpha over a checkerboard.</p>';
   det.appendChild(visual);
   var previewMode = 'alpha', previewCanvas = visual.querySelector('#segPreviewCanvas'), previewState = visual.querySelector('#segPreviewState');
   function renderPreview() {
