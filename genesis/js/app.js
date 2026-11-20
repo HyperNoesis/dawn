@@ -198,6 +198,9 @@
           cand.dispose?.(); cand = null;
         } catch (e) {
           showBenchNote('High-quality model unavailable (' + c.name + ': ' + (e && e.message ? e.message : e) + '). ' + (isLast ? 'Staying on the light model.' : 'Trying the next model...'));
+          if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() !== 'modnet' && c.key === 'modnet') {
+            V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' could not initialise or meet the performance budget: ' + (e && e.message ? e.message : e));
+          }
           try { cand && cand.dispose && cand.dispose(); } catch (e2) {}
           cand = null;
         }
