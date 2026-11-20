@@ -98,6 +98,14 @@
     const V = window.VS; let pref = 'auto'; try { pref = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) {}
     const list = [];
     if (pref === 'light') return list;
+    // An explicitly chosen advanced matte engine outranks automatic RVM probing.
+    // Otherwise a background upgrade could silently replace the user's choice.
+    const custom = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
+    if (pref === 'auto' && custom && custom !== 'modnet') {
+      const item = (V.MatteEngines.visibleEngines() || []).find((e) => e[0] === custom);
+      list.push({ name: item ? item[1] : custom, key: custom, make: makeModnet });
+      return list;
+    }
     if ((pref === 'auto' || pref === 'rvm') && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
     if ((pref === 'auto' || pref === 'modnet') && V.MODNetSegmentationProvider) list.push({ name: 'MODNet', key: 'modnet', make: makeModnet });
     return list;
@@ -176,6 +184,7 @@
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
+            if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, null);
             resetSegCache();
             rendererSend({ type: 'setMatte', state: {} });
             updateStudioChrome();
@@ -186,9 +195,15 @@
           }
           showBenchNote((isLast || clearlySlow) ? 'Staying on the light model: even the smallest ' + c.name + ' size needs ' + Math.round(ms) + ' ms per mask here.'
                                : c.name + ' needs ' + Math.round(ms) + ' ms per mask here, which is too slow. Trying the next model...');
+          if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
+            V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' measured ' + Math.round(ms) + ' ms per mask, above this device\'s live budget of ' + Math.round(maxMs()) + ' ms. MediaPipe remains active for this session.');
+          }
           cand.dispose?.(); cand = null;
         } catch (e) {
           showBenchNote('High-quality model unavailable (' + c.name + ': ' + (e && e.message ? e.message : e) + '). ' + (isLast ? 'Staying on the light model.' : 'Trying the next model...'));
+          if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
+            V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' could not initialise or meet the performance budget: ' + (e && e.message ? e.message : e));
+          }
           try { cand && cand.dispose && cand.dispose(); } catch (e2) {}
           cand = null;
         }
@@ -466,9 +481,19 @@
       if (window.VS.Grade && window.VS.Grade.onStatus) window.VS.Grade.onStatus(data.error);
     } else if (data.type === 'matteStatus') {
       if (els.matteStatus) {
-        els.matteStatus.textContent = data.ok
-          ? 'GPU sharp edges: active'
-          : 'GPU sharp edges unavailable on this device' + (data.error ? ' (' + data.error + ')' : '') + ' — using the standard edge path.';
+        if (!data.ok) {
+          cleanPlateRequested = false;
+          els.matteStatus.textContent = 'GPU sharp edges unavailable on this device' + (data.error ? ' (' + data.error + ')' : '') + ' — using the standard edge path.';
+        } else if (data.plateNotice) {
+          cleanPlateRequested = false;
+          els.matteStatus.textContent = data.plateNotice;
+        } else if (data.hasPlate) {
+          cleanPlateRequested = true;
+          els.matteStatus.textContent = 'GPU sharp edges active · Clean plate active. Keep the camera, crop and lighting unchanged.';
+        } else {
+          cleanPlateRequested = false;
+          els.matteStatus.textContent = 'GPU sharp edges active · No clean plate loaded.';
+        }
       }
     } else if (data.type === 'fatal') {
       // The render pipeline's global scope crashed outside any try/catch —
@@ -556,6 +581,12 @@
   // Sharp GPU matte (see js/providers/gl-matte.js). Falls back to the legacy
   // canvas edge path automatically if WebGL2 is unavailable.
   const matteState = { mode: 'gl', radius: 1, crisp: 0.5, despill: 0.6 };
+  let cleanPlateRequested = false;
+  function invalidateCleanPlate(reason) {
+    if (!cleanPlateRequested) return;
+    cleanPlateRequested = false;
+    rendererSend({ type: 'clearPlate', reason: reason || 'Clean plate cleared; capture a new empty-room frame.' });
+  }
   function pushMatte() {
     if (!(renderWorker || localCore)) return;
     const c = matteState.crisp;
@@ -1034,6 +1065,14 @@
     // enough (one-time speed test, remembered), otherwise MediaPipe (Apache-2.0, lightest).
     // RVM is GPL-3.0, so it only runs if someone explicitly picks it (personal use).
     const VSNS = window.VS;
+    // Wait for the optional engine router and its selected model dependencies.
+    // A rapid Start tap must not race the dynamic loader and start on the base model.
+    if (VSNS.matteEnginesReady) await VSNS.matteEnginesReady;
+    const matteChoice = VSNS.MatteEngines && VSNS.MatteEngines.pref ? VSNS.MatteEngines.pref() : 'modnet';
+    if (VSNS.MatteEngines && matteChoice !== 'modnet') {
+      const prepared = await VSNS.MatteEngines.ensureEngine(matteChoice);
+      if (!prepared.ok) VSNS.MatteEngines.reportActive(null, prepared.error);
+    }
     const pref = (els.modelSelect && els.modelSelect.value) || 'auto';
     const knownBench = readBench();
     let warmPromise = null;
@@ -1064,9 +1103,17 @@
         loadTimeout,
         `Timed out after ${loadTimeout / 1000}s loading the high-quality model — your connection may be slow.`
       );
-      if (qualityFirst() && typeof segProvider.longEdge === 'number' && segProvider.longEdge > 0) { segProvider.longEdge = QF_EDGE; resetSegCache(); }
+      // Quality-first sizing was introduced for MODNet's expensive live path.
+      // Do not apply that legacy clamp to PP-MattingV2, RVM or Genesis Hybrid:
+      // each provider owns its own trained resolution ladder.
+      if (qualityFirst() && /MODNet/.test(segProvider.label || '') && !/PP-Matting|RVM|Genesis UltraMatte/.test(segProvider.label || '') &&
+          typeof segProvider.longEdge === 'number' && segProvider.longEdge > 0) {
+        segProvider.longEdge = QF_EDGE; resetSegCache();
+      }
       updateStudioChrome();
+      if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
     } catch (err) {
+      if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(null, 'Selected engine initialisation failed: ' + (err && err.message ? err.message : err));
       // RVM needs onnxruntime-web + (ideally) WebGPU/WASM support. If that
       // genuinely fails to load (offline first run, ancient browser, CDN
       // blocked, or just too slow — see withTimeout above), fall back to the
@@ -1086,6 +1133,8 @@
             `Timed out after ${MODEL_LOAD_TIMEOUT_MS / 1000}s loading the fallback model — check your connection and try again.`
           );
           updateStudioChrome();
+          if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, 'Requested engine failed; using MediaPipe fallback: ' + (err && err.message ? err.message : err));
+          showBenchNote('The selected engine could not start. MediaPipe is active instead. Reason: ' + (err && err.message ? err.message : err));
         } catch (fallbackErr) {
           modelFailedKeepCamera(fallbackErr.message);
           return;
@@ -1131,6 +1180,7 @@
   function stopCamera() {
     hideStageLoading();
     clearInterval(blackWatchTimer);
+    invalidateCleanPlate('Camera stopped; capture a new clean plate after restarting.');
     running = false;
     try { stopGestures(); } catch (e) {}
     updateStudioChrome();
@@ -1172,6 +1222,7 @@
 
   els.flipCamBtn.addEventListener('click', async () => {
     if (!running) return;
+    invalidateCleanPlate('Camera changed; capture a new clean plate.');
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     els.cameraSelect.value = ''; // explicit facingMode should win over a stale device pick
     els.flipCamBtn.disabled = true;
@@ -1502,6 +1553,9 @@
     const impl = segProvider && segProvider.impl;
     return {
       engine: segProvider ? (segProvider.current || segProvider.label) : null,
+      matteRoute: window.VS.MatteEngines && window.VS.MatteEngines.getStatus ? window.VS.MatteEngines.getStatus(segProvider) : null,
+      hybrid: segProvider && segProvider.hy ? Object.assign({}, segProvider.hy) : null,
+      modelLongEdge: segProvider && typeof segProvider.longEdge === 'number' ? segProvider.longEdge : null,
       threads: segProvider && segProvider.threads ? segProvider.threads : 1,
       delegate: impl && impl.gpu !== undefined ? (impl.gpu ? 'GPU' : 'CPU') : (segProvider && segProvider.backend) || null,
       coveragePct: cov == null ? null : Math.round(cov * 1000) / 10,
@@ -1646,6 +1700,66 @@
     asyncSegLastAt = 0; // schedule a fresh matte so enabling can seed from a known frame
   };
 
+  function publishSegmentationPreview(source, mask) {
+    // The diagnostic canvases are opt-in work. Normal camera preview/recording
+    // should not pay for extra pixel readback while the inspector is closed.
+    if (!window.VS || !window.VS.segmentationPreviewEnabled) return;
+    if (!mask || !(mask.width > 0 && mask.height > 0)) return;
+    const long = 320, scale = Math.min(1, long / Math.max(mask.width, mask.height));
+    const w = Math.max(1, Math.round(mask.width * scale)), h = Math.max(1, Math.round(mask.height * scale));
+    const make = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+    const sourceCanvas = make(), alphaCanvas = make(), edgeCanvas = make(), checkerCanvas = make();
+    if (source) {
+      try {
+        const sx = source.videoWidth || source.width || mask.width;
+        const sy = source.videoHeight || source.height || mask.height;
+        if (sx > 0 && sy > 0) sourceCanvas.getContext('2d').drawImage(source, 0, 0, sx, sy, 0, 0, w, h);
+      } catch (sourcePreviewError) { /* original-frame preview is optional; alpha inspection must still work */ }
+    }
+    const maskCanvas = make(), maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+    maskCtx.drawImage(mask, 0, 0, w, h);
+    const raw = maskCtx.getImageData(0, 0, w, h).data;
+    const alphaCtx = alphaCanvas.getContext('2d'), alphaImage = alphaCtx.createImageData(w, h);
+    const edgeCtx = edgeCanvas.getContext('2d'), edgeImage = edgeCtx.createImageData(w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, p = i * 4, a = raw[p + 3];
+      alphaImage.data[p] = alphaImage.data[p + 1] = alphaImage.data[p + 2] = a;
+      alphaImage.data[p + 3] = 255;
+      const left = raw[(y * w + Math.max(0, x - 1)) * 4 + 3];
+      const right = raw[(y * w + Math.min(w - 1, x + 1)) * 4 + 3];
+      const up = raw[(Math.max(0, y - 1) * w + x) * 4 + 3];
+      const down = raw[(Math.min(h - 1, y + 1) * w + x) * 4 + 3];
+      const gradient = Math.max(Math.abs(a - left), Math.abs(a - right), Math.abs(a - up), Math.abs(a - down));
+      const edge = (a > 8 && a < 247) || gradient > 18 ? 255 : 0;
+      edgeImage.data[p] = edge;
+      edgeImage.data[p + 1] = edge ? 210 : 0;
+      edgeImage.data[p + 2] = edge ? 255 : 0;
+      edgeImage.data[p + 3] = 255;
+    }
+    alphaCtx.putImageData(alphaImage, 0, 0);
+    edgeCtx.putImageData(edgeImage, 0, 0);
+
+    // Composite the actual source RGB through the model alpha over a neutral
+    // checkerboard. This makes pinholes, missing hair and retained background
+    // visible without changing the production compositor.
+    const cutoutCanvas = make(), cutoutCtx = cutoutCanvas.getContext('2d');
+    try {
+      cutoutCtx.drawImage(sourceCanvas, 0, 0, w, h);
+      cutoutCtx.globalCompositeOperation = 'destination-in';
+      cutoutCtx.drawImage(maskCanvas, 0, 0, w, h);
+      cutoutCtx.globalCompositeOperation = 'source-over';
+    } catch (compositePreviewError) { /* alpha and edge previews remain available */ }
+    const checkerCtx = checkerCanvas.getContext('2d'), cell = Math.max(8, Math.round(w / 24));
+    for (let y = 0; y < h; y += cell) for (let x = 0; x < w; x += cell) {
+      checkerCtx.fillStyle = (((x / cell) | 0) + ((y / cell) | 0)) % 2 ? '#b7bbc2' : '#e5e7eb';
+      checkerCtx.fillRect(x, y, cell, cell);
+    }
+    checkerCtx.drawImage(cutoutCanvas, 0, 0, w, h);
+    window.VS = window.VS || {};
+    window.VS.segmentationPreview = { source: sourceCanvas, alpha: alphaCanvas, edge: edgeCanvas, checker: checkerCanvas, width: w, height: h, updatedAt: Date.now() };
+    window.dispatchEvent(new CustomEvent('vs:segmentation-preview'));
+  }
+
   function startAsyncSeg(token) {
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
@@ -1657,6 +1771,7 @@
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
+      try { publishSegmentationPreview(sourceFrame || els.video, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       const fresh = await createImageBitmap(r.segmentationMask);
       if (token !== loopToken) { fresh.close(); return; }
       seedMaskMotion(fresh, sourceFrame, t0);
@@ -1730,7 +1845,10 @@
       }
       if (myLoop !== loopToken) { dropPerson(); return; }
       const segMs = performance.now() - segStart;
-      if (results && results.segmentationMask) lastMaskSize = (results.segmentationMask.width || '?') + 'x' + (results.segmentationMask.height || '?');
+      if (results && results.segmentationMask) {
+        lastMaskSize = (results.segmentationMask.width || '?') + 'x' + (results.segmentationMask.height || '?');
+        try { publishSegmentationPreview(inferenceSnapshot || els.video, results.segmentationMask); } catch (previewError) { /* diagnostics only */ }
+      }
       segMsEma = segMsEma ? segMsEma * 0.8 + segMs * 0.2 : segMs;
       maskWatchdog();
     }
@@ -1983,6 +2101,7 @@
       await cand.initialize(runningQuality);
       if (!running || token !== loopToken) { cand.dispose?.(); return; }
       const old = segProvider; segProvider = cand; cand = null;
+      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, 'Performance governor switched to MediaPipe because the selected matting engine could not sustain the target frame rate.');
       resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);
       segLogPush('light-active'); showBenchNote('Light model active: this device could not hold a steady frame rate with the high-quality model.');
@@ -2044,6 +2163,11 @@
   const govOff = () => { try { return localStorage.getItem('vs_gov') === '0'; } catch (e) { return false; } };
   function govEngineId(p) {
     const l = (p && p.label) || '';
+    // A hybrid's performance rungs must rebuild the same hybrid pipeline.
+    // The EdgeTAM proxy forwards the base provider's hybrid/tracker properties.
+    if (p && p.hy && /Genesis UltraMatte/.test(l) && p.trackerHook) return 'genesis-hybrid-tam';
+    if (p && p.hy) return 'genesis-hybrid';
+    if (p && p.edgetam) return 'edgetam';
     if (/PP-Matting/.test(l)) return /HRNet/.test(l) ? 'ppmatting-hrnet' : 'ppmatting-v2';
     if (/RVM/.test(l)) return 'rvm';
     if (/MODNet/.test(l)) return 'modnet';
@@ -2051,12 +2175,21 @@
   }
   function govChainFor(engine) {
     const sizes = [512, 448, 384, 320, 256, 224], ch = [];
-    if (engine === 'ppmatting-v2' || engine === 'ppmatting-hrnet') ch.push({ engine, edges: [512, 448, 384, 320] });   // the PP models' trained range
-    ch.push({ engine: engine === 'rvm' ? 'rvm' : 'modnet', edges: sizes });
+    if (engine === 'ppmatting-v2' || engine === 'ppmatting-hrnet' || engine === 'genesis-hybrid' || engine === 'genesis-hybrid-tam' || engine === 'edgetam') {
+      ch.push({ engine, edges: [512, 448, 384, 320] });   // PP models and hybrid tiers use the trained PP size range
+    }
+    if (engine === 'rvm') ch.push({ engine: 'rvm', edges: sizes });
+    else ch.push({ engine: 'modnet', edges: sizes });
     return ch;
   }
   function makeGovEngine(id) {
     const V = window.VS;
+    if (id === 'genesis-hybrid-tam' && V.GenesisHybridProvider && V.EdgeTAMGate) return V.EdgeTAMGate.create(new V.GenesisHybridProvider());
+    if (id === 'genesis-hybrid' && V.GenesisHybridProvider) return new V.GenesisHybridProvider();
+    if (id === 'edgetam' && V.EdgeTAMGate) {
+      const Orig = V.MatteEnginesOriginal || V.MODNetWorkerProvider;
+      return V.EdgeTAMGate.create((Orig && Orig.isSupported && Orig.isSupported()) ? new Orig() : new V.MODNetSegmentationProvider());
+    }
     if (id === 'ppmatting-v2' && V.PPMattingV2Provider) return new V.PPMattingV2Provider();
     if (id === 'ppmatting-hrnet' && V.PPMattingHRNetProvider) return new V.PPMattingHRNetProvider();
     if (id === 'rvm' && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) return new V.RVMWorkerProvider();
@@ -2082,7 +2215,16 @@
   function govAdoptLight() {
     const G = window.VS.QualityGovernor;
     if (!G || govOff() || !(segProvider instanceof window.VS.MediaPipeSegmentationProvider)) return;
-    governor = G.create({ chain: govChainFor('modnet'), startEngine: 'modnet', startEdge: 224, now: performance.now() });
+    let preferred = 'modnet';
+    if (els.modelSelect && els.modelSelect.value === 'rvm') preferred = 'rvm';
+    else if (window.VS.MatteEngines && window.VS.MatteEngines.pref) {
+      const selected = window.VS.MatteEngines.pref();
+      if (selected && selected !== 'modnet') preferred = selected;
+    }
+    // When the emergency light model is active, recovery must retry the
+    // originally selected advanced engine—not an unrelated plain MODNet tier.
+    const startEdge = /^(ppmatting|genesis-hybrid)/.test(preferred) ? 320 : 224;
+    governor = G.create({ chain: govChainFor(preferred), startEngine: preferred, startEdge, now: performance.now() });
     governor.applied({ emergency: true, rungIndex: -1, type: 'emergency' }, performance.now());
     govProvider = segProvider; govLight = true;
   }
@@ -2113,6 +2255,7 @@
       if (!running || token !== loopToken) { cand.dispose?.(); cand = null; return; }
       const old = segProvider; segProvider = cand; cand = null;
       govProvider = segProvider; govLight = !!a.emergency;
+      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, a.emergency ? 'Performance governor switched to the lightweight MediaPipe fallback.' : null);
       resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);   // disposing a hung worker terminates it
       gv.applied(a, performance.now()); govSave(a);
@@ -2967,6 +3110,7 @@
       </button>`).join('');
     els.aspectSegControl.querySelectorAll('.seg-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        invalidateCleanPlate('Aspect changed; capture a new clean plate for this output shape.');
         compositionEngine.setAspect(btn.dataset.aspect);
         renderAspectSegControl();
         setCanvasSize(els.qualitySelect.value);
@@ -2976,11 +3120,18 @@
   renderAspectSegControl();
 
   els.zoomRange.addEventListener('input', () => {
+    invalidateCleanPlate('Zoom changed; capture a new clean plate for the new framing.');
     compositionEngine.setZoom(parseFloat(els.zoomRange.value));
     els.zoomVal.textContent = compositionEngine.zoom.toFixed(1) + 'x';
   });
-  els.panXRange.addEventListener('input', () => compositionEngine.setPan(parseFloat(els.panXRange.value), compositionEngine.panY));
-  els.panYRange.addEventListener('input', () => compositionEngine.setPan(compositionEngine.panX, parseFloat(els.panYRange.value)));
+  els.panXRange.addEventListener('input', () => {
+    invalidateCleanPlate('Framing changed; capture a new clean plate.');
+    compositionEngine.setPan(parseFloat(els.panXRange.value), compositionEngine.panY);
+  });
+  els.panYRange.addEventListener('input', () => {
+    invalidateCleanPlate('Framing changed; capture a new clean plate.');
+    compositionEngine.setPan(compositionEngine.panX, parseFloat(els.panYRange.value));
+  });
   // ---- v0.53 "Fit me in frame": read the face for about a second, then set zoom/pan so the head sits like a normal talking-head shot.
   // One-shot on a button press (never continuous), so it cannot fight the person or burn battery. Maths: js/face-fit-core.js (tested).
   let fitBusy = false;
@@ -2998,6 +3149,7 @@
       if (!m) { showBenchNote('Could not see one clear face. Face the camera in good light and try again.'); return; }
       const r = window.VS.FaceFit.fitHead(m, els.video.videoWidth, els.video.videoHeight, compositionEngine.aspect.ratio);
       if (!r) { showBenchNote('Could not work out a fit.'); return; }
+      invalidateCleanPlate('Fit me changed the framing; capture a new clean plate.');
       compositionEngine.setZoom(r.zoom); compositionEngine.setPan(r.panX, r.panY);
       try { window.VS.frameApi.syncUi(); } catch (e) {}
       resetSegCache();
@@ -3007,6 +3159,7 @@
   });
 
   els.resetPanBtn.addEventListener('click', () => {
+    invalidateCleanPlate('Framing reset; capture a new clean plate.');
     compositionEngine.resetPan();
     els.panXRange.value = '0.5'; els.panYRange.value = '0.5';
   });
@@ -3271,14 +3424,16 @@
       const cw = outW, ch = outH;
       const crop = compositionEngine.computeFrame(videoNativeW || cw, videoNativeH || ch, Math.max(cw, ch));
       const bmp = await createImageBitmap(els.video, crop.sx, crop.sy, crop.sw, crop.sh, { resizeWidth: cw, resizeHeight: ch, resizeQuality: 'medium' });
+      cleanPlateRequested = true;
       rendererSend({ type: 'setPlate', bitmap: bmp }, [bmp]);
-      els.matteStatus.textContent = 'Clean plate saved. Keep the camera still. Re-capture if you change zoom, framing or lighting.';
+      els.matteStatus.textContent = 'Clean plate captured. Keep the camera, crop and lighting unchanged.';
     } catch (err) {
       els.matteStatus.textContent = 'Could not capture the plate: ' + err.message;
     }
     plateBusy = false;
   });
   els.clearPlateBtn.addEventListener('click', () => {
+    cleanPlateRequested = false;
     rendererSend({ type: 'clearPlate' });
     els.matteStatus.textContent = 'Clean plate cleared.';
   });
@@ -3998,6 +4153,9 @@
   function applyConfigSnapshot(cfg) {
     if (cfg.env) { els.envSelect.value = cfg.env; renderEnvMiniGrid(); pushEnvironment(cfg.env); }
     if (cfg.quality) { els.qualitySelect.value = cfg.quality; renderQualitySegControl(); }
+    if (cfg.aspect || typeof cfg.zoom === 'number' || (typeof cfg.panX === 'number' && typeof cfg.panY === 'number')) {
+      invalidateCleanPlate('Studio framing preset changed; capture a new clean plate.');
+    }
     if (cfg.aspect) { compositionEngine.setAspect(cfg.aspect); renderAspectSegControl(); }
     if (typeof cfg.zoom === 'number') { compositionEngine.setZoom(cfg.zoom); els.zoomRange.value = cfg.zoom; els.zoomVal.textContent = cfg.zoom.toFixed(1) + 'x'; }
     if (typeof cfg.panX === 'number' && typeof cfg.panY === 'number') {

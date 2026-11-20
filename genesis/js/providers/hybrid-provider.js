@@ -106,11 +106,33 @@
       return this._hyFrame.c;
     }
 
+    /** One small, same-frame luma read is shared by cache validation and optional motion warping. */
+    _readFrameLuma(video, vw, vh) {
+      const width = LW, height = Math.max(8, Math.round(width * vh / vw));
+      if (!this._lc || this._lc.c.width !== width || this._lc.c.height !== height) this._lc = this._canvas(width, height, true);
+      this._lc.x.drawImage(video, 0, 0, width, height);
+      const rgba = this._lc.x.getImageData(0, 0, width, height).data;
+      return { data: V.BandRefineCore.lumaFromRGBA(rgba, width, height), width, height };
+    }
+
+    /** Compact source-frame signature catches hair/hand changes hidden by stable coarse alpha. */
+    _tileSignature(luma, lw, lh, core, OW, OH) {
+      const out = new Uint8Array(64), x0 = core.x / OW * lw, y0 = core.y / OH * lh;
+      const x1 = (core.x + core.w) / OW * lw, y1 = (core.y + core.h) / OH * lh;
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+        const px = Math.max(0, Math.min(lw - 1, Math.floor(x0 + (x + 0.5) * (x1 - x0) / 8)));
+        const py = Math.max(0, Math.min(lh - 1, Math.floor(y0 + (y + 0.5) * (y1 - y0) / 8)));
+        out[y * 8 + x] = luma[py * lw + px];
+      }
+      return out;
+    }
+
     async _refineTile(video, core, OW, OH, vw, vh) {
       const B = V.BandRefineCore, crop = B.cropRect(core, MARGIN, OW, OH, IN);
       if (!this._tc) this._tc = this._canvas(IN, IN, true);
       this._tc.x.drawImage(video, crop.x * vw / OW, crop.y * vh / OH, IN * vw / OW, IN * vh / OH, 0, 0, IN, IN);
-      const buf = new Uint8ClampedArray(this._tc.x.getImageData(0, 0, IN, IN).data).buffer;
+      const pixels = this._tc.x.getImageData(0, 0, IN, IN).data;
+      const buf = new Uint8Array(pixels).buffer;
       const r = await this._send({ type: 'run', w: IN, h: IN, rgba: buf }, [buf]);
       if (r.w !== IN || r.h !== IN) throw new Error('tile output ' + r.w + 'x' + r.h);
       const a = new Uint8Array(r.alpha), ox = core.x - crop.x, oy = core.y - crop.y, out = new Uint8Array(core.w * core.h);
@@ -128,40 +150,68 @@
       const up = PC.resizeAlpha(coarse, cw, ch, OW, OH, this._up);
       const T = this.trackerHook;
       if (T && T.ready()) { try { this.hy.tracked = !!(await T.step(video, up, OW, OH)); } catch (e) { this.hy.tracked = false; } }   // tracker mask first, then band + tiles
-      const band = B.buildBand(up, OW, OH, { dilate: 3 }), soft = B.feather(band, OW, OH, 2);
-      const cands = B.pickTiles(band, OW, OH, TILE, { minCount: 24 });
-      const target = lsNum('vs_hy_target_ms', 70, 20, 400), maxTiles = lsNum('vs_hy_tiles', 3, 0, 8);
-      if (!this._tileMs) this._tileMs = Math.max(8, coarseMs * 0.5);
-      let budget = B.tileBudget({ targetMs: target, coarseMs, tileMs: this._tileMs, maxTiles });
-      if (budget === 0 && maxTiles > 0 && coarseMs < target && this._frames % 45 === 0) budget = 1;   // probe so a pessimistic first estimate can recover
-      const cores = cands.map((core) => ({ core, coarse: B.extract(up, core, OW), cached: this._cache.get(core.key) }));
-      const stale = cores.filter((c) => !c.cached || B.meanAbsDiff(c.cached.coarse, c.coarse) > 4);   // busiest first
+      const band = B.buildBand(up, OW, OH, { dilate: 5 }), soft = B.feather(band, OW, OH, 2);
+      const cands = B.pickTiles(band, OW, OH, TILE, { minCount: 12 });
+      // Incremental detail allowance, independent of coarse inference latency.
+      const target = lsNum('vs_hy_target_ms', 60, 15, 300), maxTiles = lsNum('vs_hy_tiles', 3, 0, 8);
+      // Start from a conservative independent tile estimate. Deriving it from
+      // coarseMs can set the initial estimate above the entire detail allowance
+      // on a slow phone, leaving no tile to measure and therefore no way to learn.
+      if (!this._tileMs) this._tileMs = 24;
+      let budget = B.tileBudget({ budgetMs: target, tileMs: this._tileMs, maxTiles });
+      // Keep a very occasional one-tile probe when the measured tile cost is
+      // above the allowance. Without exploration, a pessimistic estimate could
+      // permanently switch refinement off for the rest of the session.
+      if (budget === 0 && maxTiles > 0 && this._frames % 30 === 0) budget = 1;
+      const frame = this._readFrameLuma(video, vw, vh);
+      const cores = cands.map((core) => ({
+        core,
+        coarse: B.extract(up, core, OW),
+        signature: this._tileSignature(frame.data, frame.width, frame.height, core, OW, OH),
+        cached: this._cache.get(core.key)
+      }));
+      const maxAge = lsNum('vs_hy_cache_frames', 4, 2, 12);
+      const needsRefresh = (c) => {
+        if (!c.cached) return true;
+        const age = this._frames - (c.cached.frame || 0);
+        return age > maxAge ||
+          B.meanAbsDiff(c.cached.coarse, c.coarse) > 4 ||
+          !c.cached.signature ||
+          B.meanAbsDiff(c.cached.signature, c.signature) > 10;
+      };
+      // Oldest and never-refined tiles get first claim on the budget so a few
+      // high-band tiles cannot starve the remainder of the subject outline.
+      const stale = cores.filter(needsRefresh).sort((a, b) => {
+        const ageA = a.cached ? this._frames - (a.cached.frame || 0) : 1e9;
+        const ageB = b.cached ? this._frames - (b.cached.frame || 0) : 1e9;
+        return ageB - ageA || b.core.count - a.core.count;
+      });
       let refined = 0, rejected = 0; const fresh = new Set();
       for (const c of stale) {
         if (refined >= budget) break;
         const t1 = performance.now(), r = await this._refineTile(video, c.core, OW, OH, vw, vh);
         this._tileMs = this._tileMs * 0.7 + (performance.now() - t1) * 0.3;
-        if (B.tileSane(c.coarse, r)) { this._cache.set(c.core.key, { coarse: c.coarse, alpha: r }); fresh.add(c.core.key); refined++; }
-        else { this._cache.delete(c.core.key); rejected++; }
+        if (B.tileSane(c.coarse, r)) {
+          this._cache.set(c.core.key, { coarse: c.coarse, alpha: r, signature: c.signature, frame: this._frames });
+          fresh.add(c.core.key); refined++;
+        } else { this._cache.delete(c.core.key); rejected++; }
       }
       let cached = 0;
-      for (const c of cores) {                                               // merge fresh tiles and still-valid cached tiles; stale ones stay coarse
+      for (const c of cores) {
         const e = this._cache.get(c.core.key);
-        if (!e) continue;
-        if (!fresh.has(c.core.key) && B.meanAbsDiff(e.coarse, c.coarse) > 4) continue;
-        B.mergeCore(up, e.alpha, c.core, soft, OW); cached += fresh.has(c.core.key) ? 0 : 1;
+        if (!e || (!fresh.has(c.core.key) && needsRefresh(c))) continue;
+        B.mergeCore(up, e.alpha, c.core, soft, OW);
+        if (!fresh.has(c.core.key)) cached++;
       }
       const keep = new Set(cands.map((c) => c.key)); for (const k of this._cache.keys()) if (!keep.has(k)) this._cache.delete(k);
 
       let warped = 0;
+      const luma = frame.data;
       if (warpOn()) {
-        const LH = Math.max(8, Math.round(LW * vh / vw));
-        if (!this._lc || this._lc.c.height !== LH) this._lc = this._canvas(LW, LH, true);
-        this._lc.x.drawImage(video, 0, 0, LW, LH);
-        const luma = B.lumaFromRGBA(this._lc.x.getImageData(0, 0, LW, LH).data, LW, LH);
         if (this._prevOut && this._prevLuma && this._prevLuma.length === luma.length) {
-          const mot = B.blockMotion(this._prevLuma, luma, LW, LH, { block: 8, range: 3 }), wp = B.warpAlpha(this._prevOut, OW, OH, mot, LW, LH, this._wp);
-          warped = B.gatedTemporal(up, wp, OW, OH, mot, LW, LH, { hist: B.HIST_CAP }).blended;
+          const mot = B.blockMotion(this._prevLuma, luma, frame.width, frame.height, { block: 8, range: 3 });
+          const wp = B.warpAlpha(this._prevOut, OW, OH, mot, frame.width, frame.height, this._wp);
+          warped = B.gatedTemporal(up, wp, OW, OH, mot, frame.width, frame.height, { hist: B.HIST_CAP }).blended;
         }
         this._prevLuma = luma;
       }
@@ -172,7 +222,7 @@
       const px = this._oimg.data;
       for (let i = 0, n = OW * OH; i < n; i++) { const o = i * 4; px[o] = px[o + 1] = px[o + 2] = 255; px[o + 3] = up[i]; }
       this._oc.x.putImageData(this._oimg, 0, 0);
-      Object.assign(this.hy, { tiles: cands.length, budget, bandPct: Math.round(100 * B.count(band) / (OW * OH) * 10) / 10, refined, cached, rejected, warped, size: [OW, OH] });
+      Object.assign(this.hy, { tiles: cands.length, budget, budgetMs: target, tileMs: Math.round(this._tileMs), bandPct: Math.round(100 * B.count(band) / (OW * OH) * 10) / 10, refined, cached, rejected, warped, size: [OW, OH] });
       return this._oc.c;
     }
   }

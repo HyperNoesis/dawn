@@ -1,12 +1,10 @@
 /**
- * Matte engines: lets the high-quality slot (the one that normally runs MODNet) use other pretrained models, without touching app.js.
- *   modnet   MODNet, the default, unchanged
- *   edgetam  MODNet + EdgeTAM cleanup (removes stray blobs; ~30 MB extra download; Apache-2.0)
- *   birefnet BiRefNet-lite (best edges; WebGPU only; ~115 MB download; MIT)
- *   ppmatting-v2  PP-MattingV2 live matting BETA (v0.94; ~34 MiB; Apache-2.0). Shown only while flags.json ppmattingBeta = 1 (remote kill switch).
- *   ppmatting-hrnet  PP-Matting HRNet-W18 (v0.94; ~94 MiB; Apache-2.0): offline/export quality, benchmark-only in the live picker (localStorage vs_ppm_lab = 1 shows it).
- * The choice is stored in localStorage 'vs_matte_engine'. Picking one also selects the MODNet slot in the Segmentation model list,
- * because that slot is what instantiates the router below. Loaded on demand from js/loader.js.
+ * Matte engine router for Genesis Studio.
+ *
+ * Each engine owns its dependency list. An unavailable optional model must never
+ * prevent an unrelated model from loading. Explicit user selection is honoured:
+ * the router either constructs that engine or returns an unavailable-provider
+ * that fails visibly during initialise; it never silently substitutes MODNet.
  */
 (function (root) {
   'use strict';
@@ -15,63 +13,169 @@
   const ENGINES = [
     ['modnet', 'MODNet (default)'],
     ['edgetam', 'MODNet + EdgeTAM cleanup (Apache-2.0, +30 MB)'],
-    ['birefnet', 'BiRefNet lite (best edges, needs WebGPU, +115 MB, MIT)'],
-    ['ppmatting-v2', 'PP-MattingV2 (BETA, live matting, +34 MB, Apache-2.0)'],
-    ['genesis-hybrid', 'Genesis Hybrid (BETA: PP-MattingV2 + edge refinement, +34 MB, Apache-2.0)'],
-    ['genesis-hybrid-tam', 'Genesis UltraMatte (BETA: PP-MattingV2 + EdgeTAM tracking + high-res boundary tiles, +64 MB, Apache-2.0)'],
-    ['ppmatting-hrnet', 'PP-Matting HRNet (benchmark only, heavy, +94 MB, Apache-2.0)']
+    ['birefnet', 'BiRefNet lite (WebGPU, +115 MB, MIT)'],
+    ['ppmatting-v2', 'PP-MattingV2 (BETA, +34 MB, Apache-2.0)'],
+    ['genesis-hybrid', 'Genesis Hybrid (BETA: boundary refinement, +34 MB, Apache-2.0)'],
+    ['genesis-hybrid-tam', 'Genesis UltraMatte (BETA: EdgeTAM + boundary refinement, +64 MB, Apache-2.0)'],
+    ['ppmatting-hrnet', 'PP-Matting HRNet (lab / export benchmark, +94 MB, Apache-2.0)']
   ];
-  const PP_DEPS = ['js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/video-guard.js', 'js/providers/engine-policy.js', 'js/providers/ppmatting-provider.js'];
-  const DEPS = ['js/providers/model-store.js', 'js/providers/temporal-mask.js', 'js/providers/edgetam-core.js', 'js/providers/birefnet-provider.js', 'js/providers/edgetam-provider.js'].concat(PP_DEPS);
-  const HY_DEPS = ['js/providers/band-refine-core.js', 'js/providers/hybrid-provider.js'];
-
-  /** Which engines the picker may show. The PP-Matting beta follows the remote flag (default on) and a local override localStorage vs_pp_beta = 0 / 1. */
-  function betaOn() {
-    try { const v = localStorage.getItem('vs_pp_beta'); if (v === '0') return false; if (v === '1') return true; } catch (e) { /* private mode */ }
-    const F = V.Flags; return !F || F.get('ppmattingBeta') !== 0;
-  }
-  /** Release-gate routing (engine-policy.js): flag on, and the device is not low-tier. localStorage vs_pp_force = 1 skips the tier check (for testing on a weak phone). */
-  function ppAllowed(id) {
-    try {
-      if (!betaOn()) return false;
-      if (localStorage.getItem('vs_pp_force') === '1' || !V.EnginePolicy) return true;
-      if (id && V.EnginePolicy.isSlow && V.EnginePolicy.isSlow(id)) return false;   // v0.95: this device's own lab run measured it as unusably slow -> fall back to the default engine
-      const nav = typeof navigator !== 'undefined' ? navigator : {};
-      const dev = { mobile: /Android|iPhone|iPad|Mobile/i.test(nav.userAgent || ''), cores: nav.hardwareConcurrency, memGB: nav.deviceMemory, webgpu: !!nav.gpu };
-      return V.EnginePolicy.tier(dev) !== 'low';
-    } catch (e) { return false; }
-  }
-  function labOn() { try { return localStorage.getItem('vs_ppm_lab') === '1'; } catch (e) { return false; } }
-  function visibleEngines() { return ENGINES.filter((e) => ((e[0] === 'ppmatting-v2' || e[0] === 'genesis-hybrid' || e[0] === 'genesis-hybrid-tam') ? betaOn() : e[0] === 'ppmatting-hrnet' ? betaOn() && labOn() : true)); }
-
-  function pref() { try { const v = localStorage.getItem(KEY); return visibleEngines().some((e) => e[0] === v) ? v : 'modnet'; } catch (e) { return 'modnet'; } }   // a hidden/removed engine (flag turned off) silently becomes MODNet
-  function setPref(v) { try { localStorage.setItem(KEY, v); } catch (e) { /* private mode */ } }
-  async function loadDeps() { for (const d of DEPS) await V.loadScript(d); for (const d of HY_DEPS) { try { await V.loadScript(d); } catch (e) { /* hybrid is optional */ } } }
-  const depsReady = () => !!(V.EdgeTAMGate && V.BiRefNetSegmentationProvider && V.ModelStore && V.EdgeTAMCore && V.TemporalMask && V.PPMattingV2Provider);
 
   let installed = false;
+  let bootPromise = null;
+  let lastError = null;
+  let activeLabel = null;
+  let fallbackReason = null;
+  const scriptLoads = new Map();
+
+  function betaOn() {
+    try {
+      const v = localStorage.getItem('vs_pp_beta');
+      if (v === '0') return false;
+      if (v === '1') return true;
+    } catch (e) {}
+    return !V.Flags || V.Flags.get('ppmattingBeta') !== 0;
+  }
+
+  function labOn() { try { return localStorage.getItem('vs_ppm_lab') === '1'; } catch (e) { return false; } }
+
+  function visibleEngines() {
+    return ENGINES.filter((e) => {
+      if (e[0] === 'ppmatting-hrnet') return betaOn() && labOn();
+      if (e[0] === 'ppmatting-v2' || e[0] === 'genesis-hybrid' || e[0] === 'genesis-hybrid-tam') return betaOn();
+      return true;
+    });
+  }
+
+  function pref() {
+    try {
+      const value = localStorage.getItem(KEY) || 'modnet';
+      return visibleEngines().some((e) => e[0] === value) ? value : 'modnet';
+    } catch (e) { return 'modnet'; }
+  }
+
+  function setPref(value) {
+    if (!visibleEngines().some((e) => e[0] === value)) throw new Error('That matting engine is not currently available in the engine picker.');
+    try { localStorage.setItem(KEY, value); } catch (e) {}
+  }
+
+  function getPolicy() { return V.MatteEnginePolicy || null; }
+
+  async function ensurePolicy() {
+    if (getPolicy()) return getPolicy();
+    if (!V.loadScript) throw new Error('Genesis script loader is unavailable.');
+    await V.loadScript('js/providers/matte-engine-policy.js');
+    if (!getPolicy()) throw new Error('Matting engine policy did not initialise.');
+    return getPolicy();
+  }
+
+  async function loadEngine(engine) {
+    const policy = await ensurePolicy();
+    if (engine === 'modnet') return { ok: true, engine, missing: [] };
+    const files = policy.scriptsFor(engine);
+    if (!files.length) return policy.resolve(engine, V);
+
+    for (const file of files) {
+      if (scriptLoads.has(file)) {
+        await scriptLoads.get(file);
+        continue;
+      }
+      const loading = V.loadScript(file);
+      scriptLoads.set(file, loading);
+      try { await loading; }
+      catch (error) { scriptLoads.delete(file); throw new Error('Could not load ' + file + ': ' + (error.message || error)); }
+    }
+    return policy.resolve(engine, V);
+  }
+
+  function describeMissing(result) {
+    if (!result || !result.missing || !result.missing.length) return 'The selected engine is not ready.';
+    return result.label + ' is not ready. Missing: ' + result.missing.join(', ') + '.';
+  }
+
+  function unavailableProvider(Original, engine, message) {
+    class UnavailableMatteProvider extends Original {
+      constructor() {
+        super();
+        this.routeError = message;
+        this.requestedEngine = engine;
+        this.label = engine + ' (unavailable)';
+      }
+      async initialize() { throw new Error(this.routeError); }
+      async segment() { throw new Error(this.routeError); }
+    }
+    return new UnavailableMatteProvider();
+  }
+
+  function originalProvider(Original) {
+    if (Original && Original.isSupported && Original.isSupported()) return new Original();
+    return new V.MODNetSegmentationProvider();
+  }
+
   function installRouter() {
-    if (installed || !V.MODNetWorkerProvider) return;
+    if (installed) return;
+    const Original = V.MODNetWorkerProvider;
+    if (!Original) return;
     installed = true;
-    const Orig = V.MODNetWorkerProvider;
-    const makeOrig = () => (Orig.isSupported() ? new Orig() : new V.MODNetSegmentationProvider());
-    // A plain function (not a class): class prototypes are read-only, and we need instanceof against the original to keep working.
+    V.MatteEnginesOriginal = Original;
+
     function MatteEngineRouter() {
       const engine = pref();
-      if (engine !== 'modnet' && depsReady()) {
-        if (engine === 'birefnet') return new V.BiRefNetSegmentationProvider();
-        if (engine === 'genesis-hybrid' && V.GenesisHybridProvider && V.GenesisHybridProvider.isSupported() && ppAllowed('ppmatting-v2')) return new V.GenesisHybridProvider();
-        if (engine === 'genesis-hybrid-tam' && V.GenesisHybridProvider && V.GenesisHybridProvider.isSupported() && ppAllowed('ppmatting-v2')) return V.EdgeTAMGate.create(new V.GenesisHybridProvider());   // EdgeTAM drops stray blobs from the hybrid output; if EdgeTAM fails it passes the hybrid matte through
-        if (engine === 'ppmatting-v2' && V.PPMattingV2Provider && V.PPMattingV2Provider.isSupported() && ppAllowed('ppmatting-v2')) return new V.PPMattingV2Provider();
-        if (engine === 'ppmatting-hrnet' && V.PPMattingHRNetProvider && V.PPMattingHRNetProvider.isSupported() && ppAllowed('ppmatting-hrnet')) return new V.PPMattingHRNetProvider();
-        if (engine === 'edgetam') return V.EdgeTAMGate.create(makeOrig());
-      }
-      return new Orig();
+      if (engine === 'modnet') return originalProvider(Original);
+
+      const readiness = (getPolicy() || {}).resolve
+        ? getPolicy().resolve(engine, V)
+        : { ok: false, missing: ['Engine policy is not loaded'] };
+
+      // A selected model is never silently changed to MODNet. The app's normal
+      // startup error path will report this exact failure and show its fallback.
+      if (!readiness.ok) return unavailableProvider(Original, engine, describeMissing(readiness));
+
+      if (engine === 'edgetam') return V.EdgeTAMGate.create(originalProvider(Original));
+      if (engine === 'birefnet') return new V.BiRefNetSegmentationProvider();
+      if (engine === 'ppmatting-v2') return new V.PPMattingV2Provider();
+      if (engine === 'ppmatting-hrnet') return new V.PPMattingHRNetProvider();
+      if (engine === 'genesis-hybrid') return new V.GenesisHybridProvider();
+      if (engine === 'genesis-hybrid-tam') return V.EdgeTAMGate.create(new V.GenesisHybridProvider());
+
+      return unavailableProvider(Original, engine, 'Unsupported matting engine: ' + engine);
     }
-    Object.setPrototypeOf(MatteEngineRouter, Orig);      // static helpers (isSupported, threadsFor, webgpuAllowed...) keep working
-    MatteEngineRouter.prototype = Orig.prototype;
+
+    Object.setPrototypeOf(MatteEngineRouter, Original);
+    MatteEngineRouter.prototype = Original.prototype;
     V.MODNetWorkerProvider = MatteEngineRouter;
-    V.MatteEnginesOriginal = Orig;
+  }
+
+  function reportActive(provider, reason) {
+    activeLabel = provider ? String(provider.current || provider.label || 'Unknown engine') : null;
+    fallbackReason = reason || null;
+    lastError = reason || null;
+  }
+
+  function getStatus(provider) {
+    return {
+      selected: pref(),
+      selectedLabel: (visibleEngines().find((e) => e[0] === pref()) || [null, 'Unknown engine'])[1],
+      active: provider ? String(provider.current || provider.label || 'Unknown engine') : activeLabel,
+      fallback: !!fallbackReason,
+      fallbackReason,
+      lastError,
+      ready: !lastError
+    };
+  }
+
+  async function ensureEngine(engine) {
+    try {
+      const result = await loadEngine(engine || pref());
+      if (!result.ok) {
+        lastError = describeMissing(result);
+        return { ok: false, error: lastError, readiness: result };
+      }
+      lastError = null;
+      return { ok: true, engine: engine || pref(), readiness: result };
+    } catch (error) {
+      lastError = String(error && error.message || error);
+      return { ok: false, error: lastError };
+    }
   }
 
   function addPicker() {
@@ -79,34 +183,93 @@
     if (!sel || document.getElementById('matteEngineSelect')) return;
     const field = sel.closest('.field');
     if (!field) return;
+
     const wrap = field.cloneNode(false);
-    const lab = document.createElement('label'); lab.htmlFor = 'matteEngineSelect'; lab.textContent = 'High-quality engine';
-    const s = document.createElement('select'); s.id = 'matteEngineSelect'; s.setAttribute('aria-label', 'High-quality matting engine');
-    for (const [v, t] of visibleEngines()) { const o = document.createElement('option'); o.value = v; o.textContent = t; s.appendChild(o); }
-    s.value = pref();
-    const note = document.createElement('div'); note.className = 'honesty-note'; note.style.marginTop = '6px';
-    wrap.appendChild(lab); wrap.appendChild(s); wrap.appendChild(note);
+    const lab = document.createElement('label');
+    lab.htmlFor = 'matteEngineSelect';
+    lab.textContent = 'High-quality engine';
+
+    const select = document.createElement('select');
+    select.id = 'matteEngineSelect';
+    select.setAttribute('aria-label', 'High-quality matting engine');
+    for (const [value, label] of visibleEngines()) {
+      const option = document.createElement('option');
+      option.value = value; option.textContent = label; select.appendChild(option);
+    }
+    select.value = pref();
+
+    const note = document.createElement('div');
+    note.className = 'honesty-note';
+    note.style.marginTop = '6px';
+    note.setAttribute('role', 'status');
+    note.setAttribute('aria-live', 'polite');
+
+    const explain = () => {
+      if (select.value === 'birefnet' && !(navigator.gpu)) return 'BiRefNet requires WebGPU. This browser may not be able to run it.';
+      if (select.value === 'genesis-hybrid-tam') return 'Experimental. Runs PP-MattingV2, EdgeTAM subject gating and local boundary refinement. Quality and speed still require real-device validation.';
+      if (select.value === 'genesis-hybrid') return 'Experimental. Uses PP-MattingV2 with local boundary refinement. Quality and speed still require real-device validation.';
+      if (select.value === 'ppmatting-v2' || select.value === 'ppmatting-hrnet') return 'Experimental model. The live performance governor may resize it, but the selected engine will not be silently replaced.';
+      if (select.value === 'edgetam') return 'Adds subject-level stray-object cleanup to the soft matte. It does not create hair alpha detail.';
+      return 'Uses the standard MODNet matting path.';
+    };
+
+    note.textContent = explain();
+    wrap.appendChild(lab); wrap.appendChild(select); wrap.appendChild(note);
     field.parentNode.insertBefore(wrap, field.nextSibling);
-    const msg = () => { note.textContent = s.value === 'birefnet' && !(navigator.gpu) ? 'This browser has no WebGPU, so BiRefNet cannot run here; the normal engine is used instead.' : /^(ppmatting|genesis-hybrid)/.test(s.value) ? 'Beta: your default engine is unchanged. If this engine cannot start or is too slow, the normal engine is used instead. Everything runs on this device; no frames are uploaded.' : ''; };
-    msg();
-    s.addEventListener('change', async () => {
-      setPref(s.value); msg();
-      if (s.value !== 'modnet') {
-        note.textContent = 'Loading engine code...';
-        try { await loadDeps(); installRouter(); msg(); } catch (e) { note.textContent = 'Could not load the engine code: ' + e.message; return; }
-        sel.value = 'modnet';                                  // the MODNet slot is what creates the router
-      }
+
+    select.addEventListener('change', async () => {
+      const previous = pref();
+      note.textContent = 'Preparing ' + select.options[select.selectedIndex].text + '…';
+      const result = await ensureEngine(select.value);
+      if (!result.ok) note.textContent = 'Engine preparation failed: ' + result.error;
+      else note.textContent = explain();
+      setPref(select.value);
+      installRouter();
+      // The router is instantiated through the MODNet worker slot. A selected
+      // advanced engine is constructed there, while the settings remain clear.
+      sel.value = 'modnet';
       sel.dispatchEvent(new Event('change', { bubbles: true }));
+      if (!result.ok) fallbackReason = result.error;
     });
   }
 
   async function boot() {
-    installRouter();                                           // harmless when pref is modnet: router returns the original class
-    if (pref() !== 'modnet') { try { await loadDeps(); } catch (e) { /* router falls back to MODNet */ } }
+    installRouter();
+    const selected = pref();
+    if (selected !== 'modnet') {
+      const result = await ensureEngine(selected);
+      if (!result.ok) fallbackReason = result.error;
+    }
     addPicker();
+    return getStatus();
   }
 
-  V.MatteEngines = { ENGINES, visibleEngines, betaOn, pref, setPref, boot, installRouter, loadDeps };
+  V.MatteEngines = {
+    ENGINES,
+    visibleEngines,
+    betaOn,
+    pref,
+    setPref,
+    loadEngine,
+    ensureEngine,
+    installRouter,
+    reportActive,
+    getStatus,
+    boot,
+    get ready() { return bootPromise || Promise.resolve(getStatus()); }
+  };
+
   if (typeof module !== 'undefined' && module.exports) module.exports = V.MatteEngines;
-  if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot(); }
+  const start = () => {
+    if (!bootPromise) bootPromise = boot().catch((error) => {
+      lastError = String(error && error.message || error);
+      addPicker();
+      return getStatus();
+    });
+    return bootPromise;
+  };
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+    else start();
+  }
 })(typeof window !== 'undefined' ? window : globalThis);
