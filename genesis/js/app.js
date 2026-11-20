@@ -481,9 +481,15 @@
       if (window.VS.Grade && window.VS.Grade.onStatus) window.VS.Grade.onStatus(data.error);
     } else if (data.type === 'matteStatus') {
       if (els.matteStatus) {
-        els.matteStatus.textContent = data.ok
-          ? 'GPU sharp edges: active'
-          : 'GPU sharp edges unavailable on this device' + (data.error ? ' (' + data.error + ')' : '') + ' — using the standard edge path.';
+        if (!data.ok) {
+          els.matteStatus.textContent = 'GPU sharp edges unavailable on this device' + (data.error ? ' (' + data.error + ')' : '') + ' — using the standard edge path.';
+        } else if (data.plateNotice) {
+          els.matteStatus.textContent = data.plateNotice;
+        } else if (data.hasPlate) {
+          els.matteStatus.textContent = 'GPU sharp edges active · Clean plate active. Keep the camera, crop and lighting unchanged.';
+        } else {
+          els.matteStatus.textContent = 'GPU sharp edges active · No clean plate loaded.';
+        }
       }
     } else if (data.type === 'fatal') {
       // The render pipeline's global scope crashed outside any try/catch —
