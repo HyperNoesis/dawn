@@ -9,7 +9,13 @@ function coarseMatte() { const a = new Uint8Array(CW * CH); for (let y = 20; y <
 let sends = [], mode = 'good';
 class Parent {
   constructor() {} static isSupported() { return true; }
-  async segment() { this.lastRaw = coarseMatte(); this.lastRefined = null; this.lastSize = [CW, CH]; this.lastGuard = null; return { segmentationMask: { tag: 'parent' } }; }
+  async segment(video) {
+    global.__parentFrameId = video.frameId;
+    await Promise.resolve(); // model worker completes after the live video has advanced
+    video.frameId = video.frameId + 1;
+    this.lastRaw = coarseMatte(); this.lastRefined = null; this.lastSize = [CW, CH]; this.lastGuard = null;
+    return { segmentationMask: { tag: 'parent' } };
+  }
   resetTemporal() {} dispose() {}
   async _send(m) {
     sends.push([m.w, m.h]);
@@ -19,23 +25,45 @@ class Parent {
   }
 }
 VS.PPMattingV2Provider = Parent;
-global.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ({ drawImage(v, sx, sy, sw, sh) { if (sw !== undefined && sw < W) global.__crop = [sx, sy, sw, sh]; }, putImageData() {}, createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }), getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(100) }) }) }) };
+global.__tileFrameIds = [];
+global.document = { createElement: () => {
+  const canvas = { width: 0, height: 0, frameId: null };
+  canvas.getContext = () => ({
+    drawImage(v, ...args) {
+      if (args.length === 4 && v && v.frameId !== undefined) canvas.frameId = v.frameId;
+      if (args.length === 8) {
+        const [sx, sy, sw, sh] = args;
+        if (sw !== undefined && sw < W) global.__crop = [sx, sy, sw, sh];
+        global.__tileFrameIds.push(v.frameId);
+      }
+    },
+    putImageData() {},
+    createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(100) })
+  });
+  return canvas;
+} };
 global.performance = { now: () => Date.now() };
 require('../../js/providers/hybrid-provider.js');
 (async () => {
-  const P = new VS.GenesisHybridProvider(), video = { videoWidth: W, videoHeight: H };
+  const P = new VS.GenesisHybridProvider(), video = { videoWidth: W, videoHeight: H, frameId: 0 };
   const r1 = await P.segment(video);
+  const firstTileFrames = global.__tileFrameIds.splice(0);
   assert.ok(r1.segmentationMask && r1.segmentationMask.width >= 192, 'hybrid canvas returned ' + JSON.stringify(P.hy));
+  assert.ok(firstTileFrames.length > 0, 'the first pass refined at least one tile');
+  assert.ok(firstTileFrames.every((id) => id === global.__parentFrameId), 'every tile must use the exact frame used by coarse inference; parent=' + global.__parentFrameId + ', tiles=' + firstTileFrames.join(','));
   assert.ok(P.hy.tiles > 0 && P.hy.size[0] >= 192, 'tiles found: ' + JSON.stringify(P.hy));
   assert.ok(sends.every(([w, h]) => w === 192 && h === 192 && w % 32 === 0), 'tile inputs are 192x192 (multiple of 32)');
   assert.strictEqual(P.hy.errors, 0, P.hy.lastError);
   assert.ok(P.hy.refined > 0 && P.hy.rejected === 0, 'faithful tiles are accepted: ' + JSON.stringify(P.hy));
   const n1 = sends.length; await P.segment(video);
+  const secondTileFrames = global.__tileFrameIds.splice(0);
+  assert.ok(secondTileFrames.every((id) => id === global.__parentFrameId), 'second-pass tile inputs stay paired with the second coarse frame');
   assert.ok(P.hy.cached > 0 || sends.length === n1 || P.hy.refined >= 0, 'second frame runs');
   // tracker-first: a hook that removes everything except the person must run BEFORE the band, so a stray blob costs no tiles
   {
     const blobParent = Parent.prototype.segment;
-    Parent.prototype.segment = async function () { const a = coarseMatte(); for (let y = 150; y < 190; y++) for (let x = 10; x < 60; x++) a[y * CW + x] = x % 2 ? 128 : 255; this.lastRaw = a; this.lastRefined = null; this.lastSize = [CW, CH]; this.lastGuard = null; return { segmentationMask: { tag: 'parent' } }; };
+    Parent.prototype.segment = async function (video) { global.__parentFrameId = video.frameId; await Promise.resolve(); video.frameId++; const a = coarseMatte(); for (let y = 150; y < 190; y++) for (let x = 10; x < 60; x++) a[y * CW + x] = x % 2 ? 128 : 255; this.lastRaw = a; this.lastRefined = null; this.lastSize = [CW, CH]; this.lastGuard = null; return { segmentationMask: { tag: 'parent' } }; };
     const plain = new VS.GenesisHybridProvider(); await plain.segment(video);
     const tr = new VS.GenesisHybridProvider(); let called = 0;
     tr.setTrackerHook({ ready: () => true, async step(v, alpha, w, h) { called++; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < w * 0.25) alpha[y * w + x] = 0; return true; } });

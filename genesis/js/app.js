@@ -626,7 +626,8 @@
   let strideTick = 0;
   let prevRender = null; // v0.46: promise of the render currently in flight
   let asyncSegBusy = false, asyncSegPromise = null, asyncSegLastAt = 0, asyncSegDone = 0, asyncSegMinGap = 150;
-  let cachedMaskBitmap = null;     // last full-size mask, reused on skipped frames (only populated when segStride > 1)
+  let cachedMaskBitmap = null;     // last full-size mask, reused while async inference is in flight
+  const maskMotion = window.VS.MaskMotion ? new window.VS.MaskMotion.MaskMotion() : null;
   let segMsEma = 0;                // smoothed wall-clock cost of one segmentation call, ms
   let loopToken = 0;               // bumped on every start/stop: a superseded processLoop iteration exits instead of racing the new loop
   let perfBannerShown = false;     // true only while the degrade banner is showing a PERFORMANCE message (not camera-lost / crash)
@@ -1185,6 +1186,7 @@
 
   function resetSegCache() {
     if (cachedMaskBitmap) { cachedMaskBitmap.close(); cachedMaskBitmap = null; }
+    if (maskMotion) maskMotion.reset();
     strideTick = 0;
     segMsEma = 0;
   }
@@ -1504,6 +1506,7 @@
       delegate: impl && impl.gpu !== undefined ? (impl.gpu ? 'GPU' : 'CPU') : (segProvider && segProvider.backend) || null,
       coveragePct: cov == null ? null : Math.round(cov * 1000) / 10,
       maskSize: lastMaskSize,
+      maskMotion: maskMotion ? (maskMotionEnabled() ? maskMotion.getMetrics() : { status: 'disabled' }) : null,
       segMs: segMsEma ? Math.round(segMsEma * 10) / 10 : null,
       renderMs: lastRenderMs,
       fps: running ? recentFps : null,
@@ -1597,20 +1600,73 @@
   };
   window.VS.pairReset = function () { pairLog.length = 0; };
 
+  function captureSegmentationFrame(video) {
+    const width = video && video.videoWidth, height = video && video.videoHeight;
+    if (!(width > 0 && height > 0)) throw new Error('Camera frame has no dimensions');
+    const frame = document.createElement('canvas');
+    frame.width = width; frame.height = height;
+    const ctx = frame.getContext('2d');
+    if (!ctx) throw new Error('Could not create a camera-frame snapshot');
+    ctx.drawImage(video, 0, 0, width, height);
+    // MediaPipe accepts canvas ImageSources. Expose the video dimensions for
+    // the existing ONNX provider contract without changing the underlying frame.
+    Object.defineProperties(frame, {
+      videoWidth: { configurable: true, value: width },
+      videoHeight: { configurable: true, value: height }
+    });
+    return frame;
+  }
+
+  function releaseSegmentationFrame(frame) {
+    if (!frame) return;
+    try { frame.width = 1; frame.height = 1; } catch (e) { /* best-effort release */ }
+  }
+
+  function maskMotionEnabled() {
+    try { return localStorage.getItem('vs_mask_motion') !== '0'; }
+    catch (e) { return true; }
+  }
+
+  function seedMaskMotion(mask, sourceFrame, timestamp) {
+    if (!maskMotion) return;
+    if (!maskMotionEnabled() || !sourceFrame) { maskMotion.reset(); return; }
+    try { maskMotion.seed(mask, sourceFrame, timestamp); }
+    catch (e) {
+      // Refinement is optional: never discard a valid model matte because the
+      // propagation stage cannot read a frame or allocate its scratch canvas.
+      maskMotion.reset();
+      if (window.VS.logError) window.VS.logError('Mask motion seed skipped: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  window.VS.maskMotionEnabled = maskMotionEnabled;
+  window.VS.setMaskMotionEnabled = function (enabled) {
+    try { localStorage.setItem('vs_mask_motion', enabled ? '1' : '0'); } catch (e) {}
+    if (maskMotion) maskMotion.reset();
+    asyncSegLastAt = 0; // schedule a fresh matte so enabling can seed from a known frame
+  };
+
   function startAsyncSeg(token) {
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
-    asyncSegPromise = Promise.resolve().then(() => segProvider.segment(els.video)).then(async (r) => {
+    let sourceFrame = null;
+    try { sourceFrame = captureSegmentationFrame(els.video); }
+    catch (e) { if (maskMotion) maskMotion.reset(); }
+    asyncSegPromise = Promise.resolve().then(() => segWithWatchdog(segProvider, sourceFrame || els.video)).then(async (r) => {
       if (token !== loopToken || !r || !r.segmentationMask) return;
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
       const fresh = await createImageBitmap(r.segmentationMask);
       if (token !== loopToken) { fresh.close(); return; }
+      seedMaskMotion(fresh, sourceFrame, t0);
       const old = cachedMaskBitmap; cachedMaskBitmap = fresh; asyncSegDone++;
-      if (old) setTimeout(() => { try { old.close(); } catch (e) {} }, 400);   // the render loop may still be copying from it
+      if (old) setTimeout(() => { try { old.close(); } catch (e) {} }, 400);
       maskWatchdog();
-    }).catch(() => {}).finally(() => { asyncSegBusy = false; });
+    }).catch(() => {}).finally(() => {
+      releaseSegmentationFrame(sourceFrame);
+      asyncSegBusy = false;
+    });
   }
 
   async function processLoop() {
@@ -1631,17 +1687,29 @@
     // same JS turn as the model's read, so both come from the same camera frame. (createImageBitmap(video) snapshots the frame at call time.)
     const w = outW, h = outH;
     const crop = compositionEngine.computeFrame(videoNativeW || w, videoNativeH || h, Math.max(w, h));
+    const useAsync = asyncSegOn() && !noPersonMode;
+    const initialSegAt = performance.now();
+    let initialSegFrame = null;
+    if (useAsync && !cachedMaskBitmap) {
+      try { initialSegFrame = captureSegmentationFrame(els.video); }
+      catch (e) { /* preserve the legacy live-video path if snapshotting is unavailable */ }
+    }
+    let inferenceSnapshot = initialSegFrame;
     const sampleFrame = camFrames();
-    const personP = createImageBitmap(els.video, crop.sx, crop.sy, crop.sw, crop.sh, { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' });
+    const personSource = initialSegFrame || els.video;
+    const personP = createImageBitmap(personSource, crop.sx, crop.sy, crop.sw, crop.sh, { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' });
     personP.catch(() => {});                                   // a failure is handled where it is awaited below; never an unhandled rejection
-    const dropPerson = () => { personP.then((b) => b.close()).catch(() => {}); };   // every early exit must release the copy
+    const dropPerson = () => {
+      personP.then((b) => b.close()).catch(() => {});
+      releaseSegmentationFrame(inferenceSnapshot);
+      inferenceSnapshot = initialSegFrame = null;
+    };   // every early exit must release the copy and its source frame
 
     // Extra-light (FAST only, auto-engaged by checkGracefulDegrade): once a
     // mask is cached, the model runs on 1 of every `segStride` frames; the
     // frames between reuse that mask against a FRESH camera image, so the
     // picture stays live and only the cutout edge refreshes less often.
     let runInference = true;
-    const useAsync = asyncSegOn() && !noPersonMode;
     if (useAsync && cachedMaskBitmap) {
       runInference = false;   // never wait for the model here: reuse the latest mask on this fresh camera frame
       if (!asyncSegBusy && performance.now() - asyncSegLastAt >= asyncSegMinGap && !benchBusy) startAsyncSeg(myLoop);
@@ -1652,7 +1720,7 @@
     if (runInference) {
       const segStart = performance.now(); maskFrame = camFrames();
       try {
-        results = await segWithWatchdog(segProvider, els.video);
+        results = await segWithWatchdog(segProvider, inferenceSnapshot || els.video);
       } catch (err) {
         dropPerson();
         if (myLoop !== loopToken) return; // stopped/restarted while waiting — whoever restarted owns the loop now
@@ -1680,9 +1748,28 @@
           if (myLoop !== loopToken) { fresh.close(); dropPerson(); return; }
           if (cachedMaskBitmap) cachedMaskBitmap.close();
           cachedMaskBitmap = fresh;
+          seedMaskMotion(fresh, inferenceSnapshot, initialSegAt);
+          releaseSegmentationFrame(inferenceSnapshot);
+          inferenceSnapshot = initialSegFrame = null;
         } catch (err) { /* keep whatever cached mask we already have */ }
       }
       maskSource = cachedMaskBitmap;
+      if (useAsync && !results && maskMotion && maskMotionEnabled()) {
+        try {
+          const aligned = maskMotion.advance(els.video, frameStart);
+          if (aligned) {
+            const motionStatus = maskMotion.getMetrics().status;
+            // Never composite a stale subject mask over a different scene or
+            // after a long capture gap. Briefly pass through the real camera
+            // until the next model result reseeds the matte.
+            if (motionStatus === 'stale-mask' || motionStatus === 'scene-cut' || motionStatus === 'frame-gap') {
+              maskSource = passCanvas;
+            } else {
+              maskSource = aligned;
+            }
+          }
+        } catch (e) { /* keep the last good cached matte */ }
+      }
       if (!maskSource) { dropPerson(); scheduleNext(); return; }
     } else {
       maskSource = results.segmentationMask;

@@ -28,9 +28,25 @@ const FPS = 8, N_EXPECT = 16;
     if (!isFinite(v.duration)) { v.currentTime = 1e101; await new Promise((x) => v.addEventListener('timeupdate', x, { once: true })); v.currentTime = 0; await new Promise((x) => v.addEventListener('seeked', x, { once: true })); }
     out.durSec = v.duration; out.vw = v.videoWidth; out.vh = v.videoHeight;
     try { const ab = await (new AudioContext()).decodeAudioData(await r.blob.arrayBuffer()); out.audioSec = ab.duration; } catch (e) { out.audioSec = 0; }
+    // Seeking is asynchronous, but a fast/cached seek can finish before a
+    // listener installed AFTER currentTime assignment sees the event. Register
+    // first, then wait two paints so the decoded frame is what gets sampled.
+    const seekAndPaint = (video, time) => new Promise((resolve, reject) => {
+      const onSeeked = () => {
+        video.removeEventListener('error', onError);
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      };
+      const onError = () => {
+        video.removeEventListener('seeked', onSeeked);
+        reject(new Error('video seek failed at ' + time));
+      };
+      video.addEventListener('seeked', onSeeked, { once: true });
+      video.addEventListener('error', onError, { once: true });
+      try { video.currentTime = time; } catch (e) { onError(); }
+    });
     // frames vs references (tolerance on mean abs diff, 160x120)
     const c = document.createElement('canvas'); c.width = 160; c.height = 120; const x = c.getContext('2d', { willReadFrequently: true }); out.shots = []; out.refMad = [];
-    for (let k = 0; k < refs.length; k++) { const idx = [1, 6, 12][k]; v.currentTime = (idx + 0.5) / FPS; await new Promise((y) => v.addEventListener('seeked', y, { once: true })); x.drawImage(v, 0, 0, 160, 120); out.shots.push(c.toDataURL('image/png'));
+    for (let k = 0; k < refs.length; k++) { const idx = [1, 6, 12][k]; await seekAndPaint(v, (idx + 0.5) / FPS); x.drawImage(v, 0, 0, 160, 120); out.shots.push(c.toDataURL('image/png'));
       if (haveRefs) { const ref = await new Promise((y) => { const i = new Image(); i.onload = () => y(i); i.src = base + '/tools/e2e/fixtures/' + refs[k]; }); const a = x.getImageData(0, 0, 160, 120).data; x.drawImage(ref, 0, 0, 160, 120); const b = x.getImageData(0, 0, 160, 120).data; let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); out.refMad.push(s / (160 * 120 * 3)); } }
     // quality vs live-style: live = MODNet 256 px + causal EMA(0.55) at the same frames; enhance = r.masks.raw/smooth (512 px, zero-phase)
     const gtImg = await new Promise((y) => { const i = new Image(); i.onload = () => y(i); i.src = gtUrl; });
@@ -38,7 +54,7 @@ const FPS = 8, N_EXPECT = 16;
     const g = document.createElement('canvas'); g.width = mw; g.height = mh; const gx = g.getContext('2d', { willReadFrequently: true }); gx.drawImage(gtImg, 0, 0, mw, mh); const gd = gx.getImageData(0, 0, mw, mh).data; const GT = new Uint8Array(mw * mh); for (let i = 0; i < GT.length; i++) GT[i] = gd[i * 4];
     const seg = new VS.MODNetWorkerProvider(); await seg.initialize('balanced'); seg.longEdge = 256; const lv = document.createElement('video'); lv.muted = true; lv.src = URL.createObjectURL(raw); await new Promise((y) => { lv.onloadedmetadata = y; });
     const live = []; const lc = document.createElement('canvas'), lx = lc.getContext('2d', { willReadFrequently: true });
-    for (let i = 0; i < r.frames; i++) { lv.currentTime = (i + 0.5) / FPS; await new Promise((y) => lv.addEventListener('seeked', y, { once: true })); const res = await seg.segment(lv); const m = res.segmentationMask; lc.width = mw; lc.height = mh; lx.clearRect(0, 0, mw, mh); lx.drawImage(m, 0, 0, mw, mh); const d = lx.getImageData(0, 0, mw, mh).data; const a = new Uint8Array(mw * mh); for (let k = 0; k < a.length; k++) a[k] = d[k * 4 + 3];
+    for (let i = 0; i < r.frames; i++) { await seekAndPaint(lv, (i + 0.5) / FPS); const res = await seg.segment(lv); const m = res.segmentationMask; lc.width = mw; lc.height = mh; lx.clearRect(0, 0, mw, mh); lx.drawImage(m, 0, 0, mw, mh); const d = lx.getImageData(0, 0, mw, mh).data; const a = new Uint8Array(mw * mh); for (let k = 0; k < a.length; k++) a[k] = d[k * 4 + 3];
       if (live.length) { const p = live[live.length - 1]; for (let k = 0; k < a.length; k++) a[k] = Math.round(0.55 * a[k] + 0.45 * p[k]); } live.push(a); }
     seg.dispose && seg.dispose();
     const avg = (arr) => arr.reduce((s, m) => s + C.edgeBandError(m, GT, mw, mh, 4), 0) / arr.length;

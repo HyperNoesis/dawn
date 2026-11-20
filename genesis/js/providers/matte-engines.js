@@ -18,7 +18,7 @@
     ['birefnet', 'BiRefNet lite (best edges, needs WebGPU, +115 MB, MIT)'],
     ['ppmatting-v2', 'PP-MattingV2 (BETA, live matting, +34 MB, Apache-2.0)'],
     ['genesis-hybrid', 'Genesis Hybrid (BETA: PP-MattingV2 + edge refinement, +34 MB, Apache-2.0)'],
-    ['genesis-hybrid-tam', 'Genesis Hybrid + EdgeTAM (BETA, cleanest: tracker keeps the subject, hybrid refines hair/fingers, +64 MB, Apache-2.0)'],
+    ['genesis-hybrid-tam', 'Genesis UltraMatte (BETA: PP-MattingV2 + EdgeTAM tracking + high-res boundary tiles, +64 MB, Apache-2.0)'],
     ['ppmatting-hrnet', 'PP-Matting HRNet (benchmark only, heavy, +94 MB, Apache-2.0)']
   ];
   const PP_DEPS = ['js/providers/ppmatting-core.js', 'js/providers/temporal-matte.js', 'js/providers/video-guard.js', 'js/providers/engine-policy.js', 'js/providers/ppmatting-provider.js'];
