@@ -24,7 +24,12 @@
   const MODNET_MAX_MS = 100;              // slower than this per mask -> use the lighter model (was 70: too strict, a phone at 72-100 ms still beats the light model's blocky edges; the fps ladder steps down if the picture gets choppy). localStorage vs_max_ms overrides.
   // v0.98 QUALITY FIRST (default on): the good model never gives way to the weak one. MODNet is the live engine at a 256 px floor; when a phone is slow the
   // mask is refreshed less often (stride) instead. The weak MediaPipe engine is only used if MODNet cannot load at all. localStorage vs_quality_first = 0 restores the old ladder.
-  function qualityFirst() { try { return localStorage.getItem('vs_quality_first') !== '0'; } catch (e) { return true; } }
+  function qualityFirst() {   // v0.98: phones no longer start on MODNet (1.2 s/frame on a Mali-G52 = 2 FPS). Explicit '1'/'0' still wins; otherwise only desktops default to quality-first.
+    try { const v = localStorage.getItem('vs_quality_first'); if (v === '1') return true; if (v === '0') return false; } catch (e) {}
+    const ua = navigator.userAgent || '';
+    const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
+    return !mobile;
+  }
   const QF_EDGE = 256;
   function maxMs() {
     try { const v = +localStorage.getItem('vs_max_ms'); if (v >= 20 && v <= 2000) return v; } catch (e) {}
