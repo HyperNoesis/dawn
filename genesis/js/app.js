@@ -1683,6 +1683,9 @@
   };
 
   function publishSegmentationPreview(source, mask) {
+    // The diagnostic canvases are opt-in work. Normal camera preview/recording
+    // should not pay for extra pixel readback while the inspector is closed.
+    if (!window.VS || !window.VS.segmentationPreviewEnabled) return;
     if (!mask || !(mask.width > 0 && mask.height > 0)) return;
     const long = 320, scale = Math.min(1, long / Math.max(mask.width, mask.height));
     const w = Math.max(1, Math.round(mask.width * scale)), h = Math.max(1, Math.round(mask.height * scale));
