@@ -27,3 +27,5 @@ MaskMotion propagates an existing matte; it is not a new segmentation model and 
 ## Timing correction
 
 MaskMotion now distinguishes source-frame time from model-result delivery time. Matte age starts when inference finishes, while the source timestamp is retained for bounded first-frame motion catch-up. The source gap limit is 1.2 seconds and the post-delivery matte lifetime is 1.5 seconds.
+
+- The opt-in composite profile is now presented in the Studio picker as Genesis UltraMatte; the existing stored engine ID remains compatible.
