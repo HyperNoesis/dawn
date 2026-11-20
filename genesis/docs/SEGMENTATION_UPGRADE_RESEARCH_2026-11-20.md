@@ -150,7 +150,7 @@ A new model-agnostic stage is loaded before the Studio app:
 - `js/providers/mask-motion.js` samples each source frame into a 64×36 luma grid.
 - It estimates small block-level backward motion, with texture, residual and match-separation confidence.
 - It warps the cached soft alpha with bilinear sampling between model refreshes.
-- It refuses alignment on low texture/confidence, scene cuts, frame gaps, or masks older than 520 ms. A rejected alignment suspends propagation until a new model matte is seeded.
+- It refuses alignment on low texture/confidence, scene cuts, frame gaps, or masks older than 1.5 seconds after delivery. A rejected alignment suspends propagation until a new model matte is seeded.
 - The implementation is optional and fail-soft. Set `localStorage.vs_mask_motion = "0"` or use the Diagnostics toggle to disable it. The base model mask remains available.
 - Diagnostics publish alignment status, mask age, mean confidence, coverage and propagation-stage cost.
 
