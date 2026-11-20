@@ -100,7 +100,7 @@
     return list;
   }
   /** True when an earlier speed test on this device already showed EVERY candidate is too slow (so we do not re-download and re-test on each start). */
-  function benchSaysSlow(b, cands) { return !!b && window.VS.PerfProfile.benchFresh(b) && cands.length > 0 && cands.every((c) => typeof b[c.key + 'Ms'] === 'number' && b[c.key + 'Ms'] > maxMs() * 1.4); }   // v0.80: only a CLEARLY slow verdict (1.4x over budget) skips the upgrade next time; a borderline one is re-measured
+  function benchSaysSlow(b, cands) { return !!b && window.VS.PerfProfile.benchFresh(b) && cands.length > 0 && (b.clearlySlow === true || cands.every((c) => typeof b[c.key + 'Ms'] === 'number' && b[c.key + 'Ms'] > maxMs() * 1.4)); }   // v0.80: only a CLEARLY slow verdict (1.4x over budget) skips the upgrade next time; a borderline one is re-measured
   /** Load the best live matting engine while the camera is already live; swap it in only if this device runs it fast enough. Tries RVM, then MODNet. */
   async function backgroundUpgrade(quality, sessionToken) {
     if (upgrading) return;
@@ -112,6 +112,7 @@
       const cands = upgradeCandidates();
       for (let ci = 0; ci < cands.length; ci++) {
         const c = cands[ci], isLast = ci === cands.length - 1;
+        if (results.clearlySlow) continue;   // v0.98: a lighter model was already >3x over budget; the heavier ones cannot fit, so do not freeze the preview testing them
         try {
           showBenchNote('Live now on the light model. Loading the high-quality model (' + c.name + ') in the background...');
           cand = c.make();
@@ -148,7 +149,8 @@
           let first = await measureLadder();
           if (!first) { benchBusy = false; cand.dispose?.(); cand = null; return; }
           let ms = first.ms, usedEdge = first.edge;
-          if (ms > maxMs() && cand.threads > 1) {
+          const clearlySlow = ms > maxMs() * 3;   // v0.98: 3x over budget is not a hiccup: skip the 1-thread and settle re-measures (each was ~10 more frozen seconds)
+          if (!clearlySlow && ms > maxMs() && cand.threads > 1) {
             showBenchNote(c.name + ' needs ' + Math.round(ms) + ' ms with ' + cand.threads + ' threads. Checking with 1 thread...');
             const edge = cand.longEdge; try { cand.dispose?.(); } catch (e0) {} cand = c.make(); cand.lowLightBoost = lowLightBoostEnabled;
             await cand.initialize(quality, { threads: 1 }); cand.longEdge = edge;
@@ -156,7 +158,7 @@
             const one = await timeProvider(cand, 6, 3, 600);
             if (one < ms) { ms = one; results.threads = 1; }
           }
-          if (ms > maxMs()) {
+          if (!clearlySlow && ms > maxMs()) {
             showBenchNote(c.name + ' measured ' + Math.round(ms) + ' ms. Measuring once more when the camera has settled...');
             await new Promise((r) => setTimeout(r, 1500));
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
@@ -164,7 +166,7 @@
             if (again < ms) ms = again;
           }
           benchBusy = false;
-          results[c.key + 'Ms'] = Math.round(ms); results.edge = usedEdge;
+          results[c.key + 'Ms'] = Math.round(ms); results.edge = usedEdge; if (clearlySlow) { results.clearlySlow = true; upgradeRetried = true; }
           segLogPush('bench', { engine: c.key, ms: Math.round(ms), edge: usedEdge, budget: maxMs(), gpu: !!cand.usingWebGPU });
           if (stale()) { cand.dispose?.(); cand = null; return; }
           if (ms <= maxMs()) {
@@ -179,7 +181,7 @@
             showBenchNote('High-quality matting is active (' + c.name + ', ' + usedEdge + ' px, ' + Math.round(ms) + ' ms per mask' + (segProvider.threads > 1 ? ', ' + segProvider.threads + ' threads' : '') + ').');
             return;
           }
-          showBenchNote(isLast ? 'Staying on the light model: even the smallest ' + c.name + ' size needs ' + Math.round(ms) + ' ms per mask here.'
+          showBenchNote((isLast || clearlySlow) ? 'Staying on the light model: even the smallest ' + c.name + ' size needs ' + Math.round(ms) + ' ms per mask here.'
                                : c.name + ' needs ' + Math.round(ms) + ' ms per mask here, which is too slow. Trying the next model...');
           cand.dispose?.(); cand = null;
         } catch (e) {
