@@ -29,7 +29,9 @@ A cached tile is refreshed when any of the following is true:
 
 The source signature is sampled from the same frame snapshot used by the coarse matte and the tile refiner. This catches some appearance changes that a coarse-alpha-only comparison misses.
 
-Tile scheduling gives never-refined and older tiles priority. That prevents the same high-activity regions from taking every available tile slot.
+Tile scheduling gives never-refined and older tiles priority. That prevents the same high-activity regions from taking every available tile slot. A conservative initial per-tile estimate and an occasional one-tile probe prevent a pessimistic first estimate from starving the entire refinement stage.
+
+The performance governor now recognises Genesis Hybrid / UltraMatte and EdgeTAM-wrapped providers as distinct engines. It rebuilds the same pipeline when resizing, and retries the explicitly selected advanced engine after a temporary lightweight fallback instead of silently recovering into unrelated MODNet.
 
 Tile sanity checks now compare contradictions against the number of confident pixels, not the entire tile area.
 
@@ -45,7 +47,9 @@ The diagnostics panel also reports:
 - hybrid boundary tiles, budget, cached tiles and boundary-band coverage;
 - hybrid errors.
 
-The preview is a low-resolution diagnostic visual only. It is not used as the recording output and does not alter the mask.
+The inspector offers Original, Alpha, Edges and Checkerboard Cutout modes. The checkerboard view composites the source frame through the provider alpha, making holes and retained-background errors easier to see. Diagnostic canvases are only generated while the inspector is expanded, so ordinary sessions do not pay for their pixel readback.
+
+The preview is a downsampled diagnostic visual only. It is not used as the recording output and does not alter the mask.
 
 ## What is intentionally not claimed as complete
 
