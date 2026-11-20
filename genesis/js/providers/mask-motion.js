@@ -14,6 +14,14 @@
     sceneCutMean: 46, maxFrameGapMs: 2500, maxMaskAgeMs: 2600
   };
 
+  function analysisSize(sourceWidth, sourceHeight, gridWidth) {
+    const width = Math.max(8, Math.round(gridWidth || DEFAULTS.gridWidth));
+    const height = sourceWidth > 0 && sourceHeight > 0
+      ? Math.max(8, Math.round(width * sourceHeight / sourceWidth))
+      : DEFAULTS.gridHeight;
+    return { width, height };
+  }
+
   function meanAbsDiff(a, b) {
     if (!a || !b || a.length !== b.length || !a.length) return Infinity;
     let sum = 0;
@@ -161,18 +169,25 @@
       this.metrics = { status: 'idle', ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
     }
 
-    _ensureAnalysisCanvas() {
+    _ensureAnalysisCanvas(source) {
       const o = this.options;
-      if (!this.analysisCanvas) {
-        this.analysisCanvas = document.createElement('canvas');
-        this.analysisCanvas.width = o.gridWidth; this.analysisCanvas.height = o.gridHeight;
+      const sourceWidth = source && (source.videoWidth || source.naturalWidth || source.width);
+      const sourceHeight = source && (source.videoHeight || source.naturalHeight || source.height);
+      const size = analysisSize(sourceWidth, sourceHeight, o.gridWidth);
+      o.gridHeight = size.height; // keep the motion field aspect-ratio matched to the camera
+      if (!this.analysisCanvas) this.analysisCanvas = document.createElement('canvas');
+      if (this.analysisCanvas.width !== size.width || this.analysisCanvas.height !== size.height) {
+        this.analysisCanvas.width = size.width;
+        this.analysisCanvas.height = size.height;
+        this.analysisCtx = this.analysisCanvas.getContext('2d', { willReadFrequently: true });
+      } else if (!this.analysisCtx) {
         this.analysisCtx = this.analysisCanvas.getContext('2d', { willReadFrequently: true });
       }
       if (!this.analysisCtx) throw new Error('MaskMotion could not create its analysis canvas');
     }
 
     _readLuma(source) {
-      const o = this.options; this._ensureAnalysisCanvas();
+      const o = this.options; this._ensureAnalysisCanvas(source);
       this.analysisCtx.drawImage(source, 0, 0, o.gridWidth, o.gridHeight);
       const rgba = this.analysisCtx.getImageData(0, 0, o.gridWidth, o.gridHeight).data;
       const luma = new Uint8Array(o.gridWidth * o.gridHeight);
@@ -277,7 +292,7 @@
     }
   }
 
-  const api = { DEFAULTS, meanAbsDiff, estimateFlow, warpAlpha, MaskMotion };
+  const api = { DEFAULTS, analysisSize, meanAbsDiff, estimateFlow, warpAlpha, MaskMotion };
   root.VS = root.VS || {}; root.VS.MaskMotion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
