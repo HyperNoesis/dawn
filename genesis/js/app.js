@@ -103,7 +103,7 @@
     const custom = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
     if (pref === 'auto' && custom && custom !== 'modnet') {
       const item = (V.MatteEngines.visibleEngines() || []).find((e) => e[0] === custom);
-      list.push({ name: item ? item[1] : custom, key: 'modnet', make: makeModnet });
+      list.push({ name: item ? item[1] : custom, key: custom, make: makeModnet });
       return list;
     }
     if ((pref === 'auto' || pref === 'rvm') && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
@@ -198,7 +198,7 @@
           cand.dispose?.(); cand = null;
         } catch (e) {
           showBenchNote('High-quality model unavailable (' + c.name + ': ' + (e && e.message ? e.message : e) + '). ' + (isLast ? 'Staying on the light model.' : 'Trying the next model...'));
-          if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() !== 'modnet' && c.key === 'modnet') {
+          if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
             V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' could not initialise or meet the performance budget: ' + (e && e.message ? e.message : e));
           }
           try { cand && cand.dispose && cand.dispose(); } catch (e2) {}
