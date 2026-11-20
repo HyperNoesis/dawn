@@ -1627,6 +1627,23 @@
     catch (e) { return true; }
   }
 
+  function seedMaskMotion(mask, sourceFrame, timestamp) {
+    if (!maskMotion) return;
+    if (!maskMotionEnabled() || !sourceFrame) { maskMotion.reset(); return; }
+    try { maskMotion.seed(mask, sourceFrame, timestamp); }
+    catch (e) {
+      // Refinement is optional: never discard a valid model matte because the
+      // propagation stage cannot read a frame or allocate its scratch canvas.
+      maskMotion.reset();
+      if (window.VS.logError) window.VS.logError('Mask motion seed skipped: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  window.VS.setMaskMotionEnabled = function (enabled) {
+    try { localStorage.setItem('vs_mask_motion', enabled ? '1' : '0'); } catch (e) {}
+    if (maskMotion) maskMotion.reset();
+  };
+
   function startAsyncSeg(token) {
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
@@ -1640,8 +1657,7 @@
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
       const fresh = await createImageBitmap(r.segmentationMask);
       if (token !== loopToken) { fresh.close(); return; }
-      if (maskMotion && maskMotionEnabled() && sourceFrame) maskMotion.seed(fresh, sourceFrame, t0);
-      else if (maskMotion) maskMotion.reset();
+      seedMaskMotion(fresh, sourceFrame, t0);
       const old = cachedMaskBitmap; cachedMaskBitmap = fresh; asyncSegDone++;
       if (old) setTimeout(() => { try { old.close(); } catch (e) {} }, 400);
       maskWatchdog();
@@ -1730,10 +1746,7 @@
           if (myLoop !== loopToken) { fresh.close(); dropPerson(); return; }
           if (cachedMaskBitmap) cachedMaskBitmap.close();
           cachedMaskBitmap = fresh;
-          if (maskMotion && maskMotionEnabled()) {
-            if (inferenceSnapshot) maskMotion.seed(fresh, inferenceSnapshot, initialSegAt);
-            else maskMotion.reset();
-          }
+          seedMaskMotion(fresh, inferenceSnapshot, initialSegAt);
           releaseSegmentationFrame(inferenceSnapshot);
           inferenceSnapshot = initialSegFrame = null;
         } catch (err) { /* keep whatever cached mask we already have */ }
