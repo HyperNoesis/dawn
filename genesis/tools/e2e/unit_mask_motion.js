@@ -4,6 +4,9 @@ global.window = global; global.VS = {};
 const M = require('../../js/providers/mask-motion.js');
 
 const W = 64, H = 36, BLOCK = 8;
+assert.deepStrictEqual(M.analysisSize(640, 480, 64), { width: 64, height: 48 }, '4:3 source keeps its aspect ratio');
+assert.deepStrictEqual(M.analysisSize(1280, 720, 64), { width: 64, height: 36 }, '16:9 source keeps its aspect ratio');
+assert.deepStrictEqual(M.analysisSize(1080, 1920, 64), { width: 64, height: 114 }, 'portrait source keeps its aspect ratio');
 function pattern(seed) {
   let x = seed >>> 0; const a = new Uint8Array(W * H);
   for (let i = 0; i < a.length; i++) { x = (1664525 * x + 1013904223) >>> 0; a[i] = 35 + (x % 190); }
