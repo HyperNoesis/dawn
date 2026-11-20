@@ -2119,6 +2119,10 @@
   const govOff = () => { try { return localStorage.getItem('vs_gov') === '0'; } catch (e) { return false; } };
   function govEngineId(p) {
     const l = (p && p.label) || '';
+    // A hybrid's performance rungs must rebuild the same hybrid pipeline.
+    // The EdgeTAM proxy forwards the base provider's hybrid/tracker properties.
+    if (p && p.hy && /Genesis UltraMatte/.test(l) && p.trackerHook) return 'genesis-hybrid-tam';
+    if (p && p.hy) return 'genesis-hybrid';
     if (/PP-Matting/.test(l)) return /HRNet/.test(l) ? 'ppmatting-hrnet' : 'ppmatting-v2';
     if (/RVM/.test(l)) return 'rvm';
     if (/MODNet/.test(l)) return 'modnet';
@@ -2126,12 +2130,17 @@
   }
   function govChainFor(engine) {
     const sizes = [512, 448, 384, 320, 256, 224], ch = [];
-    if (engine === 'ppmatting-v2' || engine === 'ppmatting-hrnet') ch.push({ engine, edges: [512, 448, 384, 320] });   // the PP models' trained range
-    ch.push({ engine: engine === 'rvm' ? 'rvm' : 'modnet', edges: sizes });
+    if (engine === 'ppmatting-v2' || engine === 'ppmatting-hrnet' || engine === 'genesis-hybrid' || engine === 'genesis-hybrid-tam') {
+      ch.push({ engine, edges: [512, 448, 384, 320] });   // PP models and hybrid tiers use the trained PP size range
+    }
+    if (engine === 'rvm') ch.push({ engine: 'rvm', edges: sizes });
+    else ch.push({ engine: 'modnet', edges: sizes });
     return ch;
   }
   function makeGovEngine(id) {
     const V = window.VS;
+    if (id === 'genesis-hybrid-tam' && V.GenesisHybridProvider && V.EdgeTAMGate) return V.EdgeTAMGate.create(new V.GenesisHybridProvider());
+    if (id === 'genesis-hybrid' && V.GenesisHybridProvider) return new V.GenesisHybridProvider();
     if (id === 'ppmatting-v2' && V.PPMattingV2Provider) return new V.PPMattingV2Provider();
     if (id === 'ppmatting-hrnet' && V.PPMattingHRNetProvider) return new V.PPMattingHRNetProvider();
     if (id === 'rvm' && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) return new V.RVMWorkerProvider();
