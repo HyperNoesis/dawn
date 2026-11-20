@@ -98,6 +98,14 @@
     const V = window.VS; let pref = 'auto'; try { pref = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) {}
     const list = [];
     if (pref === 'light') return list;
+    // An explicitly chosen advanced matte engine outranks automatic RVM probing.
+    // Otherwise a background upgrade could silently replace the user's choice.
+    const custom = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
+    if (pref === 'auto' && custom && custom !== 'modnet') {
+      const item = (V.MatteEngines.visibleEngines() || []).find((e) => e[0] === custom);
+      list.push({ name: item ? item[1] : custom, key: 'modnet', make: makeModnet });
+      return list;
+    }
     if ((pref === 'auto' || pref === 'rvm') && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
     if ((pref === 'auto' || pref === 'modnet') && V.MODNetSegmentationProvider) list.push({ name: 'MODNet', key: 'modnet', make: makeModnet });
     return list;
@@ -1034,6 +1042,14 @@
     // enough (one-time speed test, remembered), otherwise MediaPipe (Apache-2.0, lightest).
     // RVM is GPL-3.0, so it only runs if someone explicitly picks it (personal use).
     const VSNS = window.VS;
+    // Wait for the optional engine router and its selected model dependencies.
+    // A rapid Start tap must not race the dynamic loader and start on the base model.
+    if (VSNS.matteEnginesReady) await VSNS.matteEnginesReady;
+    const matteChoice = VSNS.MatteEngines && VSNS.MatteEngines.pref ? VSNS.MatteEngines.pref() : 'modnet';
+    if (VSNS.MatteEngines && matteChoice !== 'modnet') {
+      const prepared = await VSNS.MatteEngines.ensureEngine(matteChoice);
+      if (!prepared.ok) VSNS.MatteEngines.reportActive(null, prepared.error);
+    }
     const pref = (els.modelSelect && els.modelSelect.value) || 'auto';
     const knownBench = readBench();
     let warmPromise = null;
@@ -1066,7 +1082,9 @@
       );
       if (qualityFirst() && typeof segProvider.longEdge === 'number' && segProvider.longEdge > 0) { segProvider.longEdge = QF_EDGE; resetSegCache(); }
       updateStudioChrome();
+      if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
     } catch (err) {
+      if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(null, 'Selected engine initialisation failed: ' + (err && err.message ? err.message : err));
       // RVM needs onnxruntime-web + (ideally) WebGPU/WASM support. If that
       // genuinely fails to load (offline first run, ancient browser, CDN
       // blocked, or just too slow — see withTimeout above), fall back to the
@@ -1086,6 +1104,8 @@
             `Timed out after ${MODEL_LOAD_TIMEOUT_MS / 1000}s loading the fallback model — check your connection and try again.`
           );
           updateStudioChrome();
+          if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, 'Requested engine failed; using MediaPipe fallback: ' + (err && err.message ? err.message : err));
+          showBenchNote('The selected engine could not start. MediaPipe is active instead. Reason: ' + (err && err.message ? err.message : err));
         } catch (fallbackErr) {
           modelFailedKeepCamera(fallbackErr.message);
           return;
@@ -1502,6 +1522,9 @@
     const impl = segProvider && segProvider.impl;
     return {
       engine: segProvider ? (segProvider.current || segProvider.label) : null,
+      matteRoute: window.VS.MatteEngines && window.VS.MatteEngines.getStatus ? window.VS.MatteEngines.getStatus(segProvider) : null,
+      hybrid: segProvider && segProvider.hy ? Object.assign({}, segProvider.hy) : null,
+      modelLongEdge: segProvider && typeof segProvider.longEdge === 'number' ? segProvider.longEdge : null,
       threads: segProvider && segProvider.threads ? segProvider.threads : 1,
       delegate: impl && impl.gpu !== undefined ? (impl.gpu ? 'GPU' : 'CPU') : (segProvider && segProvider.backend) || null,
       coveragePct: cov == null ? null : Math.round(cov * 1000) / 10,
@@ -1646,6 +1669,44 @@
     asyncSegLastAt = 0; // schedule a fresh matte so enabling can seed from a known frame
   };
 
+  function publishSegmentationPreview(source, mask) {
+    if (!mask || !(mask.width > 0 && mask.height > 0)) return;
+    const long = 192, scale = Math.min(1, long / Math.max(mask.width, mask.height));
+    const w = Math.max(1, Math.round(mask.width * scale)), h = Math.max(1, Math.round(mask.height * scale));
+    const make = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+    const sourceCanvas = make(), alphaCanvas = make(), edgeCanvas = make();
+    if (source) {
+      const sx = source.videoWidth || source.width || mask.width;
+      const sy = source.videoHeight || source.height || mask.height;
+      if (sx > 0 && sy > 0) sourceCanvas.getContext('2d').drawImage(source, 0, 0, sx, sy, 0, 0, w, h);
+    }
+    const maskCanvas = make(), maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+    maskCtx.drawImage(mask, 0, 0, w, h);
+    const raw = maskCtx.getImageData(0, 0, w, h).data;
+    const alphaCtx = alphaCanvas.getContext('2d'), alphaImage = alphaCtx.createImageData(w, h);
+    const edgeCtx = edgeCanvas.getContext('2d'), edgeImage = edgeCtx.createImageData(w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x, p = i * 4, a = raw[p + 3];
+      alphaImage.data[p] = alphaImage.data[p + 1] = alphaImage.data[p + 2] = a;
+      alphaImage.data[p + 3] = 255;
+      const left = raw[(y * w + Math.max(0, x - 1)) * 4 + 3];
+      const right = raw[(y * w + Math.min(w - 1, x + 1)) * 4 + 3];
+      const up = raw[(Math.max(0, y - 1) * w + x) * 4 + 3];
+      const down = raw[(Math.min(h - 1, y + 1) * w + x) * 4 + 3];
+      const gradient = Math.max(Math.abs(a - left), Math.abs(a - right), Math.abs(a - up), Math.abs(a - down));
+      const edge = (a > 8 && a < 247) || gradient > 18 ? 255 : 0;
+      edgeImage.data[p] = edge;
+      edgeImage.data[p + 1] = edge ? 210 : 0;
+      edgeImage.data[p + 2] = edge ? 255 : 0;
+      edgeImage.data[p + 3] = 255;
+    }
+    alphaCtx.putImageData(alphaImage, 0, 0);
+    edgeCtx.putImageData(edgeImage, 0, 0);
+    window.VS = window.VS || {};
+    window.VS.segmentationPreview = { source: sourceCanvas, alpha: alphaCanvas, edge: edgeCanvas, width: w, height: h, updatedAt: Date.now() };
+    window.dispatchEvent(new CustomEvent('vs:segmentation-preview'));
+  }
+
   function startAsyncSeg(token) {
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
@@ -1657,6 +1718,7 @@
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
+      try { publishSegmentationPreview(sourceFrame || els.video, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       const fresh = await createImageBitmap(r.segmentationMask);
       if (token !== loopToken) { fresh.close(); return; }
       seedMaskMotion(fresh, sourceFrame, t0);
@@ -1730,7 +1792,10 @@
       }
       if (myLoop !== loopToken) { dropPerson(); return; }
       const segMs = performance.now() - segStart;
-      if (results && results.segmentationMask) lastMaskSize = (results.segmentationMask.width || '?') + 'x' + (results.segmentationMask.height || '?');
+      if (results && results.segmentationMask) {
+        lastMaskSize = (results.segmentationMask.width || '?') + 'x' + (results.segmentationMask.height || '?');
+        try { publishSegmentationPreview(inferenceSnapshot || els.video, results.segmentationMask); } catch (previewError) { /* diagnostics only */ }
+      }
       segMsEma = segMsEma ? segMsEma * 0.8 + segMs * 0.2 : segMs;
       maskWatchdog();
     }
