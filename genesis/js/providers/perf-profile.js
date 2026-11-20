@@ -199,7 +199,7 @@
   function benchFresh(b, now, maxAgeMs) {
     return !!b && typeof b.at === 'number' && ((now == null ? Date.now() : now) - b.at) < (maxAgeMs || b.holdMs || BENCH_MAX_AGE_MS) && ((now == null ? Date.now() : now) - b.at) >= 0;
   }
-  /** CPU threads for ORT-web. Phones have a few fast cores and many slow ones: more than 2 threads usually land on slow cores and starve the page, so phones are capped at 2. */
+  /** CPU threads for ORT-web. Mobile is capped at 3, with a 2-thread minimum when cross-origin isolation is available; desktop is capped at 4. The live speed governor still measures whether this helps the actual device. */
   function wasmThreads(cores, isolated, mobile, forceOne) {
     if (forceOne || !isolated) return 1;
     const c = Math.max(1, (cores | 0) || 2);
