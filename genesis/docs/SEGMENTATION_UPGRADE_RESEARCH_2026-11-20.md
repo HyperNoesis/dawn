@@ -179,3 +179,8 @@ If MaskMotion detects a scene cut, long capture gap, or expired matte, the rende
 MaskMotion keeps two clocks separate: the original camera timestamp is retained for the first source-to-current motion estimate, while mask staleness begins when the model result is delivered, not when inference started.
 
 The source-frame catch-up window is 1.2 seconds and the maximum matte lifetime after delivery is 1.5 seconds. The flow search remains local and conservative; if a large movement cannot be matched confidently, propagation suspends instead of guessing.
+
+
+### User-facing engine name
+
+The existing opt-in `genesis-hybrid-tam` engine is now presented in the picker as **Genesis UltraMatte**. It combines the local PP-MattingV2 coarse alpha, EdgeTAM subject gate, uncertainty-band high-resolution tile refinement, and the app-level MaskMotion stage. The underlying engine identifier is preserved for backward compatibility. This remains a beta profile and is not automatically promoted on low-tier devices.
