@@ -1639,9 +1639,11 @@
     }
   }
 
+  window.VS.maskMotionEnabled = maskMotionEnabled;
   window.VS.setMaskMotionEnabled = function (enabled) {
     try { localStorage.setItem('vs_mask_motion', enabled ? '1' : '0'); } catch (e) {}
     if (maskMotion) maskMotion.reset();
+    asyncSegLastAt = 0; // schedule a fresh matte so enabling can seed from a known frame
   };
 
   function startAsyncSeg(token) {
