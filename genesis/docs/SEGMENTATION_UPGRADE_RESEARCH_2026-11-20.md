@@ -131,3 +131,39 @@ The highest-value route is not "install the biggest model." It is:
 **correct frame pairing → compensate mask age → refine only uncertain edges → GPU edge cleanup → validate on real target-device footage → only then consider a new model or training.**
 
 That path improves the current product without forcing non-commercial research weights into a commercial build or sacrificing the live experience to an unmeasured heavyweight model.
+
+
+## 6. Implementation added on the upgrade branch
+
+Branch: `fix/hybrid-frame-pairing-nov20`.
+
+### Frame-locked inference
+
+- The optional Genesis Hybrid provider snapshots its input before coarse asynchronous inference and uses the same snapshot for tile inference, EdgeTAM tracking, and its motion-estimation input.
+- The Studio async path snapshots the first inference frame and uses it for both the person bitmap and segmentation model input.
+- The regression suite deliberately advances a fake camera while the parent inference promise is pending and checks the tile inputs stay paired with the correct source frame.
+
+### MaskMotion v1
+
+A new model-agnostic stage is loaded before the Studio app:
+
+- `js/providers/mask-motion.js` samples each source frame into a 64×36 luma grid.
+- It estimates small block-level backward motion, with texture, residual and match-separation confidence.
+- It warps the cached soft alpha with bilinear sampling between model refreshes.
+- It refuses alignment on low texture/confidence, scene cuts, frame gaps, or masks older than 520 ms. A rejected alignment suspends propagation until a new model matte is seeded.
+- The implementation is optional and fail-soft. Set `localStorage.vs_mask_motion = "0"` or use the Diagnostics toggle to disable it. The base model mask remains available.
+- Diagnostics publish alignment status, mask age, mean confidence, coverage and propagation-stage cost.
+
+The current search radius is deliberately small (2 analysis-grid pixels) to bound CPU cost; this is not dense optical flow and may refuse to align fast motion or low-texture footage.
+
+### Automated coverage added
+
+- `tools/e2e/unit_mask_motion.js`: controlled translation, static-scene stability and low-texture refusal.
+- `tools/unit/hybrid-provider.test.js`: coarse/refinement frame pairing under simulated asynchronous camera advancement.
+- The root workflow runs all `tools/e2e/unit_*.js` files and the existing browser/model gates.
+
+### Validation status and limitations
+
+Passing pure-logic and synthetic motion tests is necessary but insufficient. The browser gates, export checks and site build still need to pass on the current branch. No target Android device, consented real-person footage, labelled hair/finger alpha set, thermal session, or commercial licence audit has been completed here.
+
+Do not describe MaskMotion as a new segmentation model or as a solution to missing upstream alpha detail. It only aligns an already-produced matte during short asynchronous gaps. It cannot reconstruct strands the model never detected, repair a completely wrong subject mask, or recover transparency from a single ambiguous frame.
