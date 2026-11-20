@@ -23,3 +23,7 @@ This release candidate is not promoted to production by this change. Unit/synthe
 ## Limitations
 
 MaskMotion propagates an existing matte; it is not a new segmentation model and cannot synthesize missing hair alpha. It is disabled automatically for unreliable motion and can always be switched off.
+
+## Timing correction
+
+MaskMotion now distinguishes source-frame time from model-result delivery time. Matte age starts when inference finishes, while the source timestamp is retained for bounded first-frame motion catch-up. The source gap limit is 1.2 seconds and the post-delivery matte lifetime is 1.5 seconds.
