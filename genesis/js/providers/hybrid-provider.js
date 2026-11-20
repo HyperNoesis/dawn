@@ -32,7 +32,7 @@
       super();
       this.title = 'Genesis Hybrid';
       this.label = 'Genesis Hybrid (beta, local)';
-      this.hy = { tiles: 0, budget: 0, bandPct: 0, refined: 0, cached: 0, rejected: 0, warped: 0, ms: 0, size: null, errors: 0, lastError: '', off: false };
+      this.hy = { tiles: 0, budget: 0, bandPct: 0, refined: 0, cached: 0, rejected: 0, warped: 0, ms: 0, size: null, errors: 0, lastError: '', snapshotFailures: 0, lastSnapshotError: '', off: false };
       this._hyReset();
     }
 
@@ -43,7 +43,7 @@
     /** Tracker-first mode (EdgeTAM): the hook cleans the coarse matte BEFORE the uncertainty band is built, so stray blobs never cost refinement tiles. */
     setTrackerHook(h) { this.trackerHook = h || null; }
     resetTemporal() { super.resetTemporal(); this._hyReset(); }
-    dispose() { this._hyReset(); this._tc = this._lc = this._oc = null; return super.dispose(); }
+    dispose() { this._hyReset(); this._tc = this._lc = this._oc = this._hyFrame = null; return super.dispose(); }
 
     async initialize(qualityMode, opts) {
       if (!V.BandRefineCore) await V.loadScript('js/providers/band-refine-core.js');
@@ -53,9 +53,23 @@
     async segment(video) {
       const t0 = performance.now();
       this.hy.tracked = false;
+
+      // Snapshot before the parent starts asynchronous inference. The coarse matte,
+      // EdgeTAM tracker and every high-resolution tile must describe the SAME camera
+      // frame; reading the live <video> again after the worker responds mixes frames.
+      let refineFrame = null;
+      if (hyOn() && !this.hy.off && !this._rect) {
+        try {
+          refineFrame = this._snapshotFrame(video);
+        } catch (e) {
+          this.hy.snapshotFailures = (this.hy.snapshotFailures || 0) + 1;
+          this.hy.lastSnapshotError = String((e && e.message) || e);
+        }
+      }
+
       const res = await super.segment(video);
       const coarseMs = performance.now() - t0;
-      if (!hyOn() || this.hy.off || this._rect) return res;                 // crop mode moves the coordinate frame: leave the parent's matte alone
+      if (!hyOn() || this.hy.off || this._rect || !refineFrame) return res; // fail closed to the parent's matte if snapshotting fails
       const gd = this.lastGuard;
       if (gd && gd.useHeld) { this._hyReset(); return res; }                // subject lost: the parent is showing a fading held matte
       if (gd && gd.resetTemporal) this._hyReset();
@@ -63,7 +77,7 @@
       if (!coarse || !size) return res;
       const h0 = performance.now();
       try {
-        const out = await this._hybrid(video, coarse, size[0], size[1], coarseMs);
+        const out = await this._hybrid(refineFrame, coarse, size[0], size[1], coarseMs);
         this.hy.ms = Math.round(performance.now() - h0 + coarseMs);
         this.hy.errors = 0;
         return out ? Object.assign({}, res, { segmentationMask: out }) : res;
@@ -80,6 +94,18 @@
       return { c, x: c.getContext('2d', willRead ? { willReadFrequently: true } : undefined) };
     }
 
+    _snapshotFrame(video) {
+      const w = video && (video.videoWidth || video.width);
+      const h = video && (video.videoHeight || video.height);
+      if (!(w > 0 && h > 0)) throw new Error('Cannot snapshot a frame without dimensions');
+      if (!this._hyFrame || this._hyFrame.c.width !== w || this._hyFrame.c.height !== h) {
+        this._hyFrame = this._canvas(w, h, false);
+      }
+      if (!this._hyFrame.x) throw new Error('Could not create the hybrid frame snapshot context');
+      this._hyFrame.x.drawImage(video, 0, 0, w, h);
+      return this._hyFrame.c;
+    }
+
     async _refineTile(video, core, OW, OH, vw, vh) {
       const B = V.BandRefineCore, crop = B.cropRect(core, MARGIN, OW, OH, IN);
       if (!this._tc) this._tc = this._canvas(IN, IN, true);
@@ -93,7 +119,7 @@
     }
 
     async _hybrid(video, coarse, cw, ch, coarseMs) {
-      const B = V.BandRefineCore, PC = V.PPMattingCore, vw = video.videoWidth, vh = video.videoHeight;
+      const B = V.BandRefineCore, PC = V.PPMattingCore, vw = video.videoWidth || video.width, vh = video.videoHeight || video.height;
       const longCap = lsNum('vs_hy_long', 512, 256, 768), long = Math.min(Math.max(vw, vh), 2 * Math.max(cw, ch), longCap), sc = long / Math.max(vw, vh);
       const OW = Math.round(vw * sc / 2) * 2, OH = Math.round(vh * sc / 2) * 2;
       if (OW < IN || OH < IN) return null;                                   // too small for 192 px crops: plain PP-MattingV2
