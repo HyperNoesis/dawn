@@ -117,7 +117,9 @@
       if (r !== r) return false;
       if (c <= 12 || c >= 243) { conf++; if ((c > r ? c - r : r - c) > 128) flip++; }
     }
-    return conf === 0 || flip / n <= lim;
+    // Compare contradictions against confident pixels, not the whole tile.
+    // Otherwise a tile with very few confident pixels can pass too easily.
+    return conf === 0 || flip / conf <= lim;
   }
 
   function lumaFromRGBA(rgba, w, h, out) {
@@ -194,7 +196,10 @@
 
   /** Tiles affordable this frame: (target - coarse cost) / tile cost, 0 when the coarse pass alone is over budget. */
   function tileBudget(o) {
-    const room = o.targetMs - o.coarseMs;
+    // New API: budgetMs is an ADDITIONAL refinement allowance, independent of
+    // the coarse model's inference time. Keep the legacy targetMs/coarseMs form
+    // for older callers and regression tests.
+    const room = Number.isFinite(o.budgetMs) ? o.budgetMs : (o.targetMs - o.coarseMs);
     if (!(room > 0)) return 0;
     return Math.max(0, Math.min(o.maxTiles, Math.floor(room / Math.max(1, o.tileMs))));
   }
