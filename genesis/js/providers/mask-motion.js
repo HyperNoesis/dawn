@@ -157,7 +157,7 @@
       this.options = Object.assign({}, DEFAULTS, options || {});
       this.alpha = null; this.previousLuma = null;
       this.width = 0; this.height = 0; this.seededAt = 0; this.previousAt = 0;
-      this.canvas = null; this.ctx = null; this.analysisCanvas = null; this.analysisCtx = null;
+      this.canvas = null; this.ctx = null; this.analysisCanvas = null; this.analysisCtx = null; this.suspended = false;
       this.metrics = { status: 'idle', ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
     }
 
@@ -216,6 +216,7 @@
       this.alpha = new Uint8Array(this.width * this.height);
       for (let i = 0, p = 3; i < this.alpha.length; i++, p += 4) this.alpha[i] = data[p];
       this.previousLuma = sourceFrame ? this._readLuma(sourceFrame) : null;
+      this.suspended = false;
       this.seededAt = this.previousAt = Number.isFinite(timestamp) ? timestamp : performance.now();
       this.metrics = { status: this.previousLuma ? 'seeded' : 'unpaired-seed', ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
       return this._writeCanvas();
@@ -223,15 +224,20 @@
 
     advance(sourceFrame, timestamp) {
       if (!this.alpha || !this.previousLuma || !sourceFrame) return null;
+      const started = performance.now();
       const now = Number.isFinite(timestamp) ? timestamp : performance.now();
-      const luma = this._readLuma(sourceFrame);
       const age = Math.max(0, now - this.seededAt), gap = now - this.previousAt;
+      if (this.suspended) {
+        this.metrics = { status: 'awaiting-new-mask', ageMs: Math.round(age), meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false, durationMs: +(performance.now() - started).toFixed(2) };
+        return this._writeCanvas();
+      }
+      const luma = this._readLuma(sourceFrame);
       const diff = meanAbsDiff(this.previousLuma, luma);
       let status = 'static', flow = null, warped = false;
 
-      if (age > this.options.maxMaskAgeMs) status = 'stale-mask';
-      else if (gap < 0 || gap > this.options.maxFrameGapMs) status = 'frame-gap';
-      else if (diff > this.options.sceneCutMean) status = 'scene-cut';
+      if (age > this.options.maxMaskAgeMs) { status = 'stale-mask'; this.suspended = true; }
+      else if (gap < 0 || gap > this.options.maxFrameGapMs) { status = 'frame-gap'; this.suspended = true; }
+      else if (diff > this.options.sceneCutMean) { status = 'scene-cut'; this.suspended = true; }
       else {
         flow = estimateFlow(this.previousLuma, luma, this.options.gridWidth, this.options.gridHeight, this.options);
         if (flow.coverage < this.options.minCoverage || flow.meanConfidence < this.options.minMeanConfidence) {
@@ -242,17 +248,13 @@
         }
       }
 
-      if (gap >= 0 && gap <= this.options.maxFrameGapMs && diff <= this.options.sceneCutMean) {
-        this.previousLuma = luma; this.previousAt = now;
-      } else if (status === 'scene-cut' || status === 'frame-gap') {
-        this.previousLuma = luma; this.previousAt = now;
-      }
+      if (!this.suspended) { this.previousLuma = luma; this.previousAt = now; }
       this.metrics = {
         status, ageMs: Math.round(age),
         meanConfidence: flow ? +flow.meanConfidence.toFixed(3) : 0,
         coverage: flow ? +flow.coverage.toFixed(3) : 0,
         meanMotionPx: flow ? +Math.hypot(flow.meanDx, flow.meanDy).toFixed(2) : 0,
-        warped
+        warped, durationMs: +(performance.now() - started).toFixed(2)
       };
       return this._writeCanvas();
     }
@@ -260,7 +262,7 @@
     getMetrics() { return Object.assign({}, this.metrics); }
 
     reset() {
-      this.alpha = null; this.previousLuma = null;
+      this.alpha = null; this.previousLuma = null; this.suspended = false;
       this.width = this.height = this.seededAt = this.previousAt = 0;
       this.metrics = { status: 'reset', ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
     }
