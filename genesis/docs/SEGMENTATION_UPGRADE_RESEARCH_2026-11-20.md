@@ -147,7 +147,7 @@ Branch: `fix/hybrid-frame-pairing-nov20`.
 
 A new model-agnostic stage is loaded before the Studio app:
 
-- `js/providers/mask-motion.js` samples each source frame into a 64×36 luma grid.
+- `js/providers/mask-motion.js` samples each source frame into an aspect-preserving luma grid 64 pixels wide (for example 64×48 at 4:3, 64×36 at 16:9, and 64×114 in portrait).
 - It estimates small block-level backward motion, with texture, residual and match-separation confidence.
 - It warps the cached soft alpha with bilinear sampling between model refreshes.
 - It refuses alignment on low texture/confidence, scene cuts, frame gaps, or masks older than 1.5 seconds after delivery. A rejected alignment suspends propagation until a new model matte is seeded.
@@ -189,3 +189,8 @@ The existing opt-in `genesis-hybrid-tam` engine is now presented in the picker a
 ### Async recovery guard
 
 Background matte refreshes now pass through the same segmentation watchdog used by the main inference path. A worker that stops responding is counted as a stall and cannot leave the async refresh state permanently busy; the existing quality governor can then recover or downshift the engine.
+
+
+### Aspect-preserving flow geometry
+
+The motion-analysis grid now derives its height from the source camera aspect ratio on every seed/read. This prevents portrait and 4:3 footage from being distorted into a fixed 16:9 motion field; unit tests cover 4:3, 16:9 and portrait geometry.
