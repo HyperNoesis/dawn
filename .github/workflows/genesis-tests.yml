@@ -2,7 +2,6 @@ name: Genesis segmentation regression gates
 
 on:
   push:
-    branches: [main]
     paths:
       - "genesis/**"
       - ".github/workflows/genesis-tests.yml"
