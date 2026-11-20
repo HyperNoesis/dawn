@@ -145,7 +145,11 @@ function resize(nw, nh) {
     if (c) { c.width = w; c.height = h; }
   });
   maskRefiner.resize(w, h);
-  if (glMatte && glMatte.ok) glMatte.resize(w, h);
+  if (glMatte && glMatte.ok) {
+    const hadPlate = !!glMatte._havePlate;
+    glMatte.resize(w, h);
+    if (hadPlate) notify({ type: 'matteStatus', ok: true, hasPlate: false, plateNotice: 'Output size changed; capture a new clean plate.' });
+  }
   cachedBounds = null;
   // Stored annotation coordinates are in the old pixel space — clear
   // rather than let them draw stretched/misplaced at the new size.
@@ -647,13 +651,26 @@ function renderFrame(personBitmap, maskBitmap, token) {
         break;
       }
       case 'setPlate':
-        if (glMatte && glMatte.ok && msg.bitmap) { glMatte.setPlate(msg.bitmap); msg.bitmap.close(); }
+        if (glMatte && glMatte.ok && msg.bitmap) {
+          try {
+            glMatte.setPlate(msg.bitmap);
+            notify({ type: 'matteStatus', ok: true, hasPlate: !!glMatte._havePlate });
+          } catch (e) {
+            notify({ type: 'matteStatus', ok: false, hasPlate: false, error: e && e.message ? e.message : String(e) });
+          } finally {
+            try { msg.bitmap.close(); } catch (closeError) {}
+          }
+        } else {
+          try { msg.bitmap && msg.bitmap.close(); } catch (closeError) {}
+          notify({ type: 'matteStatus', ok: !!(glMatte && glMatte.ok), hasPlate: false, error: glMatte ? glMatte.error : 'GLMatte not loaded' });
+        }
         break;
       case 'clearPlate':
         if (glMatte) glMatte.clearPlate();
+        notify({ type: 'matteStatus', ok: !!(glMatte && glMatte.ok), hasPlate: false });
         break;
       case 'matteQuery':
-        notify({ type: 'matteStatus', ok: !!(glMatte && glMatte.ok), error: glMatte ? glMatte.error : 'GLMatte not loaded' });
+        notify({ type: 'matteStatus', ok: !!(glMatte && glMatte.ok), error: glMatte ? glMatte.error : 'GLMatte not loaded', hasPlate: !!(glMatte && glMatte._havePlate) });
         break;
       case 'setPerf':
         // FAST mode's lighter pipeline. Kept as its own message (not folded
