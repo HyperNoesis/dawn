@@ -667,7 +667,7 @@ function renderFrame(personBitmap, maskBitmap, token) {
         break;
       case 'clearPlate':
         if (glMatte) glMatte.clearPlate();
-        notify({ type: 'matteStatus', ok: !!(glMatte && glMatte.ok), hasPlate: false });
+        notify({ type: 'matteStatus', ok: !!(glMatte && glMatte.ok), hasPlate: false, plateNotice: msg.reason || null });
         break;
       case 'matteQuery':
         notify({ type: 'matteStatus', ok: !!(glMatte && glMatte.ok), error: glMatte ? glMatte.error : 'GLMatte not loaded', hasPlate: !!(glMatte && glMatte._havePlate) });
