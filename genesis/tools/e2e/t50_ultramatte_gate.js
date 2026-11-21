@@ -138,7 +138,7 @@ function withTimeout(promise, ms, label) {
 
   try {
     await page.goto(base + '/studio.html', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForFunction(() => window.VS && window.VS.matteEnginesReady, { timeout: 30000 });
+    await page.waitForFunction(() => window.VS && window.VS.matteEnginesReady, null, { timeout: 30000 });
     const ready = await page.evaluate(() => window.VS.matteEnginesReady);
     if (!ready || ready.ready === false) throw new Error('Studio matting engine loader failed: ' + JSON.stringify(ready));
 
@@ -165,7 +165,8 @@ function withTimeout(promise, ms, label) {
         poll();
       });
 
-      const provider = V.EdgeTAMGate.create(new V.GenesisHybridProvider());
+      const provider = V.MatteEngines.createProvider('genesis-hybrid-tam');
+      if (!provider || typeof provider.initialize !== 'function') throw new Error('MatteEngine factory did not construct the selected UltraMatte route');
       const tInit = performance.now();
       await Promise.race([
         provider.initialize('fast', { threads: 1 }),
