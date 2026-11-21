@@ -21,7 +21,11 @@ const REQUIRED = [
   'models/edgetam_vision_encoder.onnx',
   'models/edgetam_vision_encoder.onnx_data',
   'vendor/ort/ort.min.js',
+  'vendor/ort/ort.webgpu.min.js',
+  'vendor/ort/ort-wasm-simd-threaded.js',
   'vendor/ort/ort-wasm-simd-threaded.wasm',
+  'vendor/ort/ort-wasm-simd-threaded.asyncify.js',
+  'vendor/ort/ort-wasm-simd-threaded.asyncify.wasm',
   'js/ort-loader.js'
 ];
 
