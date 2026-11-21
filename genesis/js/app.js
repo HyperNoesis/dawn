@@ -105,9 +105,14 @@
   let ladderRetries = 0;       // automatic second looks after a runtime step-down to the light model (max 2 per camera session)
   let upgradeRetried = false;  // one automatic re-test per camera session after a slow verdict
   /** Load MODNet while the camera is already live; swap it in only if this device runs it fast enough. */
-  /** Which live matting engines may be tried, best first. vs_live_engine: 'auto' (default) = RVM then MODNet; 'rvm' | 'modnet' = only that one; 'light' = never upgrade. */
+  function legacyLivePreference() {
+    try { return localStorage.getItem('vs_live_engine') || 'auto'; }
+    catch (e) { return 'auto'; }
+  }
+
+  /** Which live matting engines may be tried, best first. Legacy explicit rvm/modnet/light choices remain honoured; otherwise Automatic benchmarks the advanced local routes. */
   function upgradeCandidates() {
-    const V = window.VS; let livePref = 'auto'; try { livePref = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) {}
+    const V = window.VS, livePref = legacyLivePreference();
     const list = [];
     if (livePref === 'light') return list;
 
@@ -149,6 +154,10 @@
   }
   function canProbeAdaptiveUpgrade(provider) {
     if (!provider) return false;
+    const legacy = legacyLivePreference();
+    // Never bypass an older explicit RVM or "light" preference by treating a
+    // temporary MediaPipe fallback as permission to try unrelated engines.
+    if (legacy === 'rvm' || legacy === 'light') return false;
     if (window.VS.MediaPipeSegmentationProvider && provider instanceof window.VS.MediaPipeSegmentationProvider) return true;
     const matte = window.VS.MatteEngines;
     return !!(matte && matte.isAutomaticDefault && matte.isAutomaticDefault() && /MODNet/.test(provider.label || ''));
@@ -235,7 +244,9 @@
             const old = segProvider;
             segProvider = cand; cand = null;
             const automaticMode = !!(V.MatteEngines && V.MatteEngines.isAutomaticDefault && V.MatteEngines.isAutomaticDefault());
-            const selectedEngine = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
+            const storedEngine = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
+            const legacyEngine = legacyLivePreference();
+            const selectedEngine = storedEngine === 'modnet' && (legacyEngine === 'rvm' || legacyEngine === 'modnet') ? legacyEngine : storedEngine;
             const fallbackReason = !automaticMode && c.key !== selectedEngine
               ? 'The explicitly selected ' + selectedEngine + ' route did not meet this device’s measured live budget. Genesis selected ' + c.key + ' at ' + usedEdge + ' px as the measured fallback.'
               : null;
@@ -2364,7 +2375,9 @@
   function govAdoptLight() {
     const G = window.VS.QualityGovernor;
     if (!G || govOff() || !(segProvider instanceof window.VS.MediaPipeSegmentationProvider)) return;
-    let preferred = 'modnet';
+    const legacy = legacyLivePreference();
+    if (legacy === 'light') return;
+    let preferred = legacy === 'rvm' ? 'rvm' : 'modnet';
     if (els.modelSelect && els.modelSelect.value === 'rvm') preferred = 'rvm';
     else if (window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault && window.VS.MatteEngines.isAutomaticDefault()) {
       preferred = 'genesis-hybrid-tam';
