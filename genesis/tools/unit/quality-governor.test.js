@@ -62,6 +62,60 @@ const moves = (r) => r.log.map((m) => m.type + ':' + (m.emergency ? 'light' : m.
 { const r = sim({ seconds: 120, speed: 2.6, camKnown: false }); assert(r.log.length >= 1 && !r.emergency, moves(r)); }
 // 16. cost model learns and predicts within 25 % across sizes
 { const g = G.create({ chain: [{ engine: 'm', edges: [512, 256] }], startEngine: 'm', startEdge: 512 }); const rs = g.rungs(); const p = g.predictMs(rs[1], rs[0], 100); assert(p > 30 && p < 50, 'predict 256 from 100 ms @512: ' + p); }
+
+/*
+ * 20. Genesis UltraMatte has an explicit, quality-ordered live fallback chain:
+ * EdgeTAM + Hybrid -> Hybrid -> PP-MattingV2 -> MODNet sizes. A simulated
+ * slow phone must walk those routes in order, not immediately abandon the
+ * advanced stack for the light model.
+ */
+{
+  const adaptive = [
+    { engine: 'genesis-hybrid-tam', edges: [512, 448, 384, 320] },
+    { engine: 'genesis-hybrid', edges: [320] },
+    { engine: 'ppmatting-v2', edges: [320] },
+    { engine: 'modnet', edges: [512, 448, 384, 320, 256, 224] },
+  ];
+  const rungs = G.buildRungs(adaptive, 'genesis-hybrid-tam', 384);
+  assert.deepStrictEqual(
+    rungs.map((r) => [r.engine, r.edge]),
+    [
+      ['genesis-hybrid-tam', 512], ['genesis-hybrid-tam', 448],
+      ['genesis-hybrid-tam', 384], ['genesis-hybrid-tam', 320],
+      ['genesis-hybrid', 320], ['ppmatting-v2', 320],
+      ['modnet', 512], ['modnet', 448], ['modnet', 384],
+      ['modnet', 320], ['modnet', 256], ['modnet', 224],
+    ],
+    'adaptive rung order retains every advanced route before MODNet'
+  );
+
+  const factor = { 'genesis-hybrid-tam': 30, 'genesis-hybrid': 18, 'ppmatting-v2': 12, modnet: 9 };
+  const g = G.create({
+    chain: adaptive, startEngine: 'genesis-hybrid-tam', startEdge: 384,
+    costFactor: factor, emergency: null
+  });
+  let engine = 'genesis-hybrid-tam', edge = 384;
+  const swaps = [];
+  for (let t = 0; t <= 600000; t += 1000) {
+    const segMs = factor[engine] * (edge * edge / 1e4);
+    const fps = Math.min(30, 1000 / (segMs + 8));
+    const action = g.tick({ t, fps, camFps: 30, segMs, busy: false, stalls: 0 });
+    if (action.type !== 'hold') {
+      g.applied(action, t);
+      if (!action.emergency) { engine = action.engine; edge = action.edge; }
+      swaps.push(action);
+    }
+  }
+  const engineOrder = [...new Set(swaps.filter((a) => !a.emergency).map((a) => a.engine))];
+  assert.deepStrictEqual(
+    engineOrder,
+    ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2', 'modnet'],
+    'a constrained device degrades through each matting tier before smaller MODNet'
+  );
+  assert.strictEqual(engine, 'modnet');
+  assert.strictEqual(edge, 224, 'the simulated constrained device reaches the smallest responsive matting rung');
+}
+
 console.log('quality-governor: all assertions passed');
 
 // 17. (found by the live heat emulation) a mask of ~350 ms at the smallest size is a 3 fps slideshow but below HOPELESS_MS: must still reach the light model after SLIDESHOW_SEC, and not before
