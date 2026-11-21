@@ -76,9 +76,16 @@
       const t0 = performance.now();
       const r = await this._send({ type: 'run', w, h, rgba: rgba.buffer.slice(0) });
       const ms = performance.now() - t0, a = new Uint8Array(r.alpha);
-      const ok = r.w === w && r.h === h && a.length === w * h;
-      this.selfCheck = { ms: Math.round(ms), ok };
-      if (!ok) throw new Error(this.title + ' self-check failed: unexpected output size ' + r.w + 'x' + r.h);
+      const dimensionsOk = r.w === w && r.h === h && a.length === w * h;
+      const alphaCoverage = V.PPMattingCore.coverage(a);
+      // A finite, correctly shaped tensor can still be a dead model (all
+      // foreground or all background). Reject only degenerate output here;
+      // real scene quality remains the responsibility of the camera gates.
+      const coverageOk = alphaCoverage > 0.001 && alphaCoverage < 0.999;
+      const ok = dimensionsOk && coverageOk;
+      this.selfCheck = { ms: Math.round(ms), ok, alphaCoverage: +alphaCoverage.toFixed(5), dimensionsOk, coverageOk };
+      if (!dimensionsOk) throw new Error(this.title + ' self-check failed: unexpected output size ' + r.w + 'x' + r.h);
+      if (!coverageOk) throw new Error(this.title + ' self-check failed: degenerate alpha coverage ' + alphaCoverage.toFixed(5));
     }
 
     async segment(video) {

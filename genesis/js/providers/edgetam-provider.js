@@ -123,7 +123,12 @@
             const encoderDataName = Object.keys(external).find((path) => /vision_encoder/.test(path));
             const decoderDataName = Object.keys(external).find((path) => /prompt_encoder_mask_decoder/.test(path));
             const gpu = id === 'edgetam';
-            const encoderProviders = gpu ? ['webgpu', 'wasm'] : ['wasm'];
+            // Do not pass WASM as a fallback in the same ORT session request:
+            // ORT may silently select it and the diagnostics would claim that
+            // the FP16 EdgeTAM graph is running on WebGPU. A failed WebGPU
+            // compile proceeds to the separately licensed/verified FP32-WASM
+            // checkpoint below, where the backend is explicitly known.
+            const encoderProviders = gpu ? ['webgpu'] : ['wasm'];
             encoder = await ort.InferenceSession.create(bytes[entry.encoder], {
               executionProviders: encoderProviders,
               graphOptimizationLevel: 'all',

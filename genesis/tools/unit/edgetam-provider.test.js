@@ -38,7 +38,7 @@ global.window = global; global.navigator = { gpu: {} };
 global.ort = { Tensor: class { constructor(t, d, dims) { this.type = t; this.data = d; this.dims = dims; } }, InferenceSession: { create: async () => ({ release() {} }) } };
 const V = (global.VS = {}); require('../../js/providers/edgetam-core.js');
 let loadFail = false, failWebGPU = false;
-const loadedModelIds = [];
+const loadedModelIds = [], providerRequests = [];
 V.loadOrt = async () => {};
 V.ModelStore = {
   load: async (id) => {
@@ -58,6 +58,7 @@ V.ModelStore = {
 };
 // make fake sessions: EdgeTAM says mask = left half only.
 ort.InferenceSession.create = async (bytes, options) => {
+  providerRequests.push({ bytes, providers: options && options.executionProviders });
   if (failWebGPU && options && options.executionProviders && options.executionProviders.includes('webgpu')) {
     throw new Error('WebGPU unsupported by this adapter');
   }
@@ -149,6 +150,10 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   assert.strictEqual(fallbackGate.edgetam.status, 'ready', 'fp32/WASM retry keeps EdgeTAM available');
   assert.strictEqual(fallbackGate.edgetam.modelId, 'edgetam-fp32', 'fp32 checkpoint selected after WebGPU rejection');
   assert.strictEqual(fallbackGate.edgetam.runtime, 'wasm', 'fp32 retry uses the WASM runtime');
+  assert.deepStrictEqual(providerRequests.find((r) => r.bytes === 1).providers, ['webgpu'],
+    'FP16 EdgeTAM must request WebGPU only, never silently fall through to WASM');
+  assert.deepStrictEqual(providerRequests.find((r) => r.bytes === 5).providers, ['wasm'],
+    'the explicit FP32 model is the portable WASM fallback');
   assert.match(fallbackGate.edgetam.precisionFallback, /WebGPU unsupported/, 'fallback reason remains visible');
   assert.deepStrictEqual(loadedModelIds.slice(-2), ['edgetam', 'edgetam-fp32'], 'accelerated candidate is attempted before portable fallback');
   const fallbackVideo = { videoWidth: 640, videoHeight: 480, frameId: 77 };
