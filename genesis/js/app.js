@@ -1221,14 +1221,22 @@
       updateStudioChrome();
       if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
     } catch (err) {
-      if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(null, 'Selected engine initialisation failed: ' + (err && err.message ? err.message : err));
-      // RVM needs onnxruntime-web + (ideally) WebGPU/WASM support. If that
-      // genuinely fails to load (offline first run, ancient browser, CDN
-      // blocked, or just too slow — see withTimeout above), fall back to the
-      // MediaPipe model rather than leaving the person with no camera at
-      // all — but say so honestly, never silently, and if MediaPipe ALSO
-      // fails or times out, surface that real error.
-      if (!(window.VS.MediaPipeSegmentationProvider && segProvider instanceof window.VS.MediaPipeSegmentationProvider) && window.VS.MediaPipeSegmentationProvider) {
+      const edgeOnlyFailure = VSNS.MatteEngines && typeof VSNS.MatteEngines.hasUsableMatteFallback === 'function' &&
+        VSNS.MatteEngines.hasUsableMatteFallback(matteChoice, segProvider);
+      if (edgeOnlyFailure) {
+        // The base MODNet/Hybrid provider finished initialising; only the
+        // optional EdgeTAM cleanup failed. Keep the soft matte instead of
+        // replacing it with the much coarser emergency semantic mask.
+        const reason = 'EdgeTAM is unavailable; continuing with ' +
+          (segProvider.hy ? 'Genesis Hybrid' : 'the base matting provider') +
+          ' without subject-gate cleanup. ' + (err && err.message ? err.message : err);
+        if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, reason);
+        showBenchNote(reason);
+      } else {
+        if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(null, 'Selected engine initialisation failed: ' + (err && err.message ? err.message : err));
+        // A genuinely unavailable base model still uses the emergency local
+        // provider rather than leaving the person with no camera.
+        if (!(window.VS.MediaPipeSegmentationProvider && segProvider instanceof window.VS.MediaPipeSegmentationProvider) && window.VS.MediaPipeSegmentationProvider) {
         console.warn('Segmentation model failed to initialize, falling back to MediaPipe:', err.message);
         if (els.previewHint) els.previewHint.textContent = 'Camera on · switching to a lighter model';
         segProvider.dispose?.();
@@ -1247,9 +1255,10 @@
           modelFailedKeepCamera(fallbackErr.message);
           return;
         }
-      } else {
-        modelFailedKeepCamera(err.message);
-        return;
+        } else {
+          modelFailedKeepCamera(err.message);
+          return;
+        }
       }
     }
 

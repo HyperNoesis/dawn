@@ -55,6 +55,12 @@ assert.throws(() => MatteEngines.validateProvider('edgetam', { edgetam: { status
   /requires EdgeTAM/, 'explicit EdgeTAM selection is not reported ready before initialisation');
 assert.strictEqual(MatteEngines.validateProvider('genesis-hybrid', { hy: {} }), true,
   'plain Hybrid does not require EdgeTAM');
+assert.strictEqual(MatteEngines.hasUsableMatteFallback('genesis-hybrid-tam', { edgetam: { status: 'failed' }, hy: {} }), true,
+  'a failed EdgeTAM add-on can keep the initialised Hybrid matte active');
+assert.strictEqual(MatteEngines.hasUsableMatteFallback('genesis-hybrid-tam', { edgetam: { status: 'idle' }, hy: {} }), false,
+  'a base provider that has not completed EdgeTAM initialisation is not treated as a safe fallback');
+assert.strictEqual(MatteEngines.hasUsableMatteFallback('genesis-hybrid', { hy: {} }), false,
+  'plain Hybrid does not require an EdgeTAM fallback path');
 
 MatteEngines.setPref('auto');
 assert.strictEqual(MatteEngines.pref(), 'modnet', 'explicit Automatic retains the safe startup provider');

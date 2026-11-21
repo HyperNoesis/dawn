@@ -191,6 +191,16 @@
   }
 
   /**
+   * An EdgeTAM wrapper becomes a usable base-matte fallback only after its
+   * underlying provider initialises and the optional tracker then fails.
+   */
+  function hasUsableMatteFallback(engine, provider) {
+    const edge = provider && provider.edgetam;
+    return (engine === 'genesis-hybrid-tam' || engine === 'edgetam') &&
+      !!edge && edge.status === 'failed';
+  }
+
+  /**
    * Validate model components that are mandatory for the requested route.
    * EdgeTAM is optional for plain Hybrid, but mandatory when the UI names the
    * route UltraMatte or MODNet + EdgeTAM. The wrapper remains fail-soft so the
@@ -331,6 +341,7 @@
     setPref,
     createProvider,
     validateProvider,
+    hasUsableMatteFallback,
     loadEngine,
     ensureEngine,
     installRouter,
