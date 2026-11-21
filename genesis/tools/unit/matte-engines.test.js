@@ -81,6 +81,14 @@ assert.match(unavailableDefault.label, /unavailable/i);
   assert.ok(!M.visibleEngines().some((e) => e[0] === 'ppmatting-v2'));
   delete store.vs_pp_beta;
 
+  // Once the full dependency graph is registered, the automatic default
+  // resolves to the advanced route and constructs EdgeTAM around Hybrid.
+  V.BandRefineCore = {};
+  V.GenesisHybridProvider = class { constructor() { this.kind = 'hybrid'; this.longEdge = 384; } static isSupported() { return true; } };
+  delete store.vs_matte_engine;
+  assert.strictEqual(M.pref(), 'genesis-hybrid-tam');
+  assert.strictEqual(new R().kind, 'ultramatte');
+
   // HRNet is visible only when the explicit lab switch is on. A stored but
   // hidden HRNet preference falls back to the adaptive first-run default.
   store.vs_matte_engine = 'ppmatting-hrnet';
@@ -90,14 +98,6 @@ assert.match(unavailableDefault.label, /unavailable/i);
   M.setPref('ppmatting-hrnet');
   assert.strictEqual(new R().kind, 'pphr');
   delete store.vs_ppm_lab;
-
-  // Once the full dependency graph is registered, the automatic default
-  // resolves to the advanced route and constructs EdgeTAM around Hybrid.
-  V.BandRefineCore = {};
-  V.GenesisHybridProvider = class { constructor() { this.kind = 'hybrid'; this.longEdge = 384; } static isSupported() { return true; } };
-  delete store.vs_matte_engine;
-  assert.strictEqual(M.pref(), 'genesis-hybrid-tam');
-  assert.strictEqual(new R().kind, 'ultramatte');
 
   // Device tier is not a hidden engine-selection gate. Actual speed is judged
   // by the runtime benchmark/governor after the provider has been constructed.
