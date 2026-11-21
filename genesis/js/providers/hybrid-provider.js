@@ -42,8 +42,8 @@
 
     /** Tracker-first mode (EdgeTAM): the hook cleans the coarse matte BEFORE the uncertainty band is built, so stray blobs never cost refinement tiles. */
     setTrackerHook(h) { this.trackerHook = h || null; }
-    resetTemporal() { super.resetTemporal(); this._hyReset(); }
-    dispose() { this._hyReset(); this._tc = this._lc = this._oc = this._hyFrame = null; return super.dispose(); }
+    resetTemporal() { super.resetTemporal(); this._hyReset(); this._hyLastFrame = null; }
+    dispose() { this._hyReset(); this._hyLastFrame = null; this._tc = this._lc = this._oc = this._hyFrame = null; return super.dispose(); }
 
     async initialize(qualityMode, opts) {
       if (!V.BandRefineCore) await V.loadScript('js/providers/band-refine-core.js');
@@ -61,6 +61,9 @@
       if (hyOn() && !this.hy.off && !this._rect) {
         try {
           refineFrame = this._snapshotFrame(video);
+          // Keep the exact input available to a wrapping EdgeTAM fallback.
+          // If the tracker rejects its gate, the wrapper must retry against
+          // this same frame rather than the now-advanced live camera.
         } catch (e) {
           this.hy.snapshotFailures = (this.hy.snapshotFailures || 0) + 1;
           this.hy.lastSnapshotError = String((e && e.message) || e);
@@ -68,6 +71,7 @@
       }
 
       const res = await super.segment(video);
+      this._hyLastFrame = refineFrame || video;
       const coarseMs = performance.now() - t0;
       if (!hyOn() || this.hy.off || this._rect || !refineFrame) return res; // fail closed to the parent's matte if snapshotting fails
       const gd = this.lastGuard;
