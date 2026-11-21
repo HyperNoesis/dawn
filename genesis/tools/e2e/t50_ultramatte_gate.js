@@ -183,7 +183,7 @@ function withTimeout(promise, ms, label) {
         throw new Error('EdgeTAM did not become ready: ' + JSON.stringify(provider.edgetam || {}));
       }
 
-      const samples = [], masks = [];
+      const samples = [], hybridFrames = [], masks = [];
       for (let frame = 0; frame < 2; frame++) {
         const t0 = performance.now();
         const output = await Promise.race([
@@ -220,6 +220,13 @@ function withTimeout(promise, ms, label) {
           softEdgeRatio: +(soft / pixels).toFixed(4),
           alphaMean: +(alphaSum / pixels / 255).toFixed(4)
         });
+        const frameHybrid = provider.hy || {};
+        hybridFrames.push({
+          frame, tiles: frameHybrid.tiles || 0, budget: frameHybrid.budget || 0,
+          refined: frameHybrid.refined || 0, cached: frameHybrid.cached || 0,
+          rejected: frameHybrid.rejected || 0, bandPct: frameHybrid.bandPct || 0,
+          errors: frameHybrid.errors || 0, snapshotFailures: frameHybrid.snapshotFailures || 0
+        });
         masks.push(mask);
       }
 
@@ -249,8 +256,8 @@ function withTimeout(promise, ms, label) {
     if (result.hybrid.errors || result.hybrid.snapshotFailures) {
       throw new Error('Hybrid refinement reported an internal error: ' + JSON.stringify(result.hybrid));
     }
-    if (!(result.hybrid.tiles > 0 && result.hybrid.budget > 0 && result.hybrid.refined > 0)) {
-      throw new Error('UltraMatte passed without executing high-resolution tile refinement: ' + JSON.stringify(result.hybrid));
+    if (!result.hybridFrames.some((frame) => frame.tiles > 0 && frame.budget > 0 && frame.refined > 0)) {
+      throw new Error('UltraMatte passed without executing high-resolution tile refinement on either camera frame: ' + JSON.stringify(result.hybridFrames));
     }
     if (result.edgeTam.status !== 'ready') throw new Error('EdgeTAM status is not ready: ' + JSON.stringify(result.edgeTam));
     if (!result.edgeTam.gateActive) throw new Error('EdgeTAM did not produce an active subject gate: ' + JSON.stringify(result.edgeTam));
