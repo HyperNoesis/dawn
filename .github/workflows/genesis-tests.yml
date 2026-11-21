@@ -94,3 +94,5 @@ jobs:
             genesis/gate_report.json
             genesis/gate_last_frame.png
             genesis/ultramatte_gate_report.json
+            genesis/ultramatte_last_comparison.png
+            genesis/ultramatte_last_composite.png
