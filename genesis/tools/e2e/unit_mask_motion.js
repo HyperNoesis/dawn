@@ -135,6 +135,13 @@ function translate(src, dx, dy) {
   mm.advance(textured, clock);
   assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'passthrough', 'expired-mask suspension stays pass-through');
 
+  // A longer asynchronous inference should still be allowed to pair its
+  // source frame with the returned mask; only a genuinely long capture gap
+  // invalidates the coordinate relationship.
+  mm.seed(fullMask, textured, clock);
+  clock += 900;
+  mm.advance(textured, clock);
+  assert.notStrictEqual(mm.getMetrics().status, 'frame-gap', 'a 900 ms model delay remains inside the source-frame catch-up window');
   mm.seed(fullMask, textured, clock);
   clock += M.DEFAULTS.maxFrameGapMs + 1;
   mm.advance(textured, clock);
