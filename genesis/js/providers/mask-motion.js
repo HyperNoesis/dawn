@@ -10,8 +10,8 @@
   const DEFAULTS = {
     gridWidth: 64, gridHeight: 36, blockSize: 8, searchRadius: 2,
     minTextureStd: 3.5, maxSad: 38, minBlockConfidence: 0.12,
-    neighbourRadius: 2, minCoverage: 0.08, minMeanConfidence: 0.10,
-    sceneCutMean: 46, maxFrameGapMs: 2500, maxMaskAgeMs: 2600
+    neighbourRadius: 2, minCoverage: 0.12, minMeanConfidence: 0.12,
+    sceneCutMean: 46, maxFrameGapMs: 650, maxMaskAgeMs: 1500
   };
 
   function analysisSize(sourceWidth, sourceHeight, gridWidth) {
@@ -20,6 +20,16 @@
       ? Math.max(8, Math.round(width * sourceHeight / sourceWidth))
       : DEFAULTS.gridHeight;
     return { width, height };
+  }
+
+  // Explicit allow-list for frame-safe mask composition. Low-confidence motion
+  // holds the last model result; scene changes, stale mattes, frame gaps and
+  // any unknown state must pass through the real camera.
+  function compositionPolicy(status, reason) {
+    if (status === 'warped') return 'warp';
+    if (status === 'static' || status === 'low-confidence' ||
+        (status === 'awaiting-new-mask' && reason === 'low-confidence')) return 'hold';
+    return 'passthrough';
   }
 
   function meanAbsDiff(a, b) {
@@ -143,21 +153,38 @@
     return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
   }
 
-  function warpAlpha(alpha, width, height, flow, gridWidth, gridHeight) {
+  function warpAlpha(alpha, width, height, flow, gridWidth, gridHeight, output) {
     if (!alpha || alpha.length !== width * height) throw new Error('MaskMotion alpha size is invalid');
-    const output = new Uint8Array(alpha.length), block = flow.blockSize;
-    const sx = width / gridWidth, sy = height / gridHeight;
+    const out = output && output.length === alpha.length ? output : new Uint8Array(alpha.length);
+    const block = flow.blockSize, sx = width / gridWidth, sy = height / gridHeight;
+    // Interpolate flow between block centres instead of using a hard vector
+    // step at every block border. This reduces tile-shaped motion discontinuity
+    // around the subject silhouette while keeping the analysis grid inexpensive.
     for (let y = 0; y < height; y++) {
-      const gy = Math.min(flow.rows - 1, Math.floor((y / sy) / block));
+      const fy = clamp(((y + 0.5) / sy - block * 0.5) / block, 0, flow.rows - 1);
+      const y0 = Math.floor(fy), y1 = Math.min(flow.rows - 1, y0 + 1), ty = fy - y0;
       for (let x = 0; x < width; x++) {
-        const gx = Math.min(flow.cols - 1, Math.floor((x / sx) / block));
-        const i = gy * flow.cols + gx, use = flow.confidence[i] >= 0.06;
-        const px = use ? x + flow.dx[i] * sx : x;
-        const py = use ? y + flow.dy[i] * sy : y;
-        output[y * width + x] = Math.round(sampleBilinear(alpha, width, height, px, py));
+        const fx = clamp(((x + 0.5) / sx - block * 0.5) / block, 0, flow.cols - 1);
+        const x0 = Math.floor(fx), x1 = Math.min(flow.cols - 1, x0 + 1), tx = fx - x0;
+        const i00 = y0 * flow.cols + x0, i10 = y0 * flow.cols + x1;
+        const i01 = y1 * flow.cols + x0, i11 = y1 * flow.cols + x1;
+        const topW = 1 - tx, bottomW = tx;
+        const topDx = flow.dx[i00] * topW + flow.dx[i10] * bottomW;
+        const bottomDx = flow.dx[i01] * topW + flow.dx[i11] * bottomW;
+        const topDy = flow.dy[i00] * topW + flow.dy[i10] * bottomW;
+        const bottomDy = flow.dy[i01] * topW + flow.dy[i11] * bottomW;
+        const topC = flow.confidence[i00] * topW + flow.confidence[i10] * bottomW;
+        const bottomC = flow.confidence[i01] * topW + flow.confidence[i11] * bottomW;
+        const confidence = topC * (1 - ty) + bottomC * ty;
+        const dx = topDx * (1 - ty) + bottomDx * ty;
+        const dy = topDy * (1 - ty) + bottomDy * ty;
+        const use = confidence >= 0.06;
+        const px = use ? x + dx * sx : x;
+        const py = use ? y + dy * sy : y;
+        out[y * width + x] = Math.round(sampleBilinear(alpha, width, height, px, py));
       }
     }
-    return output;
+    return out;
   }
 
   class MaskMotion {
@@ -165,8 +192,10 @@
       this.options = Object.assign({}, DEFAULTS, options || {});
       this.alpha = null; this.previousLuma = null;
       this.width = 0; this.height = 0; this.seededAt = 0; this.previousAt = 0;
-      this.canvas = null; this.ctx = null; this.analysisCanvas = null; this.analysisCtx = null; this.suspended = false;
-      this.metrics = { status: 'idle', ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
+      this.canvas = null; this.ctx = null; this.analysisCanvas = null; this.analysisCtx = null;
+      this.seedCanvas = null; this.seedCtx = null; this.imageData = null; this.warpedAlpha = null;
+      this.suspended = false; this.suspendedReason = null;
+      this.metrics = { status: 'idle', reason: null, ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
     }
 
     _ensureAnalysisCanvas(source) {
@@ -205,40 +234,47 @@
       if (!this.ctx || this._ctxWidth !== width || this._ctxHeight !== height) {
         this.ctx = this.canvas.getContext('2d');
         this._ctxWidth = width; this._ctxHeight = height;
+        this.imageData = this.ctx ? this.ctx.createImageData(width, height) : null;
+        if (this.imageData) {
+          const d = this.imageData.data;
+          for (let p = 0; p < d.length; p += 4) d[p] = d[p + 1] = d[p + 2] = 255;
+        }
       }
-      if (!this.ctx) throw new Error('MaskMotion could not create its mask canvas');
+      if (!this.ctx || !this.imageData) throw new Error('MaskMotion could not create its mask canvas');
     }
 
     _writeCanvas() {
       this._ensureMaskCanvas(this.width, this.height);
-      const image = this.ctx.createImageData(this.width, this.height), d = image.data;
-      for (let i = 0, p = 0; i < this.alpha.length; i++, p += 4) {
-        d[p] = d[p + 1] = d[p + 2] = 255; d[p + 3] = this.alpha[i];
-      }
-      this.ctx.putImageData(image, 0, 0);
+      const d = this.imageData.data;
+      for (let i = 0, p = 3; i < this.alpha.length; i++, p += 4) d[p] = this.alpha[i];
+      this.ctx.putImageData(this.imageData, 0, 0);
       return this.canvas;
     }
 
     seed(mask, sourceFrame, timestamp) {
       if (!mask || !(mask.width > 0 && mask.height > 0)) throw new Error('MaskMotion requires a valid mask image');
       this.width = mask.width; this.height = mask.height;
-      const readCanvas = document.createElement('canvas');
-      readCanvas.width = this.width; readCanvas.height = this.height;
-      const readCtx = readCanvas.getContext('2d', { willReadFrequently: true });
-      if (!readCtx) throw new Error('MaskMotion could not read the seed mask');
-      readCtx.drawImage(mask, 0, 0, this.width, this.height);
-      const data = readCtx.getImageData(0, 0, this.width, this.height).data;
+      if (!this.seedCanvas || this.seedCanvas.width !== this.width || this.seedCanvas.height !== this.height) {
+        this.seedCanvas = document.createElement('canvas');
+        this.seedCanvas.width = this.width; this.seedCanvas.height = this.height;
+        this.seedCtx = this.seedCanvas.getContext('2d', { willReadFrequently: true });
+      }
+      if (!this.seedCtx) throw new Error('MaskMotion could not read the seed mask');
+      this.seedCtx.drawImage(mask, 0, 0, this.width, this.height);
+      const data = this.seedCtx.getImageData(0, 0, this.width, this.height).data;
       this.alpha = new Uint8Array(this.width * this.height);
       for (let i = 0, p = 3; i < this.alpha.length; i++, p += 4) this.alpha[i] = data[p];
       this.previousLuma = sourceFrame ? this._readLuma(sourceFrame) : null;
+      this.warpedAlpha = new Uint8Array(this.width * this.height);
       this.suspended = false;
+      this.suspendedReason = null;
       // The frame timestamp belongs to the model input, but the mask only
       // becomes available after inference completes. Measure matte age from
       // delivery time, while retaining the source timestamp for first-frame
       // motion catch-up.
       this.previousAt = Number.isFinite(timestamp) ? timestamp : performance.now();
       this.seededAt = performance.now();
-      this.metrics = { status: this.previousLuma ? 'seeded' : 'unpaired-seed', ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
+      this.metrics = { status: this.previousLuma ? 'seeded' : 'unpaired-seed', reason: null, ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
       return this._writeCanvas();
     }
 
@@ -248,29 +284,32 @@
       const now = Number.isFinite(timestamp) ? timestamp : performance.now();
       const age = Math.max(0, now - this.seededAt), gap = now - this.previousAt;
       if (this.suspended) {
-        this.metrics = { status: 'awaiting-new-mask', ageMs: Math.round(age), meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false, durationMs: +(performance.now() - started).toFixed(2) };
-        return this._writeCanvas();
+        this.metrics = { status: 'awaiting-new-mask', reason: this.suspendedReason, ageMs: Math.round(age), meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false, durationMs: +(performance.now() - started).toFixed(2) };
+        // The mask canvas is unchanged while suspended. Return it directly:
+        // rebuilding a full RGBA ImageData on every camera frame was needless
+        // CPU and allocation pressure on lower-powered phones.
+        return this.canvas;
       }
       const luma = this._readLuma(sourceFrame);
       const diff = meanAbsDiff(this.previousLuma, luma);
       let status = 'static', flow = null, warped = false;
 
-      if (age > this.options.maxMaskAgeMs) { status = 'stale-mask'; this.suspended = true; }
-      else if (gap < 0 || gap > this.options.maxFrameGapMs) { status = 'frame-gap'; this.suspended = true; }
-      else if (diff > this.options.sceneCutMean) { status = 'scene-cut'; this.suspended = true; }
+      if (age > this.options.maxMaskAgeMs) { status = 'stale-mask'; this.suspended = true; this.suspendedReason = status; }
+      else if (gap < 0 || gap > this.options.maxFrameGapMs) { status = 'frame-gap'; this.suspended = true; this.suspendedReason = status; }
+      else if (diff > this.options.sceneCutMean) { status = 'scene-cut'; this.suspended = true; this.suspendedReason = status; }
       else {
         flow = estimateFlow(this.previousLuma, luma, this.options.gridWidth, this.options.gridHeight, this.options);
         if (flow.coverage < this.options.minCoverage || flow.meanConfidence < this.options.minMeanConfidence) {
-          status = 'low-confidence'; this.suspended = true;
+          status = 'low-confidence'; this.suspended = true; this.suspendedReason = status;
         } else {
-          this.alpha = warpAlpha(this.alpha, this.width, this.height, flow, this.options.gridWidth, this.options.gridHeight);
-          status = 'warped'; warped = true;
+          this.alpha = warpAlpha(this.alpha, this.width, this.height, flow, this.options.gridWidth, this.options.gridHeight, this.warpedAlpha);
+          status = 'warped'; warped = true; this.suspendedReason = null;
         }
       }
 
       if (!this.suspended) { this.previousLuma = luma; this.previousAt = now; }
       this.metrics = {
-        status, ageMs: Math.round(age),
+        status, reason: this.suspendedReason, ageMs: Math.round(age),
         meanConfidence: flow ? +flow.meanConfidence.toFixed(3) : 0,
         coverage: flow ? +flow.coverage.toFixed(3) : 0,
         meanMotionPx: flow ? +Math.hypot(flow.meanDx, flow.meanDy).toFixed(2) : 0,
@@ -282,17 +321,19 @@
     getMetrics() { return Object.assign({}, this.metrics); }
 
     reset() {
-      this.alpha = null; this.previousLuma = null; this.suspended = false;
+      this.alpha = null; this.previousLuma = null; this.suspended = false; this.suspendedReason = null;
+      this.warpedAlpha = null;
       this.width = this.height = this.seededAt = this.previousAt = 0;
-      this.metrics = { status: 'reset', ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
+      this.metrics = { status: 'reset', reason: null, ageMs: 0, meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false };
     }
 
     dispose() {
-      this.reset(); this.canvas = this.analysisCanvas = null; this.ctx = this.analysisCtx = null;
+      this.reset(); this.canvas = this.analysisCanvas = this.seedCanvas = null;
+      this.ctx = this.analysisCtx = this.seedCtx = this.imageData = null;
     }
   }
 
-  const api = { DEFAULTS, analysisSize, meanAbsDiff, estimateFlow, warpAlpha, MaskMotion };
+  const api = { DEFAULTS, analysisSize, meanAbsDiff, estimateFlow, warpAlpha, compositionPolicy, MaskMotion };
   root.VS = root.VS || {}; root.VS.MaskMotion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
