@@ -49,10 +49,10 @@
   function readBench() {
     try {
       const b = JSON.parse(localStorage.getItem(BENCH_KEY) || 'null');
-      return b && b.v === 4 && b.key === deviceKey() ? b : null;   // v3 = per-engine results (rvmMs / modnetMs); older results are ignored
+      return b && b.v === 5 && b.key === deviceKey() ? b : null;   // v3 = per-engine results (rvmMs / modnetMs); older results are ignored
     } catch (e) { return null; }
   }
-  function writeBench(b) { try { localStorage.setItem(BENCH_KEY, JSON.stringify(Object.assign({ v: 4, key: deviceKey(), at: Date.now() }, b))); } catch (e) {} }
+  function writeBench(b) { try { localStorage.setItem(BENCH_KEY, JSON.stringify(Object.assign({ v: 5, key: deviceKey(), at: Date.now() }, b))); } catch (e) {} }
   function showBenchNote(text) { if (els.modelBenchNote) els.modelBenchNote.textContent = text; }
   // v0.88: while the cutout engine loads (the first visit downloads about 19 MB) show a real message on the stage, not a black rectangle.
   let loadOverlayTimer = null, loadOverlayEl = null;
@@ -225,9 +225,10 @@
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
+            const automaticMode = !!(V.MatteEngines && V.MatteEngines.isAutomaticDefault && V.MatteEngines.isAutomaticDefault());
             const selectedEngine = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
-            const fallbackReason = c.key !== selectedEngine
-              ? 'The preferred ' + selectedEngine + ' route did not meet this device’s measured live budget. Genesis selected ' + c.key + ' at ' + usedEdge + ' px as the best measured fallback.'
+            const fallbackReason = !automaticMode && c.key !== selectedEngine
+              ? 'The explicitly selected ' + selectedEngine + ' route did not meet this device’s measured live budget. Genesis selected ' + c.key + ' at ' + usedEdge + ' px as the measured fallback.'
               : null;
             if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, fallbackReason);
             resetSegCache();
@@ -258,7 +259,19 @@
         }
       }
       if (!stale() && running && segProvider instanceof window.VS.MediaPipeSegmentationProvider) govAdoptLight();   // keep probing back up from the light fallback with exponential back-off
-      if (Object.keys(results).length) writeBench(results);   // every candidate was too slow: remember it (for 6 h only) so the next start skips the download
+      const adaptiveMode = !!(V.MatteEngines && V.MatteEngines.isAutomaticDefault && V.MatteEngines.isAutomaticDefault());
+      if (!stale() && running && adaptiveMode && cands.length) {
+        const attempts = cands.map((candidate) => {
+          const ms = results[candidate.key + 'Ms'];
+          const failure = (results.routeFailures || []).find((entry) => entry.indexOf(candidate.name + ':') === 0);
+          return candidate.name + ': ' + (typeof ms === 'number' ? Math.round(ms) + ' ms/mask' : (failure || 'unavailable'));
+        }).join('; ');
+        const baseline = segProvider && (segProvider.current || segProvider.label) || 'safe local provider';
+        const reason = 'Automatic mode tested its advanced routes but none met this device’s live performance or startup requirements (' + attempts + '). Keeping ' + baseline + ' active rather than forcing a slideshow.';
+        if (V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, reason);
+        showBenchNote(reason);
+      }
+      if (Object.keys(results).length) writeBench(results);   // remember per-route timings for this device and code version
       if (!upgradeRetried && !stale() && running) { upgradeRetried = true; setTimeout(() => { if (running && sessionToken === loopToken && !upgrading && canProbeAdaptiveUpgrade(segProvider)) backgroundUpgrade(quality, sessionToken); }, 45000); }   // second look once the camera loop has settled
     } finally {
       try { cand && cand.dispose && cand.dispose(); } catch (e3) {}
