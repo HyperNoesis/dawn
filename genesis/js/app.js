@@ -247,6 +247,9 @@
           }
           cand.dispose?.(); cand = null;
         } catch (e) {
+          // A timed-out candidate must not leave the safe baseline's inference
+          // paused while the next route is downloading or initialising.
+          benchBusy = false;
           const failure = c.name + ': ' + String(e && e.message || e);
           results.routeFailures = results.routeFailures || [];
           results.routeFailures.push(failure);
