@@ -1,4 +1,4 @@
-name: Genesis segmentation regression gates
+name: Genesis segmentation adaptive regression gates
 
 on:
   push:
