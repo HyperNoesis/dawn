@@ -150,6 +150,10 @@ function translate(src, dx, dy) {
   clock += 20;
   mm.advance(flat, clock);
   assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'hold', 'low-confidence suspension continues holding the base matte');
+  clock += M.DEFAULTS.maxMaskAgeMs + 1;
+  mm.advance(flat, clock);
+  assert.strictEqual(mm.getMetrics().status, 'stale-mask', 'a held low-confidence matte eventually expires');
+  assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'passthrough', 'an expired low-confidence matte cannot remain composited');
 
   mm.dispose();
   global.document = previousDocument;
