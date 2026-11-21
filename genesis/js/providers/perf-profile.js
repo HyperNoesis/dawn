@@ -188,11 +188,19 @@
   /** First rung for a classified device. Static guess only; the ladder corrects it at runtime. */
   function startRung(tier) { return LADDER_MAX_FIRST_RUNG[tier] != null ? LADDER_MAX_FIRST_RUNG[tier] : 0; }
 
-  /** Speed-test statistic. Contention (camera, renderer, other threads) only ever makes a run SLOWER, never faster, so the true speed is near the fast end:
-   *  take the lower quartile instead of the median. One hitch can no longer decide which model a phone gets. Returns 0 for no samples. */
+  /** Speed-test statistic. With enough samples, use the lower quartile to discount
+   * occasional renderer contention. With fewer than five samples (early-aborted
+   * slow probes), use the median so one lucky frame cannot promote a slideshow. */
   function lowQuartile(times) {
-    const t = (times || []).filter((x) => typeof x === 'number' && isFinite(x)).sort((a, b) => a - b);
+    const t = (times || []).filter((x) => typeof x === 'number' && isFinite(x) && x >= 0).sort((a, b) => a - b);
     return t.length ? t[Math.floor((t.length - 1) / 4)] : 0;
+  }
+  function measuredFrameMs(times) {
+    const t = (times || []).filter((x) => typeof x === 'number' && isFinite(x) && x >= 0).sort((a, b) => a - b);
+    if (!t.length) return 0;
+    if (t.length >= 5) return t[Math.floor((t.length - 1) / 4)];
+    const mid = t.length >> 1;
+    return t.length % 2 ? t[mid] : (t[mid - 1] + t[mid]) / 2;
   }
   /** A saved speed-test verdict is only trusted for maxAgeMs (default 6 h): a bad reading (hot phone, busy moment) must not pin a phone to the light model for good. */
   const BENCH_MAX_AGE_MS = 6 * 3600 * 1000;
@@ -207,7 +215,7 @@
   }
 
   VS.PerfProfile = {
-    lowQuartile, benchFresh, wasmThreads, BENCH_MAX_AGE_MS,
+    lowQuartile, measuredFrameMs, benchFresh, wasmThreads, BENCH_MAX_AGE_MS,
     HOPELESS_SEG_MS, HOPELESS_SECONDS, modelIsBottleneck, CAM_BOUND_SHARE, LADDER_LOW_SECONDS_CAM, MEDIAPIPE_MIN_SEG_MS,
     classifyDevice, readSignals, detect, decideDegradeAction, decideSaver, decideLadderStep, decideLadderStepUp, startRung, LADDER, LADDER_UP_FPS, LADDER_UP_SECONDS, LADDER_MAX_UPS, LADDER_FLOOR_FPS, LADDER_LOW_SECONDS, SAVER_BATTERY_LEVEL, SAVER_FRAME_MS,
     LOW_MEMORY_GB, LOW_THREADS, INFERENCE_BOUND_SHARE, MAX_STRIDE,

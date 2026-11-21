@@ -1,4 +1,7 @@
 (async function () {
+  // Shared Genesis runtime namespace. Several async engine-upgrade and diagnostics paths
+  // use V; keeping it bound at bootstrap prevents ReferenceError during live upgrades.
+  const V = window.VS;
   const ic = window.VS.icon;
 
   // A model load (RVM's ONNX weights + onnxruntime-web, or MediaPipe's Tasks
@@ -28,7 +31,16 @@
     try { const v = localStorage.getItem('vs_quality_first'); if (v === '1') return true; if (v === '0') return false; } catch (e) {}
     const ua = navigator.userAgent || '';
     const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
-    return !mobile;
+    // A desktop user-agent does not imply a capable device (cloud runners,
+    // Chromebooks, older tablets and low-memory PCs can be more constrained
+    // than a modern phone). Respect the same conservative hardware tier that
+    // the FAST preset uses before making MODNet the immediate baseline.
+    let constrained = false;
+    try {
+      const P = window.VS && window.VS.PerfProfile;
+      constrained = !!(P && P.detect && P.detect(navigator).tier === 'low');
+    } catch (e) {}
+    return !mobile && !constrained;
   }
   const QF_EDGE = 256;
   function maxMs() {
@@ -46,10 +58,10 @@
   function readBench() {
     try {
       const b = JSON.parse(localStorage.getItem(BENCH_KEY) || 'null');
-      return b && b.v === 4 && b.key === deviceKey() ? b : null;   // v3 = per-engine results (rvmMs / modnetMs); older results are ignored
+      return b && b.v === 5 && b.key === deviceKey() ? b : null;   // v3 = per-engine results (rvmMs / modnetMs); older results are ignored
     } catch (e) { return null; }
   }
-  function writeBench(b) { try { localStorage.setItem(BENCH_KEY, JSON.stringify(Object.assign({ v: 4, key: deviceKey(), at: Date.now() }, b))); } catch (e) {} }
+  function writeBench(b) { try { localStorage.setItem(BENCH_KEY, JSON.stringify(Object.assign({ v: 5, key: deviceKey(), at: Date.now() }, b))); } catch (e) {} }
   function showBenchNote(text) { if (els.modelBenchNote) els.modelBenchNote.textContent = text; }
   // v0.88: while the cutout engine loads (the first visit downloads about 19 MB) show a real message on the stage, not a black rectangle.
   let loadOverlayTimer = null, loadOverlayEl = null;
@@ -89,27 +101,68 @@
     return (V.MODNetWorkerProvider && V.MODNetWorkerProvider.isSupported()) ? new V.MODNetWorkerProvider() : new V.MODNetSegmentationProvider();
   }
   let upgrading = false;
-  let benchBusy = false;       // true while a speed test runs: the live loop pauses so the test measures the model, not a fight with the camera/renderer for the CPU (measured: 4-10x slower otherwise)
+  let benchBusy = false;       // true while a candidate is measured: skip competing baseline inference when a cached mask exists, but keep camera rendering live
   let ladderRetries = 0;       // automatic second looks after a runtime step-down to the light model (max 2 per camera session)
   let upgradeRetried = false;  // one automatic re-test per camera session after a slow verdict
   /** Load MODNet while the camera is already live; swap it in only if this device runs it fast enough. */
-  /** Which live matting engines may be tried, best first. vs_live_engine: 'auto' (default) = RVM then MODNet; 'rvm' | 'modnet' = only that one; 'light' = never upgrade. */
+  function legacyLivePreference() {
+    try { return localStorage.getItem('vs_live_engine') || 'auto'; }
+    catch (e) { return 'auto'; }
+  }
+
+  /** Which live matting engines may be tried, best first. Legacy explicit rvm/modnet/light choices remain honoured; otherwise Automatic benchmarks the advanced local routes. */
   function upgradeCandidates() {
-    const V = window.VS; let pref = 'auto'; try { pref = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) {}
+    const V = window.VS, livePref = legacyLivePreference();
     const list = [];
-    if (pref === 'light') return list;
-    // An explicitly chosen advanced matte engine outranks automatic RVM probing.
-    // Otherwise a background upgrade could silently replace the user's choice.
-    const custom = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
-    if (pref === 'auto' && custom && custom !== 'modnet') {
-      const item = (V.MatteEngines.visibleEngines() || []).find((e) => e[0] === custom);
-      list.push({ name: item ? item[1] : custom, key: custom, make: makeModnet });
+    if (livePref === 'light') return list;
+
+    const matte = V.MatteEngines;
+    const selected = matte && matte.pref ? matte.pref() : 'modnet';
+    const automatic = !!(matte && typeof matte.isAutomaticDefault === 'function' && matte.isAutomaticDefault());
+    if ((livePref === 'auto' || automatic) && matte && (automatic || selected !== 'modnet')) {
+      const visible = new Map((matte.visibleEngines() || []).map((item) => [item[0], item[1]]));
+      // Automatic mode first serves the safe live fallback, then benchmarks
+      // UltraMatte -> Hybrid -> PP-MattingV2 in the background. MODNet is added
+      // as a candidate only when the live fallback is the lighter MediaPipe
+      // route; do not benchmark the same MODNet instance twice on desktops.
+      const baseIsModnet = !!(segProvider && /MODNet/.test(segProvider.label || ''));
+      const keys = automatic
+        ? ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2'].concat(baseIsModnet ? [] : ['modnet'])
+        : [selected];
+      for (const key of keys) {
+        if (key !== 'modnet' && !visible.has(key)) continue;
+        const name = visible.get(key) || (key === 'modnet' ? 'MODNet' : key);
+        list.push({
+          name,
+          key,
+          prepare: () => matte.ensureEngine(key),
+          make: () => matte.createProvider(key)
+        });
+      }
       return list;
     }
-    if ((pref === 'auto' || pref === 'rvm') && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
-    if ((pref === 'auto' || pref === 'modnet') && V.MODNetSegmentationProvider) list.push({ name: 'MODNet', key: 'modnet', make: makeModnet });
+
+    // RVM is not an automatic default: its live browser package has a different
+    // distribution licence and hardware profile. Use it only when explicitly
+    // selected in the model menu.
+    if (livePref === 'rvm' && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) {
+      list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
+    } else if ((livePref === 'auto' || livePref === 'modnet') && V.MODNetSegmentationProvider) {
+      list.push({ name: 'MODNet', key: 'modnet', make: makeModnet });
+    }
     return list;
   }
+  function canProbeAdaptiveUpgrade(provider) {
+    if (!provider) return false;
+    const legacy = legacyLivePreference();
+    // Never bypass an older explicit RVM or "light" preference by treating a
+    // temporary MediaPipe fallback as permission to try unrelated engines.
+    if (legacy === 'rvm' || legacy === 'light') return false;
+    if (window.VS.MediaPipeSegmentationProvider && provider instanceof window.VS.MediaPipeSegmentationProvider) return true;
+    const matte = window.VS.MatteEngines;
+    return !!(matte && matte.isAutomaticDefault && matte.isAutomaticDefault() && /MODNet/.test(provider.label || ''));
+  }
+
   /** True when an earlier speed test on this device already showed EVERY candidate is too slow (so we do not re-download and re-test on each start). */
   function benchSaysSlow(b, cands) { return !!b && window.VS.PerfProfile.benchFresh(b) && cands.length > 0 && (b.clearlySlow === true || cands.every((c) => typeof b[c.key + 'Ms'] === 'number' && b[c.key + 'Ms'] > maxMs() * 1.4)); }   // v0.80: only a CLEARLY slow verdict (1.4x over budget) skips the upgrade next time; a borderline one is re-measured
   /** Load the best live matting engine while the camera is already live; swap it in only if this device runs it fast enough. Tries RVM, then MODNet. */
@@ -123,13 +176,16 @@
       const cands = upgradeCandidates();
       for (let ci = 0; ci < cands.length; ci++) {
         const c = cands[ci], isLast = ci === cands.length - 1;
-        if (results.clearlySlow) continue;   // v0.98: a lighter model was already >3x over budget; the heavier ones cannot fit, so do not freeze the preview testing them
         try {
-          showBenchNote('Live now on the light model. Loading the high-quality model (' + c.name + ') in the background...');
+          showBenchNote('Live preview is running. Preparing the best matting route this device can sustain (' + c.name + ')...');
+          if (c.prepare) {
+            const prepared = await withTimeout(c.prepare(), 45000, c.name + ' dependency loading timed out after 45 seconds');
+            if (!prepared || !prepared.ok) throw new Error((prepared && prepared.error) || 'Matting engine dependencies are unavailable');
+          }
           cand = c.make();
           cand.lowLightBoost = lowLightBoostEnabled;
           cand.onProgress = (p) => showBenchNote('Loading high-quality model: ' + Math.round(p * 100) + '%');
-          await cand.initialize(quality);
+          await withTimeout(cand.initialize(quality), 45000, c.name + ' model initialization timed out after 45 seconds');
           if (stale()) { cand.dispose?.(); cand = null; return; }
           showBenchNote('Testing speed on this device (' + c.name + ')...');
           benchBusy = true;
@@ -140,7 +196,7 @@
             // size predicted to fit the budget (cost ~ edge^2) instead of walking every step. Each skipped step was 8 slow frames of frozen preview.
             const mobileTest = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
             if (mobileTest && typeof cand.longEdge === 'number' && cand.longEdge > 320) cand.longEdge = 320;
-            let m = await timeProvider(cand, 6, 3, 600), edge = cand.longEdge;
+            let m = await timeProvider(cand, 4, 1, 600), edge = cand.longEdge;
             const steps = [448, 384, 320, 256, 224].filter((e) => e < edge);
             let i = 0;
             if (m > maxMs() && steps.length) {
@@ -153,7 +209,7 @@
               if (stale()) return null;
               showBenchNote('Too slow at ' + edge + ' px (' + Math.round(m) + ' ms). Trying ' + c.name + ' at ' + e + ' px...');
               cand.longEdge = e; edge = e;
-              m = await timeProvider(cand, 5, 3, 600);
+              m = await timeProvider(cand, 3, 1, 600);
             }
             return { ms: m, edge };
           };
@@ -164,27 +220,37 @@
           if (!clearlySlow && ms > maxMs() && cand.threads > 1) {
             showBenchNote(c.name + ' needs ' + Math.round(ms) + ' ms with ' + cand.threads + ' threads. Checking with 1 thread...');
             const edge = cand.longEdge; try { cand.dispose?.(); } catch (e0) {} cand = c.make(); cand.lowLightBoost = lowLightBoostEnabled;
-            await cand.initialize(quality, { threads: 1 }); cand.longEdge = edge;
+            await withTimeout(cand.initialize(quality, { threads: 1 }), 45000, c.name + ' single-thread initialization timed out after 45 seconds'); cand.longEdge = edge;
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
-            const one = await timeProvider(cand, 6, 3, 600);
+            const one = await timeProvider(cand, 4, 1, 600);
             if (one < ms) { ms = one; results.threads = 1; }
           }
           if (!clearlySlow && ms > maxMs()) {
             showBenchNote(c.name + ' measured ' + Math.round(ms) + ' ms. Measuring once more when the camera has settled...');
             await new Promise((r) => setTimeout(r, 1500));
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
-            const again = await timeProvider(cand, 6, 2, 600);
+            const again = await timeProvider(cand, 4, 1, 600);
             if (again < ms) ms = again;
           }
           benchBusy = false;
-          results[c.key + 'Ms'] = Math.round(ms); results.edge = usedEdge; if (clearlySlow) { results.clearlySlow = true; upgradeRetried = true; }
+          results[c.key + 'Ms'] = Math.round(ms); results.edge = usedEdge;
+          // A single route being much too slow must not suppress the next,
+          // simpler candidate in the automatic quality-first chain.
+          if (clearlySlow && cands.length === 1) { results.clearlySlow = true; upgradeRetried = true; }
           segLogPush('bench', { engine: c.key, ms: Math.round(ms), edge: usedEdge, budget: maxMs(), gpu: !!cand.usingWebGPU });
           if (stale()) { cand.dispose?.(); cand = null; return; }
           if (ms <= maxMs()) {
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
-            if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, null);
+            const automaticMode = !!(V.MatteEngines && V.MatteEngines.isAutomaticDefault && V.MatteEngines.isAutomaticDefault());
+            const storedEngine = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
+            const legacyEngine = legacyLivePreference();
+            const selectedEngine = storedEngine === 'modnet' && (legacyEngine === 'rvm' || legacyEngine === 'modnet') ? legacyEngine : storedEngine;
+            const fallbackReason = !automaticMode && c.key !== selectedEngine
+              ? 'The explicitly selected ' + selectedEngine + ' route did not meet this device’s measured live budget. Genesis selected ' + c.key + ' at ' + usedEdge + ' px as the measured fallback.'
+              : null;
+            if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, fallbackReason);
             resetSegCache();
             rendererSend({ type: 'setMatte', state: {} });
             updateStudioChrome();
@@ -193,14 +259,21 @@
             showBenchNote('High-quality matting is active (' + c.name + ', ' + usedEdge + ' px, ' + Math.round(ms) + ' ms per mask' + (segProvider.threads > 1 ? ', ' + segProvider.threads + ' threads' : '') + ').');
             return;
           }
-          showBenchNote((isLast || clearlySlow) ? 'Staying on the light model: even the smallest ' + c.name + ' size needs ' + Math.round(ms) + ' ms per mask here.'
-                               : c.name + ' needs ' + Math.round(ms) + ' ms per mask here, which is too slow. Trying the next model...');
+          showBenchNote(isLast
+            ? 'No advanced route met this device’s live budget. Keeping the safe live fallback; Diagnostics records each measured route.'
+            : c.name + ' needs ' + Math.round(ms) + ' ms per mask here. Trying the next matting route...');
           if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
             V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' measured ' + Math.round(ms) + ' ms per mask, above this device\'s live budget of ' + Math.round(maxMs()) + ' ms. MediaPipe remains active for this session.');
           }
           cand.dispose?.(); cand = null;
         } catch (e) {
-          showBenchNote('High-quality model unavailable (' + c.name + ': ' + (e && e.message ? e.message : e) + '). ' + (isLast ? 'Staying on the light model.' : 'Trying the next model...'));
+          // A timed-out candidate must not leave the safe baseline's inference
+          // paused while the next route is downloading or initialising.
+          benchBusy = false;
+          const failure = c.name + ': ' + String(e && e.message || e);
+          results.routeFailures = results.routeFailures || [];
+          results.routeFailures.push(failure);
+          showBenchNote('High-quality model unavailable (' + failure + '). ' + (isLast ? 'Keeping the safest available live route.' : 'Trying the next matting route...'));
           if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
             V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' could not initialise or meet the performance budget: ' + (e && e.message ? e.message : e));
           }
@@ -208,9 +281,21 @@
           cand = null;
         }
       }
-      if (!stale() && running && segProvider instanceof window.VS.MediaPipeSegmentationProvider) govAdoptLight();   // v0.96: the governor keeps probing back up (with back-off) instead of staying light for the whole session
-      if (Object.keys(results).length) writeBench(results);   // every candidate was too slow: remember it (for 6 h only) so the next start skips the download
-      if (!upgradeRetried && !stale() && running) { upgradeRetried = true; setTimeout(() => { if (running && sessionToken === loopToken && !upgrading && segProvider instanceof window.VS.MediaPipeSegmentationProvider) backgroundUpgrade(quality, sessionToken); }, 45000); }   // second look once the camera loop has settled
+      if (!stale() && running && segProvider instanceof window.VS.MediaPipeSegmentationProvider) govAdoptLight();   // keep probing back up from the light fallback with exponential back-off
+      const adaptiveMode = !!(V.MatteEngines && V.MatteEngines.isAutomaticDefault && V.MatteEngines.isAutomaticDefault());
+      if (!stale() && running && adaptiveMode && cands.length) {
+        const attempts = cands.map((candidate) => {
+          const ms = results[candidate.key + 'Ms'];
+          const failure = (results.routeFailures || []).find((entry) => entry.indexOf(candidate.name + ':') === 0);
+          return candidate.name + ': ' + (typeof ms === 'number' ? Math.round(ms) + ' ms/mask' : (failure || 'unavailable'));
+        }).join('; ');
+        const baseline = segProvider && (segProvider.current || segProvider.label) || 'safe local provider';
+        const reason = 'Automatic mode tested its advanced routes but none met this device’s live performance or startup requirements (' + attempts + '). Keeping ' + baseline + ' active rather than forcing a slideshow.';
+        if (V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, reason);
+        showBenchNote(reason);
+      }
+      if (Object.keys(results).length) writeBench(results);   // remember per-route timings for this device and code version
+      if (!upgradeRetried && !stale() && running) { upgradeRetried = true; setTimeout(() => { if (running && sessionToken === loopToken && !upgrading && canProbeAdaptiveUpgrade(segProvider)) backgroundUpgrade(quality, sessionToken); }, 45000); }   // second look once the camera loop has settled
     } finally {
       try { cand && cand.dispose && cand.dispose(); } catch (e3) {}
       benchBusy = false; upgrading = false;
@@ -224,7 +309,22 @@
     try {
     for (let i = 0; i < warmup + frames; i++) {
       const t0 = performance.now();
-      await provider.segment(els.video);
+      // A broken worker or backend must not pin Automatic mode in "testing"
+      // forever. The candidate is disposed by its caller after this timeout.
+      const timeoutMs = Math.max(1500, Math.min(12000, maxMs() * 8));
+      let timeoutHandle = null;
+      const inference = Promise.resolve().then(() => provider.segment(els.video));
+      inference.catch(() => {}); // the timeout can win while a worker rejects later
+      try {
+        await Promise.race([
+          inference,
+          new Promise((_, reject) => {
+            timeoutHandle = setTimeout(() => reject(new Error('Matting inference timed out after ' + Math.round(timeoutMs) + ' ms')), timeoutMs);
+          })
+        ]);
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      }
       const dt = performance.now() - t0;
       if (i >= warmup) times.push(dt);
       // Never freeze the UI: let taps/paint run between frames, and stop early only when the device is clearly far too slow on TWO measured frames in a row.
@@ -232,7 +332,9 @@
       if (abortAboveMs && i >= warmup + 1 && dt > abortAboveMs && times.length >= 2 && times[times.length - 2] > abortAboveMs) break;
     }
     } finally { provider.useRoi = roiWas; }
-    return window.VS.PerfProfile.lowQuartile(times);
+    return window.VS.PerfProfile.measuredFrameMs
+      ? window.VS.PerfProfile.measuredFrameMs(times)
+      : window.VS.PerfProfile.lowQuartile(times);
   }
   /** v0.80: a short log of WHY the engine changed (numbers included), shown in Diagnostics and copyable: VS.segLog. */
   function segLogPush(ev, extra) {
@@ -1168,8 +1270,7 @@
     upgradeRetried = false; ladderRetries = 0;
     let tryModnet = true; try { tryModnet = localStorage.getItem('vs_try_modnet') !== '0'; } catch (e) {}   // Prompt 1: default ON; the bench (<=70 ms/mask) and the ladder keep weak phones on the light model
     const upCands = upgradeCandidates();
-    if (tryModnet && pref === 'auto' && upCands.length && VSNS.MediaPipeSegmentationProvider &&
-        segProvider instanceof VSNS.MediaPipeSegmentationProvider &&
+    if (tryModnet && pref === 'auto' && upCands.length && canProbeAdaptiveUpgrade(segProvider) &&
         !benchSaysSlow(knownBench, upCands)) {
       backgroundUpgrade(quality, loopToken);
     } else if (tryModnet && pref === 'auto' && benchSaysSlow(knownBench, upCands)) {
@@ -1786,7 +1887,7 @@
 
   async function processLoop() {
     if (!running) return;
-    if (checkPaused || benchBusy) { scheduleNext(); return; }   // Studio Check or the model speed test owns the CPU/GPU while it measures (the picture holds its last frame for a few seconds)
+    if (checkPaused) { scheduleNext(); return; }   // Studio Check owns the CPU/GPU; a background model benchmark must never freeze the camera/render loop
     if (!renderHealthy) return; // worker crashed fatally — stop hammering a dead worker; see 'fatal' handler above for why this can't self-recover
     const myLoop = loopToken;
     const frameStart = performance.now();
@@ -1829,6 +1930,11 @@
       runInference = false;   // never wait for the model here: reuse the latest mask on this fresh camera frame
       if (!asyncSegBusy && performance.now() - asyncSegLastAt >= asyncSegMinGap && !benchBusy) startAsyncSeg(myLoop);
     } else if (segStride > 1 && cachedMaskBitmap) runInference = (strideTick++ % segStride) === 0;
+    // A candidate benchmark is isolated from baseline inference once a usable
+    // mask exists, but the render loop continues. MaskMotion keeps that cached
+    // matte aligned briefly; after its age/confidence limits, composition
+    // passes through the live camera instead of freezing an old preview.
+    if (benchBusy && cachedMaskBitmap) runInference = false;
     if (runInference && asyncSegBusy && asyncSegPromise) { try { await asyncSegPromise; } catch (e) {} }   // first mask / after a cache reset: never run two inferences at once
 
     let results = null, maskFrame = null;
@@ -1876,17 +1982,25 @@
         try {
           const aligned = maskMotion.advance(els.video, frameStart);
           if (aligned) {
-            const motionStatus = maskMotion.getMetrics().status;
-            // Never composite a stale subject mask over a different scene or
-            // after a long capture gap. Briefly pass through the real camera
-            // until the next model result reseeds the matte.
-            if (motionStatus === 'stale-mask' || motionStatus === 'scene-cut' || motionStatus === 'frame-gap') {
-              maskSource = passCanvas;
-            } else {
-              maskSource = aligned;
-            }
+            const motion = maskMotion.getMetrics();
+            const policy = window.VS.MaskMotion.compositionPolicy(motion.status, motion.reason);
+            // Warp only when motion is reliable. On low confidence hold the
+            // last model matte unchanged; after a scene cut, stale result or
+            // capture gap, pass through the real camera until a fresh matte
+            // is delivered. Unknown states fail closed rather than reusing a
+            // silhouette whose frame relationship is no longer trustworthy.
+            if (policy === 'warp') maskSource = aligned;
+            else if (policy === 'hold') maskSource = cachedMaskBitmap;
+            else maskSource = passCanvas;
+          } else {
+            // No valid source/motion pair exists. Do not reuse a potentially
+            // stale cached silhouette while the propagation stage is enabled.
+            maskSource = passCanvas;
           }
-        } catch (e) { /* keep the last good cached matte */ }
+        } catch (e) {
+          maskSource = passCanvas;
+          if (window.VS.logError) window.VS.logError('Mask motion alignment skipped safely: ' + (e && e.message ? e.message : e));
+        }
       }
       if (!maskSource) { dropPerson(); scheduleNext(); return; }
     } else {
@@ -2174,13 +2288,59 @@
     return null;
   }
   function govChainFor(engine) {
-    const sizes = [512, 448, 384, 320, 256, 224], ch = [];
-    if (engine === 'ppmatting-v2' || engine === 'ppmatting-hrnet' || engine === 'genesis-hybrid' || engine === 'genesis-hybrid-tam' || engine === 'edgetam') {
-      ch.push({ engine, edges: [512, 448, 384, 320] });   // PP models and hybrid tiers use the trained PP size range
+    const sizes = [512, 448, 384, 320, 256, 224], ppSizes = [512, 448, 384, 320], ch = [];
+    // Adaptive degradation order preserves the best remaining segmentation
+    // route at each measured step. UltraMatte sheds EdgeTAM first, then sparse
+    // tile refinement, then the PP model itself, and only then moves to MODNet.
+    // Simpler candidates enter at 320 px: this is the smallest normal PP-trained
+    // inference tier and avoids jumping to an unnecessarily expensive 512 px
+    // model merely because the engine boundary was crossed.
+    if (engine === 'genesis-hybrid-tam') {
+      ch.push({ engine: 'genesis-hybrid-tam', edges: ppSizes });
+      ch.push({ engine: 'genesis-hybrid', edges: [320] });
+      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
     }
-    if (engine === 'rvm') ch.push({ engine: 'rvm', edges: sizes });
-    else ch.push({ engine: 'modnet', edges: sizes });
+    if (engine === 'genesis-hybrid') {
+      ch.push({ engine: 'genesis-hybrid', edges: ppSizes });
+      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'ppmatting-v2') {
+      ch.push({ engine: 'ppmatting-v2', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'edgetam') {
+      ch.push({ engine: 'edgetam', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'ppmatting-hrnet') {
+      ch.push({ engine: 'ppmatting-hrnet', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'rvm') {
+      ch.push({ engine: 'rvm', edges: sizes });
+      return ch;
+    }
+    ch.push({ engine: 'modnet', edges: sizes });
     return ch;
+  }
+  function govEngineName(id) {
+    return ({
+      'genesis-hybrid-tam': 'Genesis UltraMatte',
+      'genesis-hybrid': 'Genesis Hybrid',
+      'ppmatting-v2': 'PP-MattingV2',
+      'ppmatting-hrnet': 'PP-Matting HRNet',
+      edgetam: 'MODNet + EdgeTAM',
+      modnet: 'MODNet',
+      rvm: 'RVM',
+      mediapipe: 'MediaPipe'
+    })[id] || String(id || 'matting');
   }
   function makeGovEngine(id) {
     const V = window.VS;
@@ -2215,9 +2375,13 @@
   function govAdoptLight() {
     const G = window.VS.QualityGovernor;
     if (!G || govOff() || !(segProvider instanceof window.VS.MediaPipeSegmentationProvider)) return;
-    let preferred = 'modnet';
+    const legacy = legacyLivePreference();
+    if (legacy === 'light') return;
+    let preferred = legacy === 'rvm' ? 'rvm' : 'modnet';
     if (els.modelSelect && els.modelSelect.value === 'rvm') preferred = 'rvm';
-    else if (window.VS.MatteEngines && window.VS.MatteEngines.pref) {
+    else if (window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault && window.VS.MatteEngines.isAutomaticDefault()) {
+      preferred = 'genesis-hybrid-tam';
+    } else if (window.VS.MatteEngines && window.VS.MatteEngines.pref) {
       const selected = window.VS.MatteEngines.pref();
       if (selected && selected !== 'modnet') preferred = selected;
     }
@@ -2255,13 +2419,20 @@
       if (!running || token !== loopToken) { cand.dispose?.(); cand = null; return; }
       const old = segProvider; segProvider = cand; cand = null;
       govProvider = segProvider; govLight = !!a.emergency;
-      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, a.emergency ? 'Performance governor switched to the lightweight MediaPipe fallback.' : null);
+      const selectedEngine = window.VS.MatteEngines && window.VS.MatteEngines.pref ? window.VS.MatteEngines.pref() : 'modnet';
+      const activeEngine = a.emergency ? 'mediapipe' : a.engine;
+      const governorReason = a.emergency
+        ? 'Every available matting tier exceeded this device’s measured performance floor. MediaPipe is temporarily active until the device recovers.'
+        : (activeEngine !== selectedEngine
+          ? 'Performance adaptation moved from ' + selectedEngine + ' to ' + activeEngine + ' to protect preview responsiveness.'
+          : null);
+      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, governorReason);
       resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);   // disposing a hung worker terminates it
       gv.applied(a, performance.now()); govSave(a);
       segLogPush('gov-applied', { type: a.type, engine: a.engine, edge: a.edge });
-      if (a.type === 'swap-engine' && !a.emergency && !a.up) showBenchNote('Matting now uses ' + (a.engine === 'modnet' ? 'MODNet' : a.engine === 'rvm' ? 'RVM' : 'PP-Matting') + ' at ' + a.edge + ' px to keep the picture smooth.');
-      else if (a.up && !a.emergency) showBenchNote('Matting is back on ' + (a.engine === 'modnet' ? 'MODNet' : a.engine === 'rvm' ? 'RVM' : 'PP-Matting') + ' at ' + a.edge + ' px.');
+      if (a.type === 'swap-engine' && !a.emergency && !a.up) showBenchNote('Matting now uses ' + govEngineName(a.engine) + ' at ' + a.edge + ' px to keep the picture smooth.');
+      else if (a.up && !a.emergency) showBenchNote('Matting is back on ' + govEngineName(a.engine) + ' at ' + a.edge + ' px.');
     } catch (e) {
       gv.failed(a, performance.now()); segLogPush('gov-failed', { type: a.type, engine: a.engine, why: String(e && e.message || e).slice(0, 80) });
       showBenchNote('Could not switch the matting engine (' + (e && e.message ? e.message : e) + '). Staying as is.');

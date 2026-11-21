@@ -7,8 +7,11 @@
  * recording the ladder refused to act, so a slow phone stayed in a slideshow. This governor replaces those rules.
  *
  * Arrangement (best quality first). A CHAIN of matting engines, each with fine size steps (64 px), then the light model as an EMERGENCY rung only:
- *     PP-MattingV2 512 > 448 > 384 > 320   >   MODNet 512 > 448 > 384 > 320 > 256 > 224   >   (emergency) MediaPipe
- * Which engines are in the chain is the caller's decision (PP-Matting only when allowed by the flag + the device's own measured speed).
+ *     UltraMatte 512 > 448 > 384 > 320
+ *       > Hybrid 320 > PP-MattingV2 320 > MODNet 512 > 448 > 384 > 320 > 256 > 224
+ *       > (emergency) MediaPipe
+ * The caller supplies the chain for the active route. Engine boundaries are
+ * crossed only after the current route's resolution ladder is exhausted.
  *
  * Rules.
  *  - Pressure must be SUSTAINED and judged on a window (>= 85 % of the ticks bad), never on one slow second; the first SETTLE_MS after any change is ignored (warm-up).
