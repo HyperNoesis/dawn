@@ -193,7 +193,7 @@
         // Hybrid owns its own same-frame snapshot and calls the tracker hook
         // before building/refining the uncertainty band. Do not add another
         // full-frame copy on that route.
-        const sourceFrame = own.hooked ? video : snapshotFrame(video);
+        const sourceFrame = (own.hooked || own.status !== 'ready') ? video : snapshotFrame(video);
         const res = await base.segment(sourceFrame);
         if (own.hooked && base.hy && base.hy.tracked) return res;       // hybrid already applied the tracker mask before refining: do not gate twice
         if (own.status !== 'ready' || !res || !res.segmentationMask) return res;
