@@ -29,7 +29,8 @@ assert.strictEqual(R.threadsFor(), 4);
 // engines are probed separately by the live adaptive-upgrade path.
 assert.strictEqual(M.pref(), 'modnet');
 assert.strictEqual(M.isAutomaticDefault(), true);
-let a = new R();
+(async () => {
+  let a = new R();
   assert.strictEqual(a.kind, 'worker');
   assert.ok(a instanceof R && a instanceof Worker_ && a instanceof Seg);
 
