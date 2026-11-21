@@ -46,11 +46,28 @@
     });
   }
 
+  function defaultEngine() {
+    const available = new Set(visibleEngines().map((e) => e[0]));
+    // Prefer the advanced local PP-MattingV2 + EdgeTAM + sparse boundary
+    // refinement route on first run. Hardware suitability is measured by the
+    // app before it promotes a candidate; simpler matting routes remain
+    // available as measured fallbacks.
+    for (const id of ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2', 'modnet']) {
+      if (available.has(id)) return id;
+    }
+    return 'modnet';
+  }
+
+  function isAutomaticDefault() {
+    try { return !localStorage.getItem(KEY); } catch (e) { return true; }
+  }
+
   function pref() {
     try {
-      const value = localStorage.getItem(KEY) || 'modnet';
-      return visibleEngines().some((e) => e[0] === value) ? value : 'modnet';
-    } catch (e) { return 'modnet'; }
+      const saved = localStorage.getItem(KEY);
+      const value = saved || defaultEngine();
+      return visibleEngines().some((e) => e[0] === value) ? value : defaultEngine();
+    } catch (e) { return defaultEngine(); }
   }
 
   function setPref(value) {
@@ -111,6 +128,25 @@
     return new V.MODNetSegmentationProvider();
   }
 
+  /** Create a prepared engine directly without changing the user's saved preference. */
+  function createProvider(engine) {
+    const Original = V.MatteEnginesOriginal || V.MODNetWorkerProvider;
+    if (!Original) throw new Error('The base matting provider is not loaded.');
+    if (engine !== 'modnet') {
+      const policy = getPolicy();
+      const readiness = policy && policy.resolve ? policy.resolve(engine, V) : null;
+      if (!readiness || !readiness.ok) throw new Error(describeMissing(readiness));
+    }
+    if (engine === 'modnet') return originalProvider(Original);
+    if (engine === 'edgetam') return V.EdgeTAMGate.create(originalProvider(Original));
+    if (engine === 'birefnet') return new V.BiRefNetSegmentationProvider();
+    if (engine === 'ppmatting-v2') return new V.PPMattingV2Provider();
+    if (engine === 'ppmatting-hrnet') return new V.PPMattingHRNetProvider();
+    if (engine === 'genesis-hybrid') return new V.GenesisHybridProvider();
+    if (engine === 'genesis-hybrid-tam') return V.EdgeTAMGate.create(new V.GenesisHybridProvider());
+    throw new Error('Unsupported matting engine: ' + engine);
+  }
+
   function installRouter() {
     if (installed) return;
     const Original = V.MODNetWorkerProvider;
@@ -130,14 +166,8 @@
       // startup error path will report this exact failure and show its fallback.
       if (!readiness.ok) return unavailableProvider(Original, engine, describeMissing(readiness));
 
-      if (engine === 'edgetam') return V.EdgeTAMGate.create(originalProvider(Original));
-      if (engine === 'birefnet') return new V.BiRefNetSegmentationProvider();
-      if (engine === 'ppmatting-v2') return new V.PPMattingV2Provider();
-      if (engine === 'ppmatting-hrnet') return new V.PPMattingHRNetProvider();
-      if (engine === 'genesis-hybrid') return new V.GenesisHybridProvider();
-      if (engine === 'genesis-hybrid-tam') return V.EdgeTAMGate.create(new V.GenesisHybridProvider());
-
-      return unavailableProvider(Original, engine, 'Unsupported matting engine: ' + engine);
+      try { return createProvider(engine); }
+      catch (error) { return unavailableProvider(Original, engine, String(error && error.message || error)); }
     }
 
     Object.setPrototypeOf(MatteEngineRouter, Original);
@@ -248,8 +278,11 @@
     ENGINES,
     visibleEngines,
     betaOn,
+    defaultEngine,
+    isAutomaticDefault,
     pref,
     setPref,
+    createProvider,
     loadEngine,
     ensureEngine,
     installRouter,
