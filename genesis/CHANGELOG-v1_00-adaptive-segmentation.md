@@ -4,7 +4,7 @@
 
 - Automatic mode now starts immediately with the existing device-appropriate local live model (MODNet on quality-first desktop routes; MediaPipe remains the lightweight mobile/emergency baseline).
 - Automatic mode then probes advanced local routes in the background in quality order: Genesis UltraMatte (PP-MattingV2 + EdgeTAM + boundary tiles), Genesis Hybrid, and PP-MattingV2. A candidate is promoted only if its measured mask time fits the live budget. A route that is too slow or fails to initialise is skipped, not treated as success.
-- The adaptive mode supersedes the previous `vs_live_engine` MODNet/RVM preference so old settings cannot silently disable the new probe sequence. The explicit `light` override remains respected.
+- Legacy explicit `vs_live_engine` choices (`rvm`, `modnet`, `light`) are preserved on upgraded installations. Selecting Automatic or any engine in the new picker writes the new preference and clears a stale legacy override.
 - The live governor uses a route-aware degradation chain and retains its ability to recover when performance headroom returns.
 - The per-device benchmark cache version is incremented so old measurements do not suppress new routes.
 
