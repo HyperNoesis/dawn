@@ -3,7 +3,11 @@ const assert = require('assert');
 const G = 256;
 const ops = [];
 class FakeCtx { constructor(c) { this.canvas = c; this.globalCompositeOperation = 'source-over'; this.lastDraw = null; }
-  drawImage(src, ...args) { this.canvas._last = src; this.lastDraw = { src, args }; ops.push(this.globalCompositeOperation); }
+  drawImage(src, ...args) {
+    this.canvas._last = src; this.lastDraw = { src, args }; ops.push(this.globalCompositeOperation);
+    const sourceFrameId = src && (src._sourceFrameId !== undefined ? src._sourceFrameId : src.frameId);
+    if (sourceFrameId !== undefined) this.canvas._sourceFrameId = sourceFrameId;
+  }
   fillRect() {}
   clearRect() {}
   createImageData(w, h) { return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h }; }
@@ -40,9 +44,17 @@ V.ModelStore = { load: async () => { if (loadFail) throw new Error('offline'); r
 ort.InferenceSession.create = async (bytes) => (bytes === 1
   ? { run: async () => ({ a: {}, b: {}, c: {} }), release() {} }
   : { run: async () => { const m = new Float32Array(3 * 65536).fill(-5); for (let k = 0; k < 3; k++) for (let y = 0; y < G; y++) for (let x = 0; x < 128; x++) m[k * 65536 + y * G + x] = 4; return { iou_scores: { data: [0.5, 0.9, 0.4] }, pred_masks: { data: m }, object_score_logits: { data: [5] } }; }, release() {} });
-class Base { constructor() { this.label = 'MODNet'; this.longEdge = 320; this.lowLightBoost = false; this.calls = 0; }
-  async initialize() { return 'inited'; } async segment() { this.calls++; const mask = { width: G, height: 192, _alpha: new Uint8Array(G * 192) };
-    for (let y = 0; y < 192; y++) { for (let x = 20; x < 100; x++) mask._alpha[y * G + x] = 255; for (let x = 200; x < 240; x++) if (y > 20 && y < 80) mask._alpha[y * G + x] = 255; } return { segmentationMask: mask, extra: 1 }; }
+class Base { constructor() { this.label = 'MODNet'; this.longEdge = 320; this.lowLightBoost = false; this.calls = 0; this.sourceFrameIds = []; }
+  async initialize() { return 'inited'; }
+  async segment(video) {
+    this.calls++;
+    this.sourceFrameIds.push(video && (video._sourceFrameId !== undefined ? video._sourceFrameId : video.frameId));
+    await Promise.resolve(); // let the simulated live camera advance during inference
+    if (global.__liveVideo) global.__liveVideo.frameId++;
+    const mask = { width: G, height: 192, _alpha: new Uint8Array(G * 192) };
+    for (let y = 0; y < 192; y++) { for (let x = 20; x < 100; x++) mask._alpha[y * G + x] = 255; for (let x = 200; x < 240; x++) if (y > 20 && y < 80) mask._alpha[y * G + x] = 255; }
+    return { segmentationMask: mask, extra: 1 };
+  }
   dispose() { this.disposed = true; } }
 const E = require('../../js/providers/edgetam-provider.js');
 
@@ -68,11 +80,15 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   p.lowLightBoost = true; assert.strictEqual(base.lowLightBoost, true, 'writes go to the base');
   assert.strictEqual(await p.initialize(), 'inited'); assert.strictEqual(p.edgetam.status, 'ready');
   assert.match(p.label, /MODNet \+ EdgeTAM cleanup/);
-  const r1 = await p.segment({ videoWidth: 640, videoHeight: 480 }); assert.strictEqual(r1.extra, 1);
+  const liveVideo = { videoWidth: 640, videoHeight: 480, frameId: 17 }; global.__liveVideo = liveVideo;
+  const r1 = await p.segment(liveVideo); assert.strictEqual(r1.extra, 1);
+  assert.strictEqual(base.sourceFrameIds[0], 17, 'base model receives the captured camera frame');
+  assert.strictEqual(made[1]._sourceFrameId, 17, 'EdgeTAM encoder refresh receives that exact same frame');
+  assert.strictEqual(liveVideo.frameId, 18, 'fake camera advances while base inference is pending');
   assert.ok(p.edgetam.gateActive, 'first frame awaits the first refresh: ' + JSON.stringify(p.edgetam)); assert.ok(ops.includes('destination-in'), 'gate composited');
-  const r2 = await p.segment({ videoWidth: 640, videoHeight: 480 }); assert.ok(r2.segmentationMask && r2.segmentationMask !== base._last);
+  const r2 = await p.segment(liveVideo); assert.ok(r2.segmentationMask && r2.segmentationMask !== base._last);
   // the stray right blob was agreed away by the gate -> output alpha (read back through the fake) has nothing at x>=200
-  const gateAlpha = made[2]._img.data;   // canvases are created in order: frame, base, gate, out
+  const gateAlpha = made[3]._img.data;   // canvases: source snapshot, frame, base, gate, out
   const at = (x, y) => gateAlpha[(y * G + x) * 4 + 3];
   assert.strictEqual(at(220, 50), 0, 'stray blob removed from the composited gate'); assert.strictEqual(at(50, 120), 255, 'person kept');
   p.dispose(); assert.strictEqual(base.disposed, true);
