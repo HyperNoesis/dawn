@@ -102,6 +102,7 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   p.lowLightBoost = true; assert.strictEqual(base.lowLightBoost, true, 'writes go to the base');
   assert.strictEqual(await p.initialize(), 'inited'); assert.strictEqual(p.edgetam.status, 'ready');
   assert.match(p.label, /MODNet \+ EdgeTAM cleanup/);
+  assert.strictEqual(p.edgetam.runtime, 'webgpu-encoder+wasm-decoder', 'diagnostics identify the hybrid WebGPU encoder/WASM decoder path accurately');
   const liveVideo = { videoWidth: 640, videoHeight: 480, frameId: 17 }; global.__liveVideo = liveVideo;
   const r1 = await p.segment(liveVideo); assert.strictEqual(r1.extra, 1);
   assert.strictEqual(base.sourceFrameIds[0], 17, 'base model receives the captured camera frame');

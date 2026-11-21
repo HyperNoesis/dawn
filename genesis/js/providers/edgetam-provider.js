@@ -272,7 +272,7 @@
         return {
           status: own.status, error: own.gateError, gateActive: !!own.gate,
           refreshEvery: o.refreshEvery, modelId: own.modelId,
-          runtime: own.usingWebGPU ? 'webgpu' : (own.modelId ? 'wasm' : null),
+          runtime: own.usingWebGPU ? 'webgpu-encoder+wasm-decoder' : (own.modelId ? 'wasm' : null),
           precisionFallback: own.precisionFallback, info: own.info
         };
       }
