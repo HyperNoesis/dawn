@@ -216,7 +216,11 @@
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
-            if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, null);
+            const selectedEngine = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
+            const fallbackReason = c.key !== selectedEngine
+              ? 'The preferred ' + selectedEngine + ' route did not meet this device’s measured live budget. Genesis selected ' + c.key + ' at ' + usedEdge + ' px as the best measured fallback.'
+              : null;
+            if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, fallbackReason);
             resetSegCache();
             rendererSend({ type: 'setMatte', state: {} });
             updateStudioChrome();
@@ -233,7 +237,10 @@
           }
           cand.dispose?.(); cand = null;
         } catch (e) {
-          showBenchNote('High-quality model unavailable (' + c.name + ': ' + (e && e.message ? e.message : e) + '). ' + (isLast ? 'Staying on the light model.' : 'Trying the next model...'));
+          const failure = c.name + ': ' + String(e && e.message || e);
+          results.routeFailures = results.routeFailures || [];
+          results.routeFailures.push(failure);
+          showBenchNote('High-quality model unavailable (' + failure + '). ' + (isLast ? 'Keeping the safest available live route.' : 'Trying the next matting route...'));
           if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
             V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' could not initialise or meet the performance budget: ' + (e && e.message ? e.message : e));
           }
@@ -2215,12 +2222,46 @@
     return null;
   }
   function govChainFor(engine) {
-    const sizes = [512, 448, 384, 320, 256, 224], ch = [];
-    if (engine === 'ppmatting-v2' || engine === 'ppmatting-hrnet' || engine === 'genesis-hybrid' || engine === 'genesis-hybrid-tam' || engine === 'edgetam') {
-      ch.push({ engine, edges: [512, 448, 384, 320] });   // PP models and hybrid tiers use the trained PP size range
+    const sizes = [512, 448, 384, 320, 256, 224], ppSizes = [512, 448, 384, 320], ch = [];
+    // Adaptive degradation order preserves the best remaining segmentation
+    // route at each measured step. UltraMatte sheds EdgeTAM first, then sparse
+    // tile refinement, then the PP model itself, and only then moves to MODNet.
+    // Simpler candidates enter at 320 px: this is the smallest normal PP-trained
+    // inference tier and avoids jumping to an unnecessarily expensive 512 px
+    // model merely because the engine boundary was crossed.
+    if (engine === 'genesis-hybrid-tam') {
+      ch.push({ engine: 'genesis-hybrid-tam', edges: ppSizes });
+      ch.push({ engine: 'genesis-hybrid', edges: [320] });
+      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
     }
-    if (engine === 'rvm') ch.push({ engine: 'rvm', edges: sizes });
-    else ch.push({ engine: 'modnet', edges: sizes });
+    if (engine === 'genesis-hybrid') {
+      ch.push({ engine: 'genesis-hybrid', edges: ppSizes });
+      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'ppmatting-v2') {
+      ch.push({ engine: 'ppmatting-v2', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'edgetam') {
+      ch.push({ engine: 'edgetam', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'ppmatting-hrnet') {
+      ch.push({ engine: 'ppmatting-hrnet', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'rvm') {
+      ch.push({ engine: 'rvm', edges: sizes });
+      return ch;
+    }
+    ch.push({ engine: 'modnet', edges: sizes });
     return ch;
   }
   function makeGovEngine(id) {
@@ -2296,7 +2337,14 @@
       if (!running || token !== loopToken) { cand.dispose?.(); cand = null; return; }
       const old = segProvider; segProvider = cand; cand = null;
       govProvider = segProvider; govLight = !!a.emergency;
-      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, a.emergency ? 'Performance governor switched to the lightweight MediaPipe fallback.' : null);
+      const selectedEngine = window.VS.MatteEngines && window.VS.MatteEngines.pref ? window.VS.MatteEngines.pref() : 'modnet';
+      const activeEngine = a.emergency ? 'mediapipe' : a.engine;
+      const governorReason = a.emergency
+        ? 'Every available matting tier exceeded this device’s measured performance floor. MediaPipe is temporarily active until the device recovers.'
+        : (activeEngine !== selectedEngine
+          ? 'Performance adaptation moved from ' + selectedEngine + ' to ' + activeEngine + ' to protect preview responsiveness.'
+          : null);
+      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, governorReason);
       resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);   // disposing a hung worker terminates it
       gv.applied(a, performance.now()); govSave(a);
