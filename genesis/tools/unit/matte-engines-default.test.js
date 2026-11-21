@@ -34,6 +34,16 @@ assert.strictEqual(MatteEngines.defaultEngine(), 'modnet', 'the safe local matti
 assert.strictEqual(MatteEngines.pref(), 'modnet', 'no saved choice starts on MODNet');
 assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'first-run MODNet remains an automatic selection');
 
+// Legacy explicit preferences remain explicit until the new picker is changed.
+storage.set('vs_live_engine', 'rvm');
+assert.strictEqual(MatteEngines.isAutomaticDefault(), false, 'legacy explicit RVM does not get silently replaced by Automatic');
+storage.set('vs_live_engine', 'modnet');
+assert.strictEqual(MatteEngines.isAutomaticDefault(), false, 'legacy explicit MODNet is preserved');
+storage.set('vs_live_engine', 'light');
+assert.strictEqual(MatteEngines.isAutomaticDefault(), false, 'legacy light mode is preserved');
+storage.delete('vs_live_engine');
+assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'removing the legacy override restores first-run Automatic');
+
 const created = MatteEngines.createProvider('genesis-hybrid-tam');
 assert.ok(created && created.wrapped instanceof VS.GenesisHybridProvider, 'the adaptive factory can construct UltraMatte for a background probe');
 assert.strictEqual(MatteEngines.pref(), 'modnet', 'probing UltraMatte does not switch the active/default route');
