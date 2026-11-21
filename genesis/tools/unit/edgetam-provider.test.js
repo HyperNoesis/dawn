@@ -69,7 +69,7 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   assert.strictEqual(await p.initialize(), 'inited'); assert.strictEqual(p.edgetam.status, 'ready');
   assert.match(p.label, /MODNet \+ EdgeTAM cleanup/);
   const r1 = await p.segment({ videoWidth: 640, videoHeight: 480 }); assert.strictEqual(r1.extra, 1);
-  assert.ok(p.edgetam.gateActive, 'first frame awaits the first refresh'); assert.ok(ops.includes('destination-in'), 'gate composited');
+  assert.ok(p.edgetam.gateActive, 'first frame awaits the first refresh: ' + JSON.stringify(p.edgetam)); assert.ok(ops.includes('destination-in'), 'gate composited');
   const r2 = await p.segment({ videoWidth: 640, videoHeight: 480 }); assert.ok(r2.segmentationMask && r2.segmentationMask !== base._last);
   // the stray right blob was agreed away by the gate -> output alpha (read back through the fake) has nothing at x>=200
   const gateAlpha = made[2]._img.data;   // canvases are created in order: frame, base, gate, out
