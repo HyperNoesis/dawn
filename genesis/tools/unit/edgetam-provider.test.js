@@ -37,13 +37,34 @@ global.document = { createElement: () => { const c = { width: 0, height: 0 }; c.
 global.window = global; global.navigator = { gpu: {} };
 global.ort = { Tensor: class { constructor(t, d, dims) { this.type = t; this.data = d; this.dims = dims; } }, InferenceSession: { create: async () => ({ release() {} }) } };
 const V = (global.VS = {}); require('../../js/providers/edgetam-core.js');
-let loadFail = false;
+let loadFail = false, failWebGPU = false;
+const loadedModelIds = [];
 V.loadOrt = async () => {};
-V.ModelStore = { load: async () => { if (loadFail) throw new Error('offline'); return { bytes: { enc: 1, dec: 2, e_data: 3, d_data: 4 }, entry: { encoder: 'enc', decoder: 'dec', external: { 'vision_encoder_fp16.onnx_data': 'e_data', 'prompt_encoder_mask_decoder.onnx_data': 'd_data' } } }; } };
-// make fake sessions: person on the left covers whole 256 grid left half; EdgeTAM says mask = left half only
-ort.InferenceSession.create = async (bytes) => (bytes === 1
-  ? { run: async () => ({ a: {}, b: {}, c: {} }), release() {} }
-  : { run: async () => { const m = new Float32Array(3 * 65536).fill(-5); for (let k = 0; k < 3; k++) for (let y = 0; y < G; y++) for (let x = 0; x < 128; x++) m[k * 65536 + y * G + x] = 4; return { iou_scores: { data: [0.5, 0.9, 0.4] }, pred_masks: { data: m }, object_score_logits: { data: [5] } }; }, release() {} });
+V.ModelStore = {
+  load: async (id) => {
+    loadedModelIds.push(id);
+    if (loadFail) throw new Error('offline');
+    if (id === 'edgetam-fp32') {
+      return {
+        bytes: { enc: 5, dec: 2, e_data: 6, d_data: 4 },
+        entry: { encoder: 'enc', decoder: 'dec', external: { 'vision_encoder.onnx_data': 'e_data', 'prompt_encoder_mask_decoder.onnx_data': 'd_data' } }
+      };
+    }
+    return {
+      bytes: { enc: 1, dec: 2, e_data: 3, d_data: 4 },
+      entry: { encoder: 'enc', decoder: 'dec', external: { 'vision_encoder_fp16.onnx_data': 'e_data', 'prompt_encoder_mask_decoder.onnx_data': 'd_data' } }
+    };
+  }
+};
+// make fake sessions: EdgeTAM says mask = left half only.
+ort.InferenceSession.create = async (bytes, options) => {
+  if (failWebGPU && options && options.executionProviders && options.executionProviders.includes('webgpu')) {
+    throw new Error('WebGPU unsupported by this adapter');
+  }
+  return (bytes === 1 || bytes === 5)
+    ? { run: async () => ({ a: {}, b: {}, c: {} }), release() {} }
+    : { run: async () => { const m = new Float32Array(3 * 65536).fill(-5); for (let k = 0; k < 3; k++) for (let y = 0; y < G; y++) for (let x = 0; x < 128; x++) m[k * 65536 + y * G + x] = 4; return { iou_scores: { data: [0.5, 0.9, 0.4] }, pred_masks: { data: m }, object_score_logits: { data: [5] } }; }, release() {} };
+};
 class Base { constructor() { this.label = 'MODNet'; this.longEdge = 320; this.lowLightBoost = false; this.calls = 0; this.sourceFrameIds = []; }
   async initialize() { return 'inited'; }
   async segment(video) {
@@ -118,6 +139,24 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   assert.strictEqual(hybridBase._hyLastFrame.frameId, 42, 'Hybrid retains its inference source frame');
   assert.strictEqual(made[beforeHybridCanvases]._sourceFrameId, 42, 'EdgeTAM fallback refresh uses Hybrid source frame, not live video');
   hybridGate.dispose();
+
+  // navigator.gpu can exist even when the adapter cannot compile EdgeTAM's
+  // fp16 graph. The provider must retry the fp32/WASM checkpoint and report
+  // that it deliberately downgraded precision/runtime rather than failing.
+  failWebGPU = true;
+  const fallbackBase = new Base(), fallbackGate = E.create(fallbackBase);
+  await fallbackGate.initialize();
+  assert.strictEqual(fallbackGate.edgetam.status, 'ready', 'fp32/WASM retry keeps EdgeTAM available');
+  assert.strictEqual(fallbackGate.edgetam.modelId, 'edgetam-fp32', 'fp32 checkpoint selected after WebGPU rejection');
+  assert.strictEqual(fallbackGate.edgetam.runtime, 'wasm', 'fp32 retry uses the WASM runtime');
+  assert.match(fallbackGate.edgetam.precisionFallback, /WebGPU unsupported/, 'fallback reason remains visible');
+  assert.deepStrictEqual(loadedModelIds.slice(-2), ['edgetam', 'edgetam-fp32'], 'accelerated candidate is attempted before portable fallback');
+  const fallbackVideo = { videoWidth: 640, videoHeight: 480, frameId: 77 };
+  const fallbackResult = await fallbackGate.segment(fallbackVideo);
+  assert.ok(fallbackResult.segmentationMask, 'fp32/WASM fallback still returns a gated matte');
+  assert.ok(fallbackGate.edgetam.gateActive, 'fp32/WASM fallback builds an active gate');
+  fallbackGate.dispose();
+  failWebGPU = false;
 
   p.dispose(); assert.strictEqual(base.disposed, true);
   // failure path: model load fails -> pass-through, never throws
