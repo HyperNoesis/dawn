@@ -154,6 +154,10 @@
     async function refresh(video, baseAlpha) {
       if (own.busy || own.status !== 'ready') return;
       own.busy = true;
+      // Reset the retry clock before doing work, not only after a successful
+      // gate. A missing/unsafe subject or transient runtime error must not
+      // trigger another 1024px EdgeTAM pass on the very next camera frame.
+      own.gateAge = 0;
       try {
         ensureCanvases();
         const vw = video && (video.videoWidth || video.width), vh = video && (video.videoHeight || video.height);
@@ -204,7 +208,7 @@
         ensureCanvases();
         own.frame++; own.gateAge++;
         const grid = fitAlpha(alpha, w, h, G);
-        const first = own.frame === 1, due = own.gateAge >= o.refreshEvery || !own.gate;
+        const first = own.frame === 1, due = own.gateAge >= o.refreshEvery;
         if (first || (due && !own.busy)) { const p = refresh(video, grid); if (first) await p; }
         if (!own.gate) return false;
         const keep = C().componentGate(grid, own.gate, G, G, 128, o.minOverlap);
@@ -236,7 +240,7 @@
         if (own.status !== 'ready' || !res || !res.segmentationMask) return res;
         ensureCanvases();
         own.frame++; own.gateAge++;
-        const first = own.frame === 1, due = own.gateAge >= o.refreshEvery || !own.gate;
+        const first = own.frame === 1, due = own.gateAge >= o.refreshEvery;
         if (first || (due && !own.busy)) {
           const alpha = alphaAtGate(res.segmentationMask);
           // Tracker and base matte are built from the same captured camera frame,
@@ -252,7 +256,12 @@
         own.enc = own.dec = null; own.sourceCanvas = own.frameCanvas = null; own.sourceCtx = own.frameCtx = null;
         own.status = 'idle'; return base.dispose && base.dispose();
       },
-      get label() { return String(base.label || 'Matte') + ' + EdgeTAM cleanup' + (own.status === 'failed' ? ' (cleanup unavailable)' : ''); },
+      get label() {
+        const baseLabel = own.status === 'failed' && base.hy
+          ? 'Genesis Hybrid · PP-MattingV2'
+          : (base.label || 'Matte');
+        return String(baseLabel) + ' + EdgeTAM cleanup' + (own.status === 'failed' ? ' (cleanup unavailable)' : '');
+      },
       set label(v) { base.label = v; },
       get edgetam() {
         return {

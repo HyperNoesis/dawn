@@ -190,6 +190,23 @@
     V.MODNetWorkerProvider = MatteEngineRouter;
   }
 
+  /**
+   * Validate model components that are mandatory for the requested route.
+   * EdgeTAM is optional for plain Hybrid, but mandatory when the UI names the
+   * route UltraMatte or MODNet + EdgeTAM. The wrapper remains fail-soft so the
+   * underlying matting provider can still be used as a visible fallback.
+   */
+  function validateProvider(engine, provider) {
+    if (engine === 'genesis-hybrid-tam' || engine === 'edgetam') {
+      const edge = provider && provider.edgetam;
+      if (!edge || edge.status !== 'ready') {
+        const detail = edge && edge.error ? ': ' + edge.error : '';
+        throw new Error(engine + ' requires EdgeTAM, but its runtime is not ready' + detail);
+      }
+    }
+    return true;
+  }
+
   function reportActive(provider, reason) {
     activeLabel = provider ? String(provider.current || provider.label || 'Unknown engine') : null;
     fallbackReason = reason || null;
@@ -313,6 +330,7 @@
     pref,
     setPref,
     createProvider,
+    validateProvider,
     loadEngine,
     ensureEngine,
     installRouter,

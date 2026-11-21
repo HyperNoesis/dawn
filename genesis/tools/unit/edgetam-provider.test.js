@@ -158,10 +158,31 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   fallbackGate.dispose();
   failWebGPU = false;
 
+  // A missing/unsafe subject gate is retried at the configured cadence rather
+  // than rerunning the expensive encoder on every camera frame.
+  const originalRefreshGate = V.EdgeTAMCore.refreshGate;
+  let emptyGateAttempts = 0;
+  V.EdgeTAMCore.refreshGate = async () => { emptyGateAttempts++; return null; };
+  const emptyBase = new Base(), emptyGate = E.create(emptyBase, { refreshEvery: 4 });
+  await emptyGate.initialize();
+  const emptyVideo = { videoWidth: 640, videoHeight: 480, frameId: 100 };
+  for (let i = 0; i < 4; i++) await emptyGate.segment(emptyVideo);
+  assert.strictEqual(emptyGateAttempts, 1, 'a missing first gate does not trigger per-frame EdgeTAM inference');
+  for (let i = 0; i < 4; i++) await emptyGate.segment(emptyVideo);
+  assert.strictEqual(emptyGateAttempts, 2, 'a missing gate is retried after the configured interval');
+  emptyGate.dispose();
+  V.EdgeTAMCore.refreshGate = originalRefreshGate;
+
   p.dispose(); assert.strictEqual(base.disposed, true);
   // failure path: model load fails -> pass-through, never throws
   loadFail = true; const b2 = new Base(), p2 = E.create(b2); await p2.initialize();
   assert.strictEqual(p2.edgetam.status, 'failed'); assert.match(p2.edgetam.error, /offline/); assert.match(p2.label, /cleanup unavailable/);
   const r = await p2.segment({}); assert.ok(r.segmentationMask._alpha, 'base mask passed through untouched'); assert.strictEqual(b2.calls, 1);
+  const failedHybridBase = new HybridLike(), failedHybrid = E.create(failedHybridBase);
+  await failedHybrid.initialize();
+  assert.match(failedHybrid.label, /Genesis Hybrid/, 'a failed EdgeTAM wrapper reports the actual Hybrid fallback identity');
+  assert.doesNotMatch(failedHybrid.label, /Genesis UltraMatte/, 'a failed tracker is never labelled as full UltraMatte');
+  failedHybrid.dispose();
+  loadFail = false;
   console.log('edgetam-provider: all assertions passed');
 })().catch((e) => { console.error(e); process.exit(1); });

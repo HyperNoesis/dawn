@@ -47,6 +47,14 @@ assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'removing the legacy
 const created = MatteEngines.createProvider('genesis-hybrid-tam');
 assert.ok(created && created.wrapped instanceof VS.GenesisHybridProvider, 'the adaptive factory can construct UltraMatte for a background probe');
 assert.strictEqual(MatteEngines.pref(), 'modnet', 'probing UltraMatte does not switch the active/default route');
+assert.strictEqual(MatteEngines.validateProvider('genesis-hybrid-tam', { edgetam: { status: 'ready' } }), true,
+  'UltraMatte is valid when its required EdgeTAM runtime is ready');
+assert.throws(() => MatteEngines.validateProvider('genesis-hybrid-tam', { edgetam: { status: 'failed', error: 'offline' } }),
+  /requires EdgeTAM.*offline/, 'an incomplete UltraMatte route cannot be promoted');
+assert.throws(() => MatteEngines.validateProvider('edgetam', { edgetam: { status: 'idle' } }),
+  /requires EdgeTAM/, 'explicit EdgeTAM selection is not reported ready before initialisation');
+assert.strictEqual(MatteEngines.validateProvider('genesis-hybrid', { hy: {} }), true,
+  'plain Hybrid does not require EdgeTAM');
 
 MatteEngines.setPref('auto');
 assert.strictEqual(MatteEngines.pref(), 'modnet', 'explicit Automatic retains the safe startup provider');

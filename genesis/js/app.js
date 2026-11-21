@@ -186,6 +186,9 @@
           cand.lowLightBoost = lowLightBoostEnabled;
           cand.onProgress = (p) => showBenchNote('Loading high-quality model: ' + Math.round(p * 100) + '%');
           await withTimeout(cand.initialize(quality), 45000, c.name + ' model initialization timed out after 45 seconds');
+          if (V.MatteEngines && typeof V.MatteEngines.validateProvider === 'function') {
+            V.MatteEngines.validateProvider(c.key, cand);
+          }
           if (stale()) { cand.dispose?.(); cand = null; return; }
           showBenchNote('Testing speed on this device (' + c.name + ')...');
           benchBusy = true;
@@ -1205,6 +1208,9 @@
         loadTimeout,
         `Timed out after ${loadTimeout / 1000}s loading the high-quality model — your connection may be slow.`
       );
+      if (VSNS.MatteEngines && typeof VSNS.MatteEngines.validateProvider === 'function') {
+        VSNS.MatteEngines.validateProvider(matteChoice, segProvider);
+      }
       // Quality-first sizing was introduced for MODNet's expensive live path.
       // Do not apply that legacy clamp to PP-MattingV2, RVM or Genesis Hybrid:
       // each provider owns its own trained resolution ladder.
@@ -2279,7 +2285,8 @@
     const l = (p && p.label) || '';
     // A hybrid's performance rungs must rebuild the same hybrid pipeline.
     // The EdgeTAM proxy forwards the base provider's hybrid/tracker properties.
-    if (p && p.hy && /Genesis UltraMatte/.test(l) && p.trackerHook) return 'genesis-hybrid-tam';
+    const edgeStatus = p && p.edgetam;
+    if (p && p.hy && /Genesis UltraMatte/.test(l) && p.trackerHook && edgeStatus && edgeStatus.status === 'ready') return 'genesis-hybrid-tam';
     if (p && p.hy) return 'genesis-hybrid';
     if (p && p.edgetam) return 'edgetam';
     if (/PP-Matting/.test(l)) return /HRNet/.test(l) ? 'ppmatting-hrnet' : 'ppmatting-v2';
@@ -2415,6 +2422,9 @@
       }
       // Prewarm OFF the frame path: the old engine keeps drawing while the new one loads, then the swap is one frame.
       let to; await Promise.race([cand.initialize(runningQuality), new Promise((_, rej) => { to = setTimeout(() => rej(new Error('timed out loading ' + a.engine)), 45000); })]).finally(() => clearTimeout(to));
+      if (!a.emergency && window.VS.MatteEngines && typeof window.VS.MatteEngines.validateProvider === 'function') {
+        window.VS.MatteEngines.validateProvider(a.engine, cand);
+      }
       if (!a.emergency) cand.longEdge = a.edge;
       if (!running || token !== loopToken) { cand.dispose?.(); cand = null; return; }
       const old = segProvider; segProvider = cand; cand = null;
