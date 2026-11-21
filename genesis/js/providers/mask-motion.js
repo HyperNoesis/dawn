@@ -284,7 +284,18 @@
       const now = Number.isFinite(timestamp) ? timestamp : performance.now();
       const age = Math.max(0, now - this.seededAt), gap = now - this.previousAt;
       if (this.suspended) {
-        this.metrics = { status: 'awaiting-new-mask', reason: this.suspendedReason, ageMs: Math.round(age), meanConfidence: 0, coverage: 0, meanMotionPx: 0, warped: false, durationMs: +(performance.now() - started).toFixed(2) };
+        // Low-confidence motion may hold the last model matte briefly, but it
+        // must not pin that silhouette forever. Once its delivery-age expires,
+        // surface stale-mask so the compositor passes through the real camera.
+        const expired = age > this.options.maxMaskAgeMs;
+        if (expired) this.suspendedReason = 'stale-mask';
+        this.metrics = {
+          status: expired ? 'stale-mask' : 'awaiting-new-mask',
+          reason: this.suspendedReason,
+          ageMs: Math.round(age), meanConfidence: 0, coverage: 0,
+          meanMotionPx: 0, warped: false,
+          durationMs: +(performance.now() - started).toFixed(2)
+        };
         // The mask canvas is unchanged while suspended. Return it directly:
         // rebuilding a full RGBA ImageData on every camera frame was needless
         // CPU and allocation pressure on lower-powered phones.
