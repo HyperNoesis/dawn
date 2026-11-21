@@ -26,6 +26,17 @@
   const lsNum = (k, d, lo, hi) => { const v = parseInt(ls(k), 10); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
   const hyOn = () => ls('vs_hy') !== '0';
   const warpOn = () => ls('vs_hy_warp') !== '0';
+  // The parent provider always assigns _rect, including the no-crop/full-frame
+  // case. Only skip refinement when the rectangle actually excludes pixels.
+  function isFullFrameRect(rect, video) {
+    if (!rect) return true;
+    const w = video && (video.videoWidth || video.width);
+    const h = video && (video.videoHeight || video.height);
+    if (!(w > 0 && h > 0)) return false;
+    const eps = 0.5;
+    return Math.abs(rect.sx || 0) <= eps && Math.abs(rect.sy || 0) <= eps &&
+      Math.abs(rect.sw - w) <= eps && Math.abs(rect.sh - h) <= eps;
+  }
 
   class GenesisHybridProvider extends Parent {
     constructor() {
@@ -58,7 +69,7 @@
       // EdgeTAM tracker and every high-resolution tile must describe the SAME camera
       // frame; reading the live <video> again after the worker responds mixes frames.
       let refineFrame = null;
-      if (hyOn() && !this.hy.off && !this._rect) {
+      if (hyOn() && !this.hy.off && isFullFrameRect(this._rect, video)) {
         try {
           refineFrame = this._snapshotFrame(video);
           // Keep the exact input available to a wrapping EdgeTAM fallback.
@@ -73,7 +84,7 @@
       const res = await super.segment(video);
       this._hyLastFrame = refineFrame || null;
       const coarseMs = performance.now() - t0;
-      if (!hyOn() || this.hy.off || this._rect || !refineFrame) return res; // fail closed to the parent's matte if snapshotting fails
+      if (!hyOn() || this.hy.off || !isFullFrameRect(this._rect, video) || !refineFrame) return res; // fail closed to the parent's matte if snapshotting fails
       const gd = this.lastGuard;
       if (gd && gd.useHeld) { this._hyReset(); return res; }                // subject lost: the parent is showing a fading held matte
       if (gd && gd.resetTemporal) this._hyReset();
