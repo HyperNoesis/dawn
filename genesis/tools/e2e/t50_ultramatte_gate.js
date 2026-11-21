@@ -140,8 +140,8 @@ function withTimeout(promise, ms, label) {
 
   try {
     await page.goto(base + '/studio.html', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForFunction(() => window.VS && window.VS.matteEnginesReady, null, { timeout: 30000 });
-    const ready = await page.evaluate(() => window.VS.matteEnginesReady);
+    await page.waitForFunction(() => window.VS && window.VS.MatteEngines, null, { timeout: 30000 });
+    const ready = await page.evaluate(async () => await window.VS.MatteEngines.ready);
     if (!ready || ready.ready === false) throw new Error('Studio matting engine loader failed: ' + JSON.stringify(ready));
 
     const result = await page.evaluate(async ({ baseUrl }) => {
