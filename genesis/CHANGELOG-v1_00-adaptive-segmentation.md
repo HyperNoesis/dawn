@@ -15,6 +15,8 @@
 - Source-frame catch-up now allows up to 1.2 seconds, while matte lifetime after delivery remains bounded at 1.5 seconds.
 - Flow vectors are interpolated between block centres; canvas/ImageData/alpha buffers are reused to reduce allocation and compositing overhead.
 - EdgeTAM's square encoder input is aspect-preserving and padded rather than stretched. Gate alpha is mapped back into the source matte's native geometry.
+- Standalone EdgeTAM snapshots its input frame before asynchronous base-model inference and uses that same snapshot for the tracker refresh, preventing stale-frame gate/matte mismatches.
+- Automatic model probes have bounded dependency loading, model initialization and per-frame inference waits; a failed candidate does not keep the baseline renderer or inference paused.
 
 ## Regression coverage
 
