@@ -184,7 +184,13 @@ function withTimeout(promise, ms, label) {
       }
 
       const samples = [], hybridFrames = [], masks = [];
+      let preview = null;
       for (let frame = 0; frame < 2; frame++) {
+        // Capture the source immediately before inference so the saved visual
+        // comparison is paired with the exact input frame used by the provider.
+        const sourceFrame = document.createElement('canvas');
+        sourceFrame.width = video.videoWidth; sourceFrame.height = video.videoHeight;
+        sourceFrame.getContext('2d').drawImage(video, 0, 0);
         const t0 = performance.now();
         const output = await Promise.race([
           provider.segment(video),
@@ -209,6 +215,38 @@ function withTimeout(promise, ms, label) {
         }
         const pixels = rgba.length / 4;
         const foregroundRatio = foreground / pixels;
+        // Preserve visual evidence for review: source beside grayscale alpha,
+        // plus a checkerboard composite. These are synthetic-camera previews,
+        // not a substitute for consented real-person/hair test footage.
+        const alphaCanvas = document.createElement('canvas');
+        alphaCanvas.width = mask.width; alphaCanvas.height = mask.height;
+        const alphaCtx = alphaCanvas.getContext('2d', { willReadFrequently: true });
+        alphaCtx.drawImage(mask, 0, 0);
+        const alphaImage = alphaCtx.getImageData(0, 0, mask.width, mask.height);
+        for (let p = 0; p < alphaImage.data.length; p += 4) {
+          const a = alphaImage.data[p + 3];
+          alphaImage.data[p] = alphaImage.data[p + 1] = alphaImage.data[p + 2] = a;
+          alphaImage.data[p + 3] = 255;
+        }
+        alphaCtx.putImageData(alphaImage, 0, 0);
+        const comparison = document.createElement('canvas');
+        comparison.width = mask.width * 2; comparison.height = mask.height;
+        const comparisonCtx = comparison.getContext('2d');
+        comparisonCtx.drawImage(sourceFrame, 0, 0, mask.width, mask.height);
+        comparisonCtx.drawImage(alphaCanvas, mask.width, 0);
+        const composite = document.createElement('canvas');
+        composite.width = mask.width; composite.height = mask.height;
+        const compositeCtx = composite.getContext('2d');
+        const cell = 16;
+        for (let y = 0; y < mask.height; y += cell) for (let x = 0; x < mask.width; x += cell) {
+          compositeCtx.fillStyle = ((x / cell + y / cell) % 2) ? '#c8c8c8' : '#eeeeee';
+          compositeCtx.fillRect(x, y, cell, cell);
+        }
+        compositeCtx.drawImage(sourceFrame, 0, 0, mask.width, mask.height);
+        compositeCtx.globalCompositeOperation = 'destination-in';
+        compositeCtx.drawImage(mask, 0, 0, mask.width, mask.height);
+        compositeCtx.globalCompositeOperation = 'source-over';
+        preview = { comparison: comparison.toDataURL('image/png'), composite: composite.toDataURL('image/png') };
         if (invalid) throw new Error('UltraMatte produced non-finite alpha values');
         if (foregroundRatio < 0.01 || foregroundRatio > 0.98) {
           throw new Error('UltraMatte returned an implausible empty/full mask: ' + foregroundRatio);
@@ -267,6 +305,12 @@ function withTimeout(promise, ms, label) {
       throw new Error('Browser page errors: ' + pageErrors.join(' | '));
     }
 
+    const preview = result.preview;
+    delete result.preview;
+    if (preview) {
+      fs.writeFileSync(path.join(ROOT, 'ultramatte_last_comparison.png'), Buffer.from(preview.comparison.split(',')[1], 'base64'));
+      fs.writeFileSync(path.join(ROOT, 'ultramatte_last_composite.png'), Buffer.from(preview.composite.split(',')[1], 'base64'));
+    }
     fs.writeFileSync(REPORT, JSON.stringify({ pass: true, ...result, pageErrors }, null, 2));
     console.log('ULTRAMATTE_REPORT ' + JSON.stringify(result));
     console.log('PASS UltraMatte returned non-empty alpha on 2 camera frames');
