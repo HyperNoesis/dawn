@@ -69,7 +69,12 @@
 
   function setPref(value) {
     if (value === 'auto') {
-      try { localStorage.setItem(KEY, 'auto'); } catch (e) {}
+      try {
+        localStorage.setItem(KEY, 'auto');
+        // Migrate the old, separate live-engine override so it cannot silently
+        // disable the new adaptive candidate chain on an upgraded installation.
+        localStorage.setItem('vs_live_engine', 'auto');
+      } catch (e) {}
       return;
     }
     if (!visibleEngines().some((e) => e[0] === value)) throw new Error('That matting engine is not currently available in the engine picker.');
