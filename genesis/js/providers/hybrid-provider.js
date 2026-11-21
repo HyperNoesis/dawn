@@ -71,7 +71,7 @@
       }
 
       const res = await super.segment(video);
-      this._hyLastFrame = refineFrame || video;
+      this._hyLastFrame = refineFrame || null;
       const coarseMs = performance.now() - t0;
       if (!hyOn() || this.hy.off || this._rect || !refineFrame) return res; // fail closed to the parent's matte if snapshotting fails
       const gd = this.lastGuard;
