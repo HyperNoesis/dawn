@@ -294,7 +294,9 @@
       if (abortAboveMs && i >= warmup + 1 && dt > abortAboveMs && times.length >= 2 && times[times.length - 2] > abortAboveMs) break;
     }
     } finally { provider.useRoi = roiWas; }
-    return window.VS.PerfProfile.lowQuartile(times);
+    return window.VS.PerfProfile.measuredFrameMs
+      ? window.VS.PerfProfile.measuredFrameMs(times)
+      : window.VS.PerfProfile.lowQuartile(times);
   }
   /** v0.80: a short log of WHY the engine changed (numbers included), shown in Diagnostics and copyable: VS.segLog. */
   function segLogPush(ev, extra) {
