@@ -60,7 +60,7 @@
     const o = Object.assign({ refreshEvery: 8, dilate: 2, keepDilate: 3, feather: 2, minOverlap: 0.3 }, options || {});
     const own = {
       status: 'idle', gateError: null, gate: null, gateAge: 0, frame: 0, busy: false, enc: null, dec: null, ortRef: null,
-      info: null, frameCanvas: null, frameCtx: null, baseCanvas: null, baseCtx: null, outCanvas: null, outCtx: null, gateCanvas: null, gateCtx: null, gateImg: null
+      info: null, sourceCanvas: null, sourceCtx: null, frameCanvas: null, frameCtx: null, baseCanvas: null, baseCtx: null, outCanvas: null, outCtx: null, gateCanvas: null, gateCtx: null, gateImg: null
     };
     const C = () => V.EdgeTAMCore;
 
@@ -71,6 +71,24 @@
       own.baseCanvas = mk(G, G); own.baseCtx = own.baseCanvas.getContext('2d', { willReadFrequently: true });
       own.gateCanvas = mk(G, G); own.gateCtx = own.gateCanvas.getContext('2d'); own.gateImg = own.gateCtx.createImageData(G, G);
       own.outCanvas = mk(2, 2); own.outCtx = own.outCanvas.getContext('2d');
+    }
+
+    function snapshotFrame(video) {
+      const width = video && (video.videoWidth || video.width);
+      const height = video && (video.videoHeight || video.height);
+      if (!(width > 0 && height > 0)) throw new Error('EdgeTAM source frame has no dimensions');
+      if (!own.sourceCanvas || own.sourceCanvas.width !== width || own.sourceCanvas.height !== height) {
+        own.sourceCanvas = document.createElement('canvas');
+        own.sourceCanvas.width = width; own.sourceCanvas.height = height;
+        own.sourceCtx = own.sourceCanvas.getContext('2d');
+      }
+      if (!own.sourceCtx) throw new Error('EdgeTAM could not create a source-frame snapshot');
+      own.sourceCtx.drawImage(video, 0, 0, width, height);
+      Object.defineProperties(own.sourceCanvas, {
+        videoWidth: { configurable: true, value: width },
+        videoHeight: { configurable: true, value: height }
+      });
+      return own.sourceCanvas;
     }
 
     function alphaAtGate(maskCanvas) {
@@ -172,7 +190,11 @@
         return r;
       },
       async segment(video) {
-        const res = await base.segment(video);
+        // Hybrid owns its own same-frame snapshot and calls the tracker hook
+        // before building/refining the uncertainty band. Do not add another
+        // full-frame copy on that route.
+        const sourceFrame = own.hooked ? video : snapshotFrame(video);
+        const res = await base.segment(sourceFrame);
         if (own.hooked && base.hy && base.hy.tracked) return res;       // hybrid already applied the tracker mask before refining: do not gate twice
         if (own.status !== 'ready' || !res || !res.segmentationMask) return res;
         ensureCanvases();
@@ -180,12 +202,18 @@
         const first = own.frame === 1, due = own.gateAge >= o.refreshEvery || !own.gate;
         if (first || (due && !own.busy)) {
           const alpha = alphaAtGate(res.segmentationMask);
-          const p = refresh(video, alpha);
+          // Tracker and base matte are built from the same captured camera frame,
+          // never from a newer live-video frame after asynchronous inference.
+          const p = refresh(sourceFrame, alpha);
           if (first) await p;                                         // the first picture must not show a stray blob
         }
         return own.gate ? Object.assign({}, res, { segmentationMask: compose(res.segmentationMask) }) : res;
       },
-      dispose() { try { own.enc && own.enc.release && own.enc.release(); own.dec && own.dec.release && own.dec.release(); } catch (e) { /* ignore */ } own.enc = own.dec = null; own.status = 'idle'; return base.dispose && base.dispose(); },
+      dispose() {
+        try { own.enc && own.enc.release && own.enc.release(); own.dec && own.dec.release && own.dec.release(); } catch (e) { /* ignore */ }
+        own.enc = own.dec = null; own.sourceCanvas = own.frameCanvas = null; own.sourceCtx = own.frameCtx = null;
+        own.status = 'idle'; return base.dispose && base.dispose();
+      },
       get label() { return String(base.label || 'Matte') + ' + EdgeTAM cleanup' + (own.status === 'failed' ? ' (cleanup unavailable)' : ''); },
       set label(v) { base.label = v; },
       get edgetam() { return { status: own.status, error: own.gateError, gateActive: !!own.gate, refreshEvery: o.refreshEvery, info: own.info }; }
