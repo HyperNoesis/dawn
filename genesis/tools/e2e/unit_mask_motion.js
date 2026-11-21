@@ -60,4 +60,100 @@ function translate(src, dx, dy) {
   }
   assert.strictEqual(M.compositionPolicy('some-future-state', null), 'passthrough', 'unknown states fail closed');
 }
+
+// Exercise the stateful browser wrapper with a deterministic canvas shim. This
+// catches stale/suspended-state bugs and repeated full-resolution canvas leaks,
+// not just the pure block-flow mathematics above.
+{
+  const previousDocument = global.document;
+  const previousPerformance = global.performance;
+  let clock = 1000;
+  const allocations = [];
+  function makeCanvas() {
+    let width = 0, height = 0, ctx = null;
+    const canvas = {};
+    Object.defineProperties(canvas, {
+      width: { get: () => width, set: (v) => { width = v; ctx = null; } },
+      height: { get: () => height, set: (v) => { height = v; ctx = null; } }
+    });
+    canvas.getContext = () => {
+      if (!ctx) {
+        ctx = {
+          source: null,
+          drawImage(source) { this.source = source; },
+          getImageData() {
+            const data = new Uint8ClampedArray(width * height * 4);
+            const source = this.source || {};
+            if (source.luma && source.luma.length === width * height) {
+              for (let i = 0; i < source.luma.length; i++) {
+                const p = i * 4, v = source.luma[i];
+                data[p] = data[p + 1] = data[p + 2] = v; data[p + 3] = 255;
+              }
+            } else if (source.alpha && source.alpha.length === width * height) {
+              for (let i = 0; i < source.alpha.length; i++) data[i * 4 + 3] = source.alpha[i];
+            }
+            return { data };
+          },
+          createImageData(w, h) { return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h }; },
+          putImageData(image) { this.lastImageData = image; }
+        };
+      }
+      return ctx;
+    };
+    return canvas;
+  }
+  global.document = { createElement(tag) { assert.strictEqual(tag, 'canvas'); const c = makeCanvas(); allocations.push(c); return c; } };
+  global.performance = { now: () => clock };
+
+  const mm = new M.MaskMotion();
+  const fullMask = { width: W, height: H, alpha: new Uint8Array(W * H).fill(255) };
+  const textured = { width: W, height: H, luma: pattern(431) };
+  mm.seed(fullMask, textured, clock);
+  const firstCanvasCount = allocations.length;
+  mm.seed(fullMask, textured, clock + 1);
+  assert.strictEqual(allocations.length, firstCanvasCount, 'same-sized reseeds reuse the analysis, seed and output canvases');
+
+  clock += 20;
+  mm.advance(textured, clock);
+  assert.strictEqual(mm.getMetrics().status, 'warped', 'textured, same-scene frames produce a trusted alignment');
+
+  const sceneCut = { width: W, height: H, luma: new Uint8Array(W * H).fill(255) };
+  clock += 20;
+  mm.advance(sceneCut, clock);
+  assert.strictEqual(mm.getMetrics().status, 'scene-cut', 'large frame appearance changes suspend propagation');
+  assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'passthrough', 'scene cuts cannot reuse the old silhouette');
+  clock += 20;
+  mm.advance(sceneCut, clock);
+  assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'passthrough', 'scene-cut suspension remains pass-through until reseeded');
+
+  mm.seed(fullMask, textured, clock);
+  clock += M.DEFAULTS.maxMaskAgeMs + 1;
+  mm.advance(textured, clock);
+  assert.strictEqual(mm.getMetrics().status, 'stale-mask', 'mask age is bounded from delivery time');
+  assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'passthrough', 'expired mattes are never composited');
+  clock += 10;
+  mm.advance(textured, clock);
+  assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'passthrough', 'expired-mask suspension stays pass-through');
+
+  mm.seed(fullMask, textured, clock);
+  clock += M.DEFAULTS.maxFrameGapMs + 1;
+  mm.advance(textured, clock);
+  assert.strictEqual(mm.getMetrics().status, 'frame-gap', 'large capture gaps invalidate motion alignment');
+  assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'passthrough', 'frame gaps cannot reuse stale coordinates');
+
+  const flat = { width: W, height: H, luma: new Uint8Array(W * H).fill(100) };
+  mm.seed(fullMask, flat, clock);
+  clock += 20;
+  mm.advance(flat, clock);
+  assert.strictEqual(mm.getMetrics().status, 'low-confidence', 'flat scenes refuse to invent motion');
+  assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'hold', 'low confidence holds the last unwarped model matte');
+  clock += 20;
+  mm.advance(flat, clock);
+  assert.strictEqual(M.compositionPolicy(mm.getMetrics().status, mm.getMetrics().reason), 'hold', 'low-confidence suspension continues holding the base matte');
+
+  mm.dispose();
+  global.document = previousDocument;
+  global.performance = previousPerformance;
+}
+
 console.log('mask-motion: all assertions passed');
