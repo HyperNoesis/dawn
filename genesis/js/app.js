@@ -105,7 +105,7 @@
     const matte = V.MatteEngines;
     const selected = matte && matte.pref ? matte.pref() : 'modnet';
     const automatic = !!(matte && typeof matte.isAutomaticDefault === 'function' && matte.isAutomaticDefault());
-    if (livePref === 'auto' && matte && (automatic || selected !== 'modnet')) {
+    if ((livePref === 'auto' || automatic) && matte && (automatic || selected !== 'modnet')) {
       const visible = new Map((matte.visibleEngines() || []).map((item) => [item[0], item[1]]));
       // Automatic mode first serves the safe live fallback, then benchmarks
       // UltraMatte -> Hybrid -> PP-MattingV2 in the background. MODNet is added
