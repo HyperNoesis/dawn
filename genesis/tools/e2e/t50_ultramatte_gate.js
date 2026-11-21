@@ -278,6 +278,8 @@ function withTimeout(promise, ms, label) {
         ortVersion: ort.env && ort.env.versions ? ort.env.versions.web : 'unknown',
         initMs: Math.round(initMs),
         samples,
+        hybridFrames,
+        preview,
         hybrid: {
           tiles: hybrid.tiles || 0, budget: hybrid.budget || 0,
           refined: hybrid.refined || 0, rejected: hybrid.rejected || 0,
