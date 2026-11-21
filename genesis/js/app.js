@@ -98,19 +98,42 @@
   /** Load MODNet while the camera is already live; swap it in only if this device runs it fast enough. */
   /** Which live matting engines may be tried, best first. vs_live_engine: 'auto' (default) = RVM then MODNet; 'rvm' | 'modnet' = only that one; 'light' = never upgrade. */
   function upgradeCandidates() {
-    const V = window.VS; let pref = 'auto'; try { pref = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) {}
+    const V = window.VS; let livePref = 'auto'; try { livePref = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) {}
     const list = [];
-    if (pref === 'light') return list;
-    // An explicitly chosen advanced matte engine outranks automatic RVM probing.
-    // Otherwise a background upgrade could silently replace the user's choice.
-    const custom = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
-    if (pref === 'auto' && custom && custom !== 'modnet') {
-      const item = (V.MatteEngines.visibleEngines() || []).find((e) => e[0] === custom);
-      list.push({ name: item ? item[1] : custom, key: custom, make: makeModnet });
+    if (livePref === 'light') return list;
+
+    const matte = V.MatteEngines;
+    const selected = matte && matte.pref ? matte.pref() : 'modnet';
+    if (livePref === 'auto' && matte && selected !== 'modnet') {
+      const automatic = typeof matte.isAutomaticDefault === 'function' && matte.isAutomaticDefault();
+      const visible = new Map((matte.visibleEngines() || []).map((item) => [item[0], item[1]]));
+      // First-run default is the advanced UltraMatte route. If this device cannot
+      // load or sustain it, try progressively simpler matting routes before the
+      // lightweight emergency model. Explicit user choices remain authoritative.
+      const keys = automatic
+        ? ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2', 'modnet']
+        : [selected];
+      for (const key of keys) {
+        if (key !== 'modnet' && !visible.has(key)) continue;
+        const name = visible.get(key) || (key === 'modnet' ? 'MODNet' : key);
+        list.push({
+          name,
+          key,
+          prepare: () => matte.ensureEngine(key),
+          make: () => matte.createProvider(key)
+        });
+      }
       return list;
     }
-    if ((pref === 'auto' || pref === 'rvm') && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
-    if ((pref === 'auto' || pref === 'modnet') && V.MODNetSegmentationProvider) list.push({ name: 'MODNet', key: 'modnet', make: makeModnet });
+
+    // RVM is not an automatic default: its live browser package has a different
+    // distribution licence and hardware profile. Use it only when explicitly
+    // selected in the model menu.
+    if (livePref === 'rvm' && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) {
+      list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
+    } else if ((livePref === 'auto' || livePref === 'modnet') && V.MODNetSegmentationProvider) {
+      list.push({ name: 'MODNet', key: 'modnet', make: makeModnet });
+    }
     return list;
   }
   /** True when an earlier speed test on this device already showed EVERY candidate is too slow (so we do not re-download and re-test on each start). */
@@ -126,9 +149,12 @@
       const cands = upgradeCandidates();
       for (let ci = 0; ci < cands.length; ci++) {
         const c = cands[ci], isLast = ci === cands.length - 1;
-        if (results.clearlySlow) continue;   // v0.98: a lighter model was already >3x over budget; the heavier ones cannot fit, so do not freeze the preview testing them
         try {
-          showBenchNote('Live now on the light model. Loading the high-quality model (' + c.name + ') in the background...');
+          showBenchNote('Live preview is running. Preparing the best matting route this device can sustain (' + c.name + ')...');
+          if (c.prepare) {
+            const prepared = await c.prepare();
+            if (!prepared || !prepared.ok) throw new Error((prepared && prepared.error) || 'Matting engine dependencies are unavailable');
+          }
           cand = c.make();
           cand.lowLightBoost = lowLightBoostEnabled;
           cand.onProgress = (p) => showBenchNote('Loading high-quality model: ' + Math.round(p * 100) + '%');
@@ -180,7 +206,10 @@
             if (again < ms) ms = again;
           }
           benchBusy = false;
-          results[c.key + 'Ms'] = Math.round(ms); results.edge = usedEdge; if (clearlySlow) { results.clearlySlow = true; upgradeRetried = true; }
+          results[c.key + 'Ms'] = Math.round(ms); results.edge = usedEdge;
+          // A single route being much too slow must not suppress the next,
+          // simpler candidate in the automatic quality-first chain.
+          if (clearlySlow && cands.length === 1) { results.clearlySlow = true; upgradeRetried = true; }
           segLogPush('bench', { engine: c.key, ms: Math.round(ms), edge: usedEdge, budget: maxMs(), gpu: !!cand.usingWebGPU });
           if (stale()) { cand.dispose?.(); cand = null; return; }
           if (ms <= maxMs()) {
@@ -196,8 +225,9 @@
             showBenchNote('High-quality matting is active (' + c.name + ', ' + usedEdge + ' px, ' + Math.round(ms) + ' ms per mask' + (segProvider.threads > 1 ? ', ' + segProvider.threads + ' threads' : '') + ').');
             return;
           }
-          showBenchNote((isLast || clearlySlow) ? 'Staying on the light model: even the smallest ' + c.name + ' size needs ' + Math.round(ms) + ' ms per mask here.'
-                               : c.name + ' needs ' + Math.round(ms) + ' ms per mask here, which is too slow. Trying the next model...');
+          showBenchNote(isLast
+            ? 'No advanced route met this device’s live budget. Keeping the safe live fallback; Diagnostics records each measured route.'
+            : c.name + ' needs ' + Math.round(ms) + ' ms per mask here. Trying the next matting route...');
           if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
             V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' measured ' + Math.round(ms) + ' ms per mask, above this device\'s live budget of ' + Math.round(maxMs()) + ' ms. MediaPipe remains active for this session.');
           }
@@ -1879,17 +1909,25 @@
         try {
           const aligned = maskMotion.advance(els.video, frameStart);
           if (aligned) {
-            const motionStatus = maskMotion.getMetrics().status;
-            // Never composite a stale subject mask over a different scene or
-            // after a long capture gap. Briefly pass through the real camera
-            // until the next model result reseeds the matte.
-            if (motionStatus === 'stale-mask' || motionStatus === 'scene-cut' || motionStatus === 'frame-gap') {
-              maskSource = passCanvas;
-            } else {
-              maskSource = aligned;
-            }
+            const motion = maskMotion.getMetrics();
+            const policy = window.VS.MaskMotion.compositionPolicy(motion.status, motion.reason);
+            // Warp only when motion is reliable. On low confidence hold the
+            // last model matte unchanged; after a scene cut, stale result or
+            // capture gap, pass through the real camera until a fresh matte
+            // is delivered. Unknown states fail closed rather than reusing a
+            // silhouette whose frame relationship is no longer trustworthy.
+            if (policy === 'warp') maskSource = aligned;
+            else if (policy === 'hold') maskSource = cachedMaskBitmap;
+            else maskSource = passCanvas;
+          } else {
+            // No valid source/motion pair exists. Do not reuse a potentially
+            // stale cached silhouette while the propagation stage is enabled.
+            maskSource = passCanvas;
           }
-        } catch (e) { /* keep the last good cached matte */ }
+        } catch (e) {
+          maskSource = passCanvas;
+          if (window.VS.logError) window.VS.logError('Mask motion alignment skipped safely: ' + (e && e.message ? e.message : e));
+        }
       }
       if (!maskSource) { dropPerson(); scheduleNext(); return; }
     } else {
