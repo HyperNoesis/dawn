@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const PerfProfile = require('../../js/providers/perf-profile.js');
+const PerfProfile = require('../../js/providers/perf-profile.js').VS.PerfProfile;
 
 assert.strictEqual(PerfProfile.measuredFrameMs([]), 0, 'empty timing set has no measurement');
 assert.strictEqual(PerfProfile.measuredFrameMs([210, 1210]), 710, 'two early-aborted samples use their median, not the lucky minimum');
