@@ -40,6 +40,7 @@ assert.strictEqual(MatteEngines.pref(), 'modnet', 'probing UltraMatte does not s
 MatteEngines.setPref('auto');
 assert.strictEqual(MatteEngines.pref(), 'modnet', 'explicit Automatic retains the safe startup provider');
 assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'Automatic re-enables adaptive probes');
+assert.strictEqual(storage.get('vs_live_engine'), 'auto', 'Automatic clears an obsolete legacy live-engine override');
 MatteEngines.setPref('modnet');
 assert.strictEqual(MatteEngines.isAutomaticDefault(), false, 'an explicit model disables the automatic probe sequence');
 MatteEngines.setPref('auto');
