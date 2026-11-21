@@ -104,14 +104,16 @@
 
     const matte = V.MatteEngines;
     const selected = matte && matte.pref ? matte.pref() : 'modnet';
-    if (livePref === 'auto' && matte && selected !== 'modnet') {
-      const automatic = typeof matte.isAutomaticDefault === 'function' && matte.isAutomaticDefault();
+    const automatic = !!(matte && typeof matte.isAutomaticDefault === 'function' && matte.isAutomaticDefault());
+    if (livePref === 'auto' && matte && (automatic || selected !== 'modnet')) {
       const visible = new Map((matte.visibleEngines() || []).map((item) => [item[0], item[1]]));
-      // First-run default is the advanced UltraMatte route. If this device cannot
-      // load or sustain it, try progressively simpler matting routes before the
-      // lightweight emergency model. Explicit user choices remain authoritative.
+      // Automatic mode first serves the safe live fallback, then benchmarks
+      // UltraMatte -> Hybrid -> PP-MattingV2 in the background. MODNet is added
+      // as a candidate only when the live fallback is the lighter MediaPipe
+      // route; do not benchmark the same MODNet instance twice on desktops.
+      const baseIsModnet = !!(segProvider && /MODNet/.test(segProvider.label || ''));
       const keys = automatic
-        ? ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2', 'modnet']
+        ? ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2'].concat(baseIsModnet ? [] : ['modnet'])
         : [selected];
       for (const key of keys) {
         if (key !== 'modnet' && !visible.has(key)) continue;
@@ -136,6 +138,13 @@
     }
     return list;
   }
+  function canProbeAdaptiveUpgrade(provider) {
+    if (!provider) return false;
+    if (window.VS.MediaPipeSegmentationProvider && provider instanceof window.VS.MediaPipeSegmentationProvider) return true;
+    const matte = window.VS.MatteEngines;
+    return !!(matte && matte.isAutomaticDefault && matte.isAutomaticDefault() && /MODNet/.test(provider.label || ''));
+  }
+
   /** True when an earlier speed test on this device already showed EVERY candidate is too slow (so we do not re-download and re-test on each start). */
   function benchSaysSlow(b, cands) { return !!b && window.VS.PerfProfile.benchFresh(b) && cands.length > 0 && (b.clearlySlow === true || cands.every((c) => typeof b[c.key + 'Ms'] === 'number' && b[c.key + 'Ms'] > maxMs() * 1.4)); }   // v0.80: only a CLEARLY slow verdict (1.4x over budget) skips the upgrade next time; a borderline one is re-measured
   /** Load the best live matting engine while the camera is already live; swap it in only if this device runs it fast enough. Tries RVM, then MODNet. */
@@ -248,9 +257,9 @@
           cand = null;
         }
       }
-      if (!stale() && running && segProvider instanceof window.VS.MediaPipeSegmentationProvider) govAdoptLight();   // v0.96: the governor keeps probing back up (with back-off) instead of staying light for the whole session
+      if (!stale() && running && segProvider instanceof window.VS.MediaPipeSegmentationProvider) govAdoptLight();   // keep probing back up from the light fallback with exponential back-off
       if (Object.keys(results).length) writeBench(results);   // every candidate was too slow: remember it (for 6 h only) so the next start skips the download
-      if (!upgradeRetried && !stale() && running) { upgradeRetried = true; setTimeout(() => { if (running && sessionToken === loopToken && !upgrading && segProvider instanceof window.VS.MediaPipeSegmentationProvider) backgroundUpgrade(quality, sessionToken); }, 45000); }   // second look once the camera loop has settled
+      if (!upgradeRetried && !stale() && running) { upgradeRetried = true; setTimeout(() => { if (running && sessionToken === loopToken && !upgrading && canProbeAdaptiveUpgrade(segProvider)) backgroundUpgrade(quality, sessionToken); }, 45000); }   // second look once the camera loop has settled
     } finally {
       try { cand && cand.dispose && cand.dispose(); } catch (e3) {}
       benchBusy = false; upgrading = false;
@@ -1208,8 +1217,7 @@
     upgradeRetried = false; ladderRetries = 0;
     let tryModnet = true; try { tryModnet = localStorage.getItem('vs_try_modnet') !== '0'; } catch (e) {}   // Prompt 1: default ON; the bench (<=70 ms/mask) and the ladder keep weak phones on the light model
     const upCands = upgradeCandidates();
-    if (tryModnet && pref === 'auto' && upCands.length && VSNS.MediaPipeSegmentationProvider &&
-        segProvider instanceof VSNS.MediaPipeSegmentationProvider &&
+    if (tryModnet && pref === 'auto' && upCands.length && canProbeAdaptiveUpgrade(segProvider) &&
         !benchSaysSlow(knownBench, upCands)) {
       backgroundUpgrade(quality, loopToken);
     } else if (tryModnet && pref === 'auto' && benchSaysSlow(knownBench, upCands)) {
@@ -2311,7 +2319,9 @@
     if (!G || govOff() || !(segProvider instanceof window.VS.MediaPipeSegmentationProvider)) return;
     let preferred = 'modnet';
     if (els.modelSelect && els.modelSelect.value === 'rvm') preferred = 'rvm';
-    else if (window.VS.MatteEngines && window.VS.MatteEngines.pref) {
+    else if (window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault && window.VS.MatteEngines.isAutomaticDefault()) {
+      preferred = 'genesis-hybrid-tam';
+    } else if (window.VS.MatteEngines && window.VS.MatteEngines.pref) {
       const selected = window.VS.MatteEngines.pref();
       if (selected && selected !== 'modnet') preferred = selected;
     }
