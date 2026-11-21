@@ -196,6 +196,9 @@
         const sourceFrame = (own.hooked || own.status !== 'ready') ? video : snapshotFrame(video);
         const res = await base.segment(sourceFrame);
         if (own.hooked && base.hy && base.hy.tracked) return res;       // hybrid already applied the tracker mask before refining: do not gate twice
+        // If Hybrid could not capture a paired source frame, do not retry
+        // EdgeTAM against the live video after asynchronous inference.
+        if (own.hooked && !base._hyLastFrame) return res;
         if (own.status !== 'ready' || !res || !res.segmentationMask) return res;
         ensureCanvases();
         own.frame++; own.gateAge++;
@@ -204,7 +207,7 @@
           const alpha = alphaAtGate(res.segmentationMask);
           // Tracker and base matte are built from the same captured camera frame,
           // never from a newer live-video frame after asynchronous inference.
-          const trackerFrame = own.hooked ? (base._hyLastFrame || sourceFrame) : sourceFrame;
+          const trackerFrame = own.hooked ? base._hyLastFrame : sourceFrame;
           const p = refresh(trackerFrame, alpha);
           if (first) await p;                                         // the first picture must not show a stray blob
         }
