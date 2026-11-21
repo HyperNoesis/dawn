@@ -91,6 +91,34 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   const gateAlpha = made[3]._img.data;   // canvases: source snapshot, frame, base, gate, out
   const at = (x, y) => gateAlpha[(y * G + x) * 4 + 3];
   assert.strictEqual(at(220, 50), 0, 'stray blob removed from the composited gate'); assert.strictEqual(at(50, 120), 255, 'person kept');
+
+  // Hybrid owns a same-frame snapshot internally. If its tracker reports that
+  // the first gate was not safe, EdgeTAM's wrapper fallback must reuse that
+  // exact Hybrid snapshot, not the now-advanced live camera.
+  class HybridLike extends Base {
+    constructor() { super(); this.hy = { tracked: false }; }
+    setTrackerHook(hook) { this.trackerHook = hook; }
+    async segment(video) {
+      this.calls++;
+      this._hyLastFrame = { videoWidth: video.videoWidth, videoHeight: video.videoHeight, frameId: video.frameId };
+      await Promise.resolve();
+      if (global.__liveVideo) global.__liveVideo.frameId++;
+      const mask = { width: G, height: 192, _alpha: new Uint8Array(G * 192) };
+      for (let y = 0; y < 192; y++) for (let x = 20; x < 100; x++) mask._alpha[y * G + x] = 255;
+      return { segmentationMask: mask, extra: 2 };
+    }
+  }
+  const beforeHybridCanvases = made.length;
+  const hybridBase = new HybridLike(), hybridGate = E.create(hybridBase, { refreshEvery: 4 });
+  await hybridGate.initialize();
+  liveVideo.frameId = 42;
+  const hybridResult = await hybridGate.segment(liveVideo);
+  assert.strictEqual(hybridResult.extra, 2, 'Hybrid fallback keeps the provider result');
+  assert.strictEqual(liveVideo.frameId, 43, 'fake camera advances during Hybrid inference');
+  assert.strictEqual(hybridBase._hyLastFrame.frameId, 42, 'Hybrid retains its inference source frame');
+  assert.strictEqual(made[beforeHybridCanvases]._sourceFrameId, 42, 'EdgeTAM fallback refresh uses Hybrid source frame, not live video');
+  hybridGate.dispose();
+
   p.dispose(); assert.strictEqual(base.disposed, true);
   // failure path: model load fails -> pass-through, never throws
   loadFail = true; const b2 = new Base(), p2 = E.create(b2); await p2.initialize();
