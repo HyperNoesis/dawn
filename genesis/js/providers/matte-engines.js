@@ -55,7 +55,11 @@
   function isAutomaticDefault() {
     try {
       const saved = localStorage.getItem(KEY);
-      return !saved || saved === 'auto';
+      const legacy = localStorage.getItem('vs_live_engine');
+      // Before the new picker existed, users could explicitly choose RVM,
+      // MODNet or the light mode. Preserve those choices unless they select
+      // Automatic in the new picker; a missing legacy key means first-run Auto.
+      return (!saved || saved === 'auto') && (!legacy || legacy === 'auto');
     } catch (e) { return true; }
   }
 
@@ -78,7 +82,12 @@
       return;
     }
     if (!visibleEngines().some((e) => e[0] === value)) throw new Error('That matting engine is not currently available in the engine picker.');
-    try { localStorage.setItem(KEY, value); } catch (e) {}
+    try {
+      localStorage.setItem(KEY, value);
+      // A choice in the new engine picker supersedes the old separate live
+      // model preference, so legacy settings cannot override a newer choice.
+      localStorage.setItem('vs_live_engine', 'auto');
+    } catch (e) {}
   }
 
   function getPolicy() { return V.MatteEnginePolicy || null; }
