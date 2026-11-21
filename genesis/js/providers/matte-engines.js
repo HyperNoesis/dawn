@@ -46,31 +46,32 @@
     });
   }
 
-  function defaultEngine() {
-    const available = new Set(visibleEngines().map((e) => e[0]));
-    // Prefer the advanced local PP-MattingV2 + EdgeTAM + sparse boundary
-    // refinement route on first run. Hardware suitability is measured by the
-    // app before it promotes a candidate; simpler matting routes remain
-    // available as measured fallbacks.
-    for (const id of ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2', 'modnet']) {
-      if (available.has(id)) return id;
-    }
-    return 'modnet';
-  }
+  // Automatic mode starts with the known-safe local matting route, then the
+  // live app probes the advanced routes in quality order and promotes only the
+  // best one that actually meets this device's measured frame-time budget.
+  // This avoids making the first camera frame wait on the heaviest model.
+  function defaultEngine() { return 'modnet'; }
 
   function isAutomaticDefault() {
-    try { return !localStorage.getItem(KEY); } catch (e) { return true; }
+    try {
+      const saved = localStorage.getItem(KEY);
+      return !saved || saved === 'auto';
+    } catch (e) { return true; }
   }
 
   function pref() {
     try {
       const saved = localStorage.getItem(KEY);
-      const value = saved || defaultEngine();
+      const value = !saved || saved === 'auto' ? defaultEngine() : saved;
       return visibleEngines().some((e) => e[0] === value) ? value : defaultEngine();
     } catch (e) { return defaultEngine(); }
   }
 
   function setPref(value) {
+    if (value === 'auto') {
+      try { localStorage.setItem(KEY, 'auto'); } catch (e) {}
+      return;
+    }
     if (!visibleEngines().some((e) => e[0] === value)) throw new Error('That matting engine is not currently available in the engine picker.');
     try { localStorage.setItem(KEY, value); } catch (e) {}
   }
@@ -182,9 +183,11 @@
   }
 
   function getStatus(provider) {
+    const automatic = isAutomaticDefault();
     return {
-      selected: pref(),
-      selectedLabel: (visibleEngines().find((e) => e[0] === pref()) || [null, 'Unknown engine'])[1],
+      selected: automatic ? 'auto' : pref(),
+      selectedLabel: automatic ? 'Automatic (adaptive)' : (visibleEngines().find((e) => e[0] === pref()) || [null, 'Unknown engine'])[1],
+      automatic,
       active: provider ? String(provider.current || provider.label || 'Unknown engine') : activeLabel,
       fallback: !!fallbackReason,
       fallbackReason,
@@ -222,11 +225,14 @@
     const select = document.createElement('select');
     select.id = 'matteEngineSelect';
     select.setAttribute('aria-label', 'High-quality matting engine');
+    const automaticOption = document.createElement('option');
+    automaticOption.value = 'auto'; automaticOption.textContent = 'Automatic (adaptive)';
+    select.appendChild(automaticOption);
     for (const [value, label] of visibleEngines()) {
       const option = document.createElement('option');
       option.value = value; option.textContent = label; select.appendChild(option);
     }
-    select.value = pref();
+    select.value = isAutomaticDefault() ? 'auto' : pref();
 
     const note = document.createElement('div');
     note.className = 'honesty-note';
@@ -235,6 +241,7 @@
     note.setAttribute('aria-live', 'polite');
 
     const explain = () => {
+      if (select.value === 'auto') return 'Automatic mode starts immediately on a safe local matte, then measures Genesis UltraMatte, Hybrid and PP-MattingV2 in the background. It keeps the best route this device can sustain and retains a safe fallback.';
       if (select.value === 'birefnet' && !(navigator.gpu)) return 'BiRefNet requires WebGPU. This browser may not be able to run it.';
       if (select.value === 'genesis-hybrid-tam') return 'Experimental. Runs PP-MattingV2, EdgeTAM subject gating and local boundary refinement. Quality and speed still require real-device validation.';
       if (select.value === 'genesis-hybrid') return 'Experimental. Uses PP-MattingV2 with local boundary refinement. Quality and speed still require real-device validation.';
@@ -248,12 +255,21 @@
     field.parentNode.insertBefore(wrap, field.nextSibling);
 
     select.addEventListener('change', async () => {
-      const previous = pref();
+      const chosen = select.value;
+      if (chosen === 'auto') {
+        setPref('auto');
+        fallbackReason = null;
+        note.textContent = explain();
+        installRouter();
+        sel.value = 'modnet';
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
       note.textContent = 'Preparing ' + select.options[select.selectedIndex].text + '…';
-      const result = await ensureEngine(select.value);
+      const result = await ensureEngine(chosen);
       if (!result.ok) note.textContent = 'Engine preparation failed: ' + result.error;
       else note.textContent = explain();
-      setPref(select.value);
+      setPref(chosen);
       installRouter();
       // The router is instantiated through the MODNet worker slot. A selected
       // advanced engine is constructed there, while the settings remain clear.
