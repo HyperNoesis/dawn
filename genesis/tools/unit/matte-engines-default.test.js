@@ -8,6 +8,7 @@ global.VS = {
   },
   MODNetSegmentationProvider: class MODNetSegmentationProvider {}
 };
+const VS = global.VS;
 const storage = new Map();
 global.localStorage = {
   getItem(key) { return storage.has(key) ? storage.get(key) : null; },
