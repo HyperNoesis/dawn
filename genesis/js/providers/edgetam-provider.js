@@ -204,7 +204,8 @@
           const alpha = alphaAtGate(res.segmentationMask);
           // Tracker and base matte are built from the same captured camera frame,
           // never from a newer live-video frame after asynchronous inference.
-          const p = refresh(sourceFrame, alpha);
+          const trackerFrame = own.hooked ? (base._hyLastFrame || sourceFrame) : sourceFrame;
+          const p = refresh(trackerFrame, alpha);
           if (first) await p;                                         // the first picture must not show a stray blob
         }
         return own.gate ? Object.assign({}, res, { segmentationMask: compose(res.segmentationMask) }) : res;
