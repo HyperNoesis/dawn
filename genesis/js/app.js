@@ -1125,6 +1125,9 @@
 
     els.video.srcObject = stream;
     await els.video.play();
+    // A new stream may have the same dimensions as the previous camera. The
+    // GPU compositor must still forget the previous subject/camera history.
+    rendererSend({ type: 'setMatte', state: {} });
     try {
       const vt = stream.getVideoTracks()[0];
       let st = vt.getSettings ? vt.getSettings() : {};

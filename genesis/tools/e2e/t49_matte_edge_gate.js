@@ -121,6 +121,11 @@ const GATES = JSON.parse(fs.readFileSync(path.join(__dirname, 'matte_edge_gates.
           jSum += Math.abs(ex - e) + Math.abs(ey - e); jN += 2;
         }
         out[sc.name + '-' + MW] = { alphaMAE: aSum / n, jagged: jSum / jN, bleed: bN ? bSum / bN : 0, compMAE: cSum / n };
+        // The renderer uses this reset after a camera/engine transition; keep
+        // the GPU primitive's history invalidation covered by the browser gate.
+        const hadHistory = m._hasHistory;
+        m.reset();
+        if (hadHistory && m._hasHistory) throw new Error('GLMatte.reset did not clear temporal history');
       }
     }
     return out;

@@ -642,6 +642,10 @@ function renderFrame(personBitmap, maskBitmap, token) {
         break;
       case 'setMatte': {
         const st = msg.state || {};
+        // Engine/provider/quality changes send setMatte even when no visual
+        // tuning changed. Never blend a previous provider's alpha history
+        // into the first matte from the new route.
+        if (glMatte) glMatte.reset();
         if (st.mode === 'gl' || st.mode === 'legacy') matteMode = st.mode;
         if (glMatte) {
           ['radius', 'sigmaR', 'edgeLo', 'edgeHi', 'despill', 'colourSnap', 'smoothBase', 'smoothAdapt', 'plateStrength'].forEach((k) => {
