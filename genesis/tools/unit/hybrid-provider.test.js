@@ -8,7 +8,10 @@ const W = 1280, H = 720, CW = 320, CH = 192;
 function coarseMatte() { const a = new Uint8Array(CW * CH); for (let y = 20; y < 180; y++) for (let x = 100; x < 220; x++) a[y * CW + x] = (x < 106 || x > 213) ? 128 : 255; return a; }
 let sends = [], mode = 'good';
 class Parent {
-  constructor() {} static isSupported() { return true; }
+  // Match the real MODNet/PP parent: _rect is a full-frame object even when
+  // ROI cropping is disabled. Hybrid must not mistake this for an active crop.
+  constructor() { this._rect = { sx: 0, sy: 0, sw: W, sh: H }; }
+  static isSupported() { return true; }
   async segment(video) {
     global.__parentFrameId = video.frameId;
     await Promise.resolve(); // model worker completes after the live video has advanced
@@ -56,6 +59,14 @@ require('../../js/providers/hybrid-provider.js');
   assert.ok(sends.every(([w, h]) => w === 192 && h === 192 && w % 32 === 0), 'tile inputs are 192x192 (multiple of 32)');
   assert.strictEqual(P.hy.errors, 0, P.hy.lastError);
   assert.ok(P.hy.refined > 0 && P.hy.rejected === 0, 'faithful tiles are accepted: ' + JSON.stringify(P.hy));
+  assert.ok(P.hy.budget > 0, 'full-frame _rect must not disable the independent tile budget: ' + JSON.stringify(P.hy));
+  // A real ROI crop is intentionally fail-closed until tile coordinates can
+  // be proven to match the parent provider's cropped coordinate system.
+  const cropped = new VS.GenesisHybridProvider();
+  cropped._rect = { sx: 80, sy: 40, sw: W - 160, sh: H - 80 };
+  const croppedResult = await cropped.segment(video);
+  assert.strictEqual(cropped.hy.tiles, 0, 'ROI-cropped input must not enter full-frame tile refinement');
+  assert.strictEqual(croppedResult.segmentationMask.tag, 'parent', 'cropped path safely preserves parent matte');
   const n1 = sends.length; await P.segment(video);
   const secondTileFrames = global.__tileFrameIds.splice(0);
   assert.ok(secondTileFrames.every((id) => id === global.__parentFrameId), 'second-pass tile inputs stay paired with the second coarse frame');
