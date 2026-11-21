@@ -15,6 +15,47 @@
   const V = root.VS = root.VS || {};
   const G = 256;                                  // gate grid
 
+  // Match SAM2/EdgeTAM's square encoder canvas without stretching people into
+  // a square. Content is resized with its aspect ratio preserved and padded
+  // on the right/bottom; this is also how prompt coordinates remain aligned.
+  function fitRect(width, height, side) {
+    const w = Math.max(1, width | 0), h = Math.max(1, height | 0), scale = side / Math.max(w, h);
+    return { x: 0, y: 0, width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
+  }
+
+  function resizePlane(src, sw, sh, dw, dh) {
+    const out = new Uint8Array(dw * dh);
+    if (sw === dw && sh === dh) { out.set(src); return out; }
+    const rx = sw / dw, ry = sh / dh;
+    for (let y = 0; y < dh; y++) {
+      let fy = (y + 0.5) * ry - 0.5; if (fy < 0) fy = 0;
+      const y0 = Math.min(sh - 1, fy | 0), y1 = Math.min(sh - 1, y0 + 1), wy = fy - y0;
+      for (let x = 0; x < dw; x++) {
+        let fx = (x + 0.5) * rx - 0.5; if (fx < 0) fx = 0;
+        const x0 = Math.min(sw - 1, fx | 0), x1 = Math.min(sw - 1, x0 + 1), wx = fx - x0;
+        const top = src[y0 * sw + x0] * (1 - wx) + src[y0 * sw + x1] * wx;
+        const bottom = src[y1 * sw + x0] * (1 - wx) + src[y1 * sw + x1] * wx;
+        out[y * dw + x] = Math.round(top * (1 - wy) + bottom * wy);
+      }
+    }
+    return out;
+  }
+
+  function fitAlpha(alpha, width, height, side) {
+    if (!alpha || alpha.length !== width * height) throw new Error('EdgeTAM source alpha dimensions do not match');
+    const rect = fitRect(width, height, side), resized = resizePlane(alpha, width, height, rect.width, rect.height);
+    const out = new Uint8Array(side * side);
+    for (let y = 0; y < rect.height; y++) out.set(resized.subarray(y * rect.width, (y + 1) * rect.width), (rect.y + y) * side + rect.x);
+    return out;
+  }
+
+  function unfitAlpha(fitted, width, height, side) {
+    if (!fitted || fitted.length !== side * side) throw new Error('EdgeTAM fitted alpha dimensions do not match');
+    const rect = fitRect(width, height, side), crop = new Uint8Array(rect.width * rect.height);
+    for (let y = 0; y < rect.height; y++) crop.set(fitted.subarray((rect.y + y) * side + rect.x, (rect.y + y) * side + rect.x + rect.width), y * rect.width);
+    return resizePlane(crop, rect.width, rect.height, width, height);
+  }
+
   function create(base, options) {
     const o = Object.assign({ refreshEvery: 8, dilate: 2, keepDilate: 3, feather: 2, minOverlap: 0.3 }, options || {});
     const own = {
@@ -34,7 +75,9 @@
 
     function alphaAtGate(maskCanvas) {
       own.baseCtx.clearRect(0, 0, G, G);
-      own.baseCtx.drawImage(maskCanvas, 0, 0, G, G);
+      const sw = maskCanvas.width || G, sh = maskCanvas.height || G, rect = fitRect(sw, sh, G);
+      // Canvas scaling is bilinear; unused square padding remains transparent.
+      own.baseCtx.drawImage(maskCanvas, 0, 0, rect.width, rect.height);
       const d = own.baseCtx.getImageData(0, 0, G, G).data, a = new Uint8Array(G * G);
       for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3];
       return a;
@@ -61,7 +104,14 @@
       own.busy = true;
       try {
         ensureCanvases();
-        own.frameCtx.drawImage(video, 0, 0, 1024, 1024);
+        const vw = video && (video.videoWidth || video.width), vh = video && (video.videoHeight || video.height);
+        if (!(vw > 0 && vh > 0)) throw new Error('EdgeTAM frame has no dimensions');
+        const rect = fitRect(vw, vh, 1024);
+        // EdgeTAM's SAM2-style encoder expects 1024 square input. Pad with
+        // ImageNet mean colour rather than stretching a 16:9 / portrait person.
+        own.frameCtx.fillStyle = 'rgb(124,116,104)';
+        own.frameCtx.fillRect(0, 0, 1024, 1024);
+        own.frameCtx.drawImage(video, 0, 0, rect.width, rect.height);
         const rgba = own.frameCtx.getImageData(0, 0, 1024, 1024).data;
         const r = await C().refreshGate(own.ortRef, own.enc, own.dec, rgba, baseAlpha, G, G);
         if (!r) { own.gate = null; return; }
@@ -86,7 +136,11 @@
       for (let i = 0, j = 0; i < soft.length; i++, j += 4) { d[j] = d[j + 1] = d[j + 2] = 255; d[j + 3] = soft[i]; }
       own.gateCtx.putImageData(own.gateImg, 0, 0);
       own.outCtx.globalCompositeOperation = 'copy'; own.outCtx.drawImage(mask, 0, 0, w, h);
-      own.outCtx.globalCompositeOperation = 'destination-in'; own.outCtx.drawImage(own.gateCanvas, 0, 0, w, h);
+      const rect = fitRect(w, h, G);
+      own.outCtx.globalCompositeOperation = 'destination-in';
+      // Crop away only the synthetic padding before scaling the gate back to
+      // the matte's native aspect ratio.
+      own.outCtx.drawImage(own.gateCanvas, rect.x, rect.y, rect.width, rect.height, 0, 0, w, h);
       own.outCtx.globalCompositeOperation = 'source-over';
       return own.outCanvas;
     }
@@ -97,17 +151,18 @@
       async step(video, alpha, w, h) {
         ensureCanvases();
         own.frame++; own.gateAge++;
-        const grid = V.PPMattingCore.resizeAlpha(alpha, w, h, G, G);
+        const grid = fitAlpha(alpha, w, h, G);
         const first = own.frame === 1, due = own.gateAge >= o.refreshEvery || !own.gate;
         if (first || (due && !own.busy)) { const p = refresh(video, grid); if (first) await p; }
         if (!own.gate) return false;
         const keep = C().componentGate(grid, own.gate, G, G, 128, o.minOverlap);
-        const soft = V.PPMattingCore.resizeAlpha(C().softGate(keep, G, G, o.keepDilate, o.feather), G, G, w, h);
-        for (let i = 0; i < alpha.length; i++) alpha[i] = (alpha[i] * soft[i] / 255 + 0.5) | 0;
+        const soft = C().softGate(keep, G, G, o.keepDilate, o.feather);
+        const nativeSoft = unfitAlpha(soft, w, h, G);
+        for (let i = 0; i < alpha.length; i++) alpha[i] = (alpha[i] * nativeSoft[i] / 255 + 0.5) | 0;
         return true;
       }
     };
-    own.hooked = !!(base && typeof base.setTrackerHook === 'function' && V.PPMattingCore);
+    own.hooked = !!(base && typeof base.setTrackerHook === 'function');
     if (own.hooked) base.setTrackerHook(tracker);
 
     const overrides = {
@@ -144,7 +199,7 @@
     });
   }
 
-  const api = { create };
+  const api = { create, fitRect, fitAlpha, unfitAlpha };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   V.EdgeTAMGate = api;
 })(typeof window !== 'undefined' ? window : globalThis);
