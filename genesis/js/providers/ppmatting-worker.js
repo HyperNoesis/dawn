@@ -42,7 +42,11 @@ async function run(m) {
   inBuf = core.toTensor(rgba, w, h, inBuf && inBuf.length === 3 * w * h ? inBuf : null);
   const out = await session.run({ [inName]: new ort.Tensor('float32', inBuf, [1, 3, h, w]) });
   const t = out[outName] || out[Object.keys(out)[0]];
+  if (!t || !t.data) throw new Error('model did not return an alpha tensor');
   const dims = t.dims || [1, 1, h, w], oh = dims[dims.length - 2], ow = dims[dims.length - 1];
+  if (ow !== w || oh !== h) throw new Error('alpha dimensions ' + ow + 'x' + oh + ' do not match input ' + w + 'x' + h);
+  const valid = core.validateAlphaOutput(t.data, ow * oh);
+  if (!valid.ok) throw new Error('invalid PP-Matting alpha output: ' + valid.reason);
   const alpha = core.toAlpha(t.data, ow * oh);
   return { w: ow, h: oh, alpha, ms: (self.performance || Date).now() - t0 };
 }
