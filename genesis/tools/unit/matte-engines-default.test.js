@@ -29,20 +29,23 @@ VS.PPMattingHRNetProvider = class PPMattingHRNetProvider {};
 
 const MatteEngines = require('../../js/providers/matte-engines.js');
 
-assert.strictEqual(MatteEngines.defaultEngine(), 'genesis-hybrid-tam', 'the first-run default is the advanced UltraMatte route');
-assert.strictEqual(MatteEngines.pref(), 'genesis-hybrid-tam', 'no saved choice resolves to the advanced default');
-assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'a first-run default remains distinguishable from an explicit user choice');
+assert.strictEqual(MatteEngines.defaultEngine(), 'modnet', 'the safe local matting route is the immediate default');
+assert.strictEqual(MatteEngines.pref(), 'modnet', 'no saved choice starts on MODNet');
+assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'first-run MODNet remains an automatic selection');
 
 const created = MatteEngines.createProvider('genesis-hybrid-tam');
-assert.ok(created && created.wrapped instanceof VS.GenesisHybridProvider, 'UltraMatte factory wraps the Hybrid provider with EdgeTAM');
-assert.strictEqual(MatteEngines.pref(), 'genesis-hybrid-tam', 'creating a fallback candidate does not mutate the saved preference');
+assert.ok(created && created.wrapped instanceof VS.GenesisHybridProvider, 'the adaptive factory can construct UltraMatte for a background probe');
+assert.strictEqual(MatteEngines.pref(), 'modnet', 'probing UltraMatte does not switch the active/default route');
 
+MatteEngines.setPref('auto');
+assert.strictEqual(MatteEngines.pref(), 'modnet', 'explicit Automatic retains the safe startup provider');
+assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'Automatic re-enables adaptive probes');
 MatteEngines.setPref('modnet');
-assert.strictEqual(MatteEngines.pref(), 'modnet', 'an explicit user choice is retained');
-assert.strictEqual(MatteEngines.isAutomaticDefault(), false, 'an explicit choice disables automatic first-run fallback ordering');
+assert.strictEqual(MatteEngines.isAutomaticDefault(), false, 'an explicit model disables the automatic probe sequence');
+MatteEngines.setPref('auto');
 
 VS.Flags = { get(key) { return key === 'ppmattingBeta' ? 0 : 0; } };
 storage.delete('vs_matte_engine');
-assert.strictEqual(MatteEngines.defaultEngine(), 'modnet', 'the remote safety kill switch disables experimental defaults');
+assert.strictEqual(MatteEngines.defaultEngine(), 'modnet', 'the remote safety kill switch never promotes experimental models');
 
 console.log('matte-engines-default: all assertions passed');
