@@ -92,7 +92,7 @@
     return (V.MODNetWorkerProvider && V.MODNetWorkerProvider.isSupported()) ? new V.MODNetWorkerProvider() : new V.MODNetSegmentationProvider();
   }
   let upgrading = false;
-  let benchBusy = false;       // true while a speed test runs: the live loop pauses so the test measures the model, not a fight with the camera/renderer for the CPU (measured: 4-10x slower otherwise)
+  let benchBusy = false;       // true while a candidate is measured: skip competing baseline inference when a cached mask exists, but keep camera rendering live
   let ladderRetries = 0;       // automatic second looks after a runtime step-down to the light model (max 2 per camera session)
   let upgradeRetried = false;  // one automatic re-test per camera session after a slow verdict
   /** Load MODNet while the camera is already live; swap it in only if this device runs it fast enough. */
@@ -178,7 +178,7 @@
             // size predicted to fit the budget (cost ~ edge^2) instead of walking every step. Each skipped step was 8 slow frames of frozen preview.
             const mobileTest = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
             if (mobileTest && typeof cand.longEdge === 'number' && cand.longEdge > 320) cand.longEdge = 320;
-            let m = await timeProvider(cand, 6, 3, 600), edge = cand.longEdge;
+            let m = await timeProvider(cand, 4, 1, 600), edge = cand.longEdge;
             const steps = [448, 384, 320, 256, 224].filter((e) => e < edge);
             let i = 0;
             if (m > maxMs() && steps.length) {
@@ -191,7 +191,7 @@
               if (stale()) return null;
               showBenchNote('Too slow at ' + edge + ' px (' + Math.round(m) + ' ms). Trying ' + c.name + ' at ' + e + ' px...');
               cand.longEdge = e; edge = e;
-              m = await timeProvider(cand, 5, 3, 600);
+              m = await timeProvider(cand, 3, 1, 600);
             }
             return { ms: m, edge };
           };
@@ -204,14 +204,14 @@
             const edge = cand.longEdge; try { cand.dispose?.(); } catch (e0) {} cand = c.make(); cand.lowLightBoost = lowLightBoostEnabled;
             await cand.initialize(quality, { threads: 1 }); cand.longEdge = edge;
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
-            const one = await timeProvider(cand, 6, 3, 600);
+            const one = await timeProvider(cand, 4, 1, 600);
             if (one < ms) { ms = one; results.threads = 1; }
           }
           if (!clearlySlow && ms > maxMs()) {
             showBenchNote(c.name + ' measured ' + Math.round(ms) + ' ms. Measuring once more when the camera has settled...');
             await new Promise((r) => setTimeout(r, 1500));
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
-            const again = await timeProvider(cand, 6, 2, 600);
+            const again = await timeProvider(cand, 4, 1, 600);
             if (again < ms) ms = again;
           }
           benchBusy = false;
@@ -1847,7 +1847,7 @@
 
   async function processLoop() {
     if (!running) return;
-    if (checkPaused || benchBusy) { scheduleNext(); return; }   // Studio Check or the model speed test owns the CPU/GPU while it measures (the picture holds its last frame for a few seconds)
+    if (checkPaused) { scheduleNext(); return; }   // Studio Check owns the CPU/GPU; a background model benchmark must never freeze the camera/render loop
     if (!renderHealthy) return; // worker crashed fatally — stop hammering a dead worker; see 'fatal' handler above for why this can't self-recover
     const myLoop = loopToken;
     const frameStart = performance.now();
@@ -1890,6 +1890,11 @@
       runInference = false;   // never wait for the model here: reuse the latest mask on this fresh camera frame
       if (!asyncSegBusy && performance.now() - asyncSegLastAt >= asyncSegMinGap && !benchBusy) startAsyncSeg(myLoop);
     } else if (segStride > 1 && cachedMaskBitmap) runInference = (strideTick++ % segStride) === 0;
+    // A candidate benchmark is isolated from baseline inference once a usable
+    // mask exists, but the render loop continues. MaskMotion keeps that cached
+    // matte aligned briefly; after its age/confidence limits, composition
+    // passes through the live camera instead of freezing an old preview.
+    if (benchBusy && cachedMaskBitmap) runInference = false;
     if (runInference && asyncSegBusy && asyncSegPromise) { try { await asyncSegPromise; } catch (e) {} }   // first mask / after a cache reset: never run two inferences at once
 
     let results = null, maskFrame = null;
