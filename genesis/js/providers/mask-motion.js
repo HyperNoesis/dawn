@@ -11,7 +11,7 @@
     gridWidth: 64, gridHeight: 36, blockSize: 8, searchRadius: 2,
     minTextureStd: 3.5, maxSad: 38, minBlockConfidence: 0.12,
     neighbourRadius: 2, minCoverage: 0.12, minMeanConfidence: 0.12,
-    sceneCutMean: 46, maxFrameGapMs: 650, maxMaskAgeMs: 1500
+    sceneCutMean: 46, maxFrameGapMs: 1200, maxMaskAgeMs: 1500
   };
 
   function analysisSize(sourceWidth, sourceHeight, gridWidth) {
