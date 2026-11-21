@@ -236,6 +236,7 @@ function withTimeout(promise, ms, label) {
         hybrid: {
           tiles: hybrid.tiles || 0, budget: hybrid.budget || 0,
           refined: hybrid.refined || 0, rejected: hybrid.rejected || 0,
+          bandPct: hybrid.bandPct || 0, size: hybrid.size || null,
           errors: hybrid.errors || 0, snapshotFailures: hybrid.snapshotFailures || 0
         },
         edgeTam: {
@@ -247,6 +248,9 @@ function withTimeout(promise, ms, label) {
 
     if (result.hybrid.errors || result.hybrid.snapshotFailures) {
       throw new Error('Hybrid refinement reported an internal error: ' + JSON.stringify(result.hybrid));
+    }
+    if (!(result.hybrid.tiles > 0 && result.hybrid.budget > 0 && result.hybrid.refined > 0)) {
+      throw new Error('UltraMatte passed without executing high-resolution tile refinement: ' + JSON.stringify(result.hybrid));
     }
     if (result.edgeTam.status !== 'ready') throw new Error('EdgeTAM status is not ready: ' + JSON.stringify(result.edgeTam));
     if (!result.edgeTam.gateActive) throw new Error('EdgeTAM did not produce an active subject gate: ' + JSON.stringify(result.edgeTam));
