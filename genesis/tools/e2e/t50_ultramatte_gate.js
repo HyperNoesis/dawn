@@ -18,6 +18,8 @@ const REQUIRED = [
   'models/edgetam_vision_encoder_fp16.onnx_data',
   'models/edgetam_mask_decoder.onnx',
   'models/edgetam_mask_decoder.onnx_data',
+  'models/edgetam_vision_encoder.onnx',
+  'models/edgetam_vision_encoder.onnx_data',
   'vendor/ort/ort.min.js',
   'vendor/ort/ort-wasm-simd-threaded.wasm',
   'js/ort-loader.js'
