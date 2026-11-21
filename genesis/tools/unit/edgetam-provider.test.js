@@ -2,12 +2,32 @@
 const assert = require('assert');
 const G = 256;
 const ops = [];
-class FakeCtx { constructor(c) { this.canvas = c; this.globalCompositeOperation = 'source-over'; }
-  drawImage(src) { this.canvas._last = src; ops.push(this.globalCompositeOperation); }
+class FakeCtx { constructor(c) { this.canvas = c; this.globalCompositeOperation = 'source-over'; this.lastDraw = null; }
+  drawImage(src, ...args) { this.canvas._last = src; this.lastDraw = { src, args }; ops.push(this.globalCompositeOperation); }
   fillRect() {}
-  clearRect() {} createImageData(w, h) { return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h }; }
+  clearRect() {}
+  createImageData(w, h) { return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h }; }
   putImageData(img) { this.canvas._img = img; }
-  getImageData(x, y, w, h) { const d = new Uint8ClampedArray(w * h * 4); const s = this.canvas._last; if (s && s._alpha) for (let i = 0; i < w * h; i++) d[i * 4 + 3] = s._alpha[i]; return { data: d }; } }
+  getImageData(x, y, w, h) {
+    const d = new Uint8ClampedArray(w * h * 4), draw = this.lastDraw;
+    const src = draw && draw.src;
+    if (src && src._alpha) {
+      // Respect drawImage(image, dx, dy, dw, dh) so aspect-padded alpha is
+      // rasterised at its real destination size instead of stretched to fill
+      // the square backing canvas.
+      const a = draw.args, dx = a.length === 4 ? a[0] : 0, dy = a.length === 4 ? a[1] : 0;
+      const dw = a.length === 4 ? a[2] : (src.width || w), dh = a.length === 4 ? a[3] : (src.height || h);
+      const sw = src.width || dw, sh = src.height || dh;
+      for (let yy = 0; yy < Math.min(h, dh); yy++) for (let xx = 0; xx < Math.min(w, dw); xx++) {
+        const sx = Math.min(sw - 1, Math.floor(xx * sw / dw));
+        const sy = Math.min(sh - 1, Math.floor(yy * sh / dh));
+        const p = (yy + dy - y) * w + (xx + dx - x);
+        if (p >= 0 && p < w * h) d[p * 4 + 3] = src._alpha[sy * sw + sx] || 0;
+      }
+    }
+    return { data: d };
+  }
+}
 const made = [];
 global.document = { createElement: () => { const c = { width: 0, height: 0 }; c.getContext = () => (c._ctx = c._ctx || new FakeCtx(c)); made.push(c); return c; } };
 global.window = global; global.navigator = { gpu: {} };
