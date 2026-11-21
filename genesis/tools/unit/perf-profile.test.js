@@ -8,5 +8,7 @@ assert.strictEqual(PerfProfile.measuredFrameMs([90, 160, 410]), 160, 'three samp
 assert.strictEqual(PerfProfile.measuredFrameMs([80, 100, 130, 200]), 115, 'four samples use the midpoint median');
 assert.strictEqual(PerfProfile.measuredFrameMs([100, 120, 140, 160, 500]), 120, 'five or more samples use the lower quartile');
 assert.strictEqual(PerfProfile.measuredFrameMs([NaN, -1, 50, 100, Infinity]), 75, 'invalid timings are excluded from the sample');
+assert.strictEqual(PerfProfile.detect({ hardwareConcurrency: 4 }).tier, 'low', 'a low-core desktop is not treated as a high-performance device');
+assert.strictEqual(PerfProfile.detect({ hardwareConcurrency: 8, deviceMemory: 8 }).tier, 'standard', 'a capable desktop may start quality-first');
 
 console.log('perf-profile: measured frame timing assertions passed');
