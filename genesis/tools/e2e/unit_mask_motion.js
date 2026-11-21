@@ -49,4 +49,15 @@ function translate(src, dx, dy) {
   const a = new Uint8Array([1, 2, 3]), b = new Uint8Array([2, 4, 6]);
   assert.strictEqual(M.meanAbsDiff(a, b), 2, 'mean absolute difference is correct');
 }
+
+{
+  assert.strictEqual(M.compositionPolicy('warped', null), 'warp', 'reliable motion may warp the matte');
+  assert.strictEqual(M.compositionPolicy('low-confidence', 'low-confidence'), 'hold', 'uncertain motion holds the unwarped model matte');
+  assert.strictEqual(M.compositionPolicy('awaiting-new-mask', 'low-confidence'), 'hold', 'low-confidence suspension keeps the unwarped matte');
+  for (const status of ['stale-mask', 'scene-cut', 'frame-gap']) {
+    assert.strictEqual(M.compositionPolicy(status, status), 'passthrough', status + ' must pass through the real camera');
+    assert.strictEqual(M.compositionPolicy('awaiting-new-mask', status), 'passthrough', 'suspension after ' + status + ' must remain pass-through');
+  }
+  assert.strictEqual(M.compositionPolicy('some-future-state', null), 'passthrough', 'unknown states fail closed');
+}
 console.log('mask-motion: all assertions passed');
