@@ -42,7 +42,7 @@ jobs:
         run: sh scripts/restore-big-files.sh
 
       - name: Fetch checksum-verified PP-MattingV2 and EdgeTAM browser models
-        run: node scripts/fetch-models.js --only edgetam,ppmatting-v2
+        run: node scripts/fetch-models.js --only edgetam,edgetam-fp32,ppmatting-v2
 
       - name: Install Python test dependencies
         run: python -m pip install -q pillow numpy opencv-python-headless scipy scikit-image imageio-ffmpeg fastapi httpx uvicorn
