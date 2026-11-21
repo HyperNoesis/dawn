@@ -31,7 +31,16 @@
     try { const v = localStorage.getItem('vs_quality_first'); if (v === '1') return true; if (v === '0') return false; } catch (e) {}
     const ua = navigator.userAgent || '';
     const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
-    return !mobile;
+    // A desktop user-agent does not imply a capable device (cloud runners,
+    // Chromebooks, older tablets and low-memory PCs can be more constrained
+    // than a modern phone). Respect the same conservative hardware tier that
+    // the FAST preset uses before making MODNet the immediate baseline.
+    let constrained = false;
+    try {
+      const P = window.VS && window.VS.PerfProfile;
+      constrained = !!(P && P.detect && P.detect(navigator).tier === 'low');
+    } catch (e) {}
+    return !mobile && !constrained;
   }
   const QF_EDGE = 256;
   function maxMs() {
