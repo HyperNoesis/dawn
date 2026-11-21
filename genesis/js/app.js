@@ -2264,6 +2264,18 @@
     ch.push({ engine: 'modnet', edges: sizes });
     return ch;
   }
+  function govEngineName(id) {
+    return ({
+      'genesis-hybrid-tam': 'Genesis UltraMatte',
+      'genesis-hybrid': 'Genesis Hybrid',
+      'ppmatting-v2': 'PP-MattingV2',
+      'ppmatting-hrnet': 'PP-Matting HRNet',
+      edgetam: 'MODNet + EdgeTAM',
+      modnet: 'MODNet',
+      rvm: 'RVM',
+      mediapipe: 'MediaPipe'
+    })[id] || String(id || 'matting');
+  }
   function makeGovEngine(id) {
     const V = window.VS;
     if (id === 'genesis-hybrid-tam' && V.GenesisHybridProvider && V.EdgeTAMGate) return V.EdgeTAMGate.create(new V.GenesisHybridProvider());
@@ -2349,8 +2361,8 @@
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);   // disposing a hung worker terminates it
       gv.applied(a, performance.now()); govSave(a);
       segLogPush('gov-applied', { type: a.type, engine: a.engine, edge: a.edge });
-      if (a.type === 'swap-engine' && !a.emergency && !a.up) showBenchNote('Matting now uses ' + (a.engine === 'modnet' ? 'MODNet' : a.engine === 'rvm' ? 'RVM' : 'PP-Matting') + ' at ' + a.edge + ' px to keep the picture smooth.');
-      else if (a.up && !a.emergency) showBenchNote('Matting is back on ' + (a.engine === 'modnet' ? 'MODNet' : a.engine === 'rvm' ? 'RVM' : 'PP-Matting') + ' at ' + a.edge + ' px.');
+      if (a.type === 'swap-engine' && !a.emergency && !a.up) showBenchNote('Matting now uses ' + govEngineName(a.engine) + ' at ' + a.edge + ' px to keep the picture smooth.');
+      else if (a.up && !a.emergency) showBenchNote('Matting is back on ' + govEngineName(a.engine) + ' at ' + a.edge + ' px.');
     } catch (e) {
       gv.failed(a, performance.now()); segLogPush('gov-failed', { type: a.type, engine: a.engine, why: String(e && e.message || e).slice(0, 80) });
       showBenchNote('Could not switch the matting engine (' + (e && e.message ? e.message : e) + '). Staying as is.');
