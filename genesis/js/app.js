@@ -170,7 +170,7 @@
         try {
           showBenchNote('Live preview is running. Preparing the best matting route this device can sustain (' + c.name + ')...');
           if (c.prepare) {
-            const prepared = await c.prepare();
+            const prepared = await withTimeout(c.prepare(), 45000, c.name + ' dependency loading timed out after 45 seconds');
             if (!prepared || !prepared.ok) throw new Error((prepared && prepared.error) || 'Matting engine dependencies are unavailable');
           }
           cand = c.make();
