@@ -60,6 +60,7 @@
     const o = Object.assign({ refreshEvery: 8, dilate: 2, keepDilate: 3, feather: 2, minOverlap: 0.3 }, options || {});
     const own = {
       status: 'idle', gateError: null, gate: null, gateAge: 0, frame: 0, busy: false, enc: null, dec: null, ortRef: null,
+      modelId: null, usingWebGPU: false, precisionFallback: null,
       info: null, sourceCanvas: null, sourceCtx: null, frameCanvas: null, frameCtx: null, baseCanvas: null, baseCtx: null, outCanvas: null, outCtx: null, gateCanvas: null, gateCtx: null, gateImg: null
     };
     const C = () => V.EdgeTAMCore;
@@ -105,18 +106,51 @@
       own.status = 'loading';
       try {
         await V.loadOrt();
-        if (typeof ort === 'undefined') throw new Error('onnxruntime-web unavailable');
-        const gpu = typeof navigator !== 'undefined' && !!navigator.gpu;
-        const id = gpu ? 'edgetam' : 'edgetam-fp32';                   // fp16 encoder needs WebGPU; fp32 runs on wasm
-        const { bytes, entry } = await V.ModelStore.load(id, { onProgress: opts && opts.onProgress });
-        const ext = Object.keys(entry.external).map((path) => ({ path, data: bytes[entry.external[path]] }));
-        const mkExt = (name) => ext.filter((e) => e.path === name);
-        own.enc = await ort.InferenceSession.create(bytes[entry.encoder], { executionProviders: gpu ? ['webgpu', 'wasm'] : ['wasm'], graphOptimizationLevel: 'all', externalData: mkExt(Object.keys(entry.external).find((k) => /vision_encoder/.test(k))) });
-        own.dec = await ort.InferenceSession.create(bytes[entry.decoder], { executionProviders: ['wasm'], graphOptimizationLevel: 'all', externalData: mkExt('prompt_encoder_mask_decoder.onnx_data') });
-        own.ortRef = ort; own.status = 'ready';
-      } catch (e) { own.status = 'failed'; own.gateError = String((e && e.message) || e); }
+        if (typeof ort === 'undefined' || !ort.InferenceSession) throw new Error('onnxruntime-web unavailable');
+        const gpuAvailable = typeof navigator !== 'undefined' && !!navigator.gpu;
+        // A WebGPU-capable browser is not proof that this specific fp16 graph
+        // will compile or execute on its adapter. Try the accelerated model,
+        // then fall back to the fp32/WASM checkpoint before declaring the gate
+        // unavailable. CPU-only browsers never download the fp16 model.
+        const candidates = gpuAvailable ? ['edgetam', 'edgetam-fp32'] : ['edgetam-fp32'];
+        const failures = [];
+        for (const id of candidates) {
+          let encoder = null, decoder = null;
+          try {
+            const { bytes, entry } = await V.ModelStore.load(id, { onProgress: opts && opts.onProgress });
+            const external = entry.external || {};
+            const ext = Object.keys(external).map((path) => ({ path, data: bytes[external[path]] }));
+            const encoderDataName = Object.keys(external).find((path) => /vision_encoder/.test(path));
+            const decoderDataName = Object.keys(external).find((path) => /prompt_encoder_mask_decoder/.test(path));
+            const gpu = id === 'edgetam';
+            const encoderProviders = gpu ? ['webgpu', 'wasm'] : ['wasm'];
+            encoder = await ort.InferenceSession.create(bytes[entry.encoder], {
+              executionProviders: encoderProviders,
+              graphOptimizationLevel: 'all',
+              externalData: encoderDataName ? ext.filter((item) => item.path === encoderDataName) : []
+            });
+            decoder = await ort.InferenceSession.create(bytes[entry.decoder], {
+              executionProviders: ['wasm'],
+              graphOptimizationLevel: 'all',
+              externalData: decoderDataName ? ext.filter((item) => item.path === decoderDataName) : []
+            });
+            own.enc = encoder; own.dec = decoder; own.ortRef = ort;
+            own.modelId = id; own.usingWebGPU = gpu;
+            own.precisionFallback = failures.length ? failures.join(' | ') : null;
+            own.gateError = null; own.status = 'ready';
+            return;
+          } catch (error) {
+            try { encoder && encoder.release && encoder.release(); } catch (e) {}
+            try { decoder && decoder.release && decoder.release(); } catch (e) {}
+            failures.push(id + ': ' + String(error && error.message || error));
+          }
+        }
+        throw new Error('No EdgeTAM runtime variant could start: ' + failures.join(' | '));
+      } catch (e) {
+        own.status = 'failed';
+        own.gateError = String((e && e.message) || e);
+      }
     }
-
     async function refresh(video, baseAlpha) {
       if (own.busy || own.status !== 'ready') return;
       own.busy = true;
@@ -220,7 +254,14 @@
       },
       get label() { return String(base.label || 'Matte') + ' + EdgeTAM cleanup' + (own.status === 'failed' ? ' (cleanup unavailable)' : ''); },
       set label(v) { base.label = v; },
-      get edgetam() { return { status: own.status, error: own.gateError, gateActive: !!own.gate, refreshEvery: o.refreshEvery, info: own.info }; }
+      get edgetam() {
+        return {
+          status: own.status, error: own.gateError, gateActive: !!own.gate,
+          refreshEvery: o.refreshEvery, modelId: own.modelId,
+          runtime: own.usingWebGPU ? 'webgpu' : (own.modelId ? 'wasm' : null),
+          precisionFallback: own.precisionFallback, info: own.info
+        };
+      }
     };
 
     return new Proxy(base, {
