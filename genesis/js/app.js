@@ -167,7 +167,7 @@
           cand = c.make();
           cand.lowLightBoost = lowLightBoostEnabled;
           cand.onProgress = (p) => showBenchNote('Loading high-quality model: ' + Math.round(p * 100) + '%');
-          await cand.initialize(quality);
+          await withTimeout(cand.initialize(quality), 45000, c.name + ' model initialization timed out after 45 seconds');
           if (stale()) { cand.dispose?.(); cand = null; return; }
           showBenchNote('Testing speed on this device (' + c.name + ')...');
           benchBusy = true;
@@ -202,7 +202,7 @@
           if (!clearlySlow && ms > maxMs() && cand.threads > 1) {
             showBenchNote(c.name + ' needs ' + Math.round(ms) + ' ms with ' + cand.threads + ' threads. Checking with 1 thread...');
             const edge = cand.longEdge; try { cand.dispose?.(); } catch (e0) {} cand = c.make(); cand.lowLightBoost = lowLightBoostEnabled;
-            await cand.initialize(quality, { threads: 1 }); cand.longEdge = edge;
+            await withTimeout(cand.initialize(quality, { threads: 1 }), 45000, c.name + ' single-thread initialization timed out after 45 seconds'); cand.longEdge = edge;
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
             const one = await timeProvider(cand, 4, 1, 600);
             if (one < ms) { ms = one; results.threads = 1; }
@@ -286,7 +286,22 @@
     try {
     for (let i = 0; i < warmup + frames; i++) {
       const t0 = performance.now();
-      await provider.segment(els.video);
+      // A broken worker or backend must not pin Automatic mode in "testing"
+      // forever. The candidate is disposed by its caller after this timeout.
+      const timeoutMs = Math.max(1500, Math.min(12000, maxMs() * 8));
+      let timeoutHandle = null;
+      const inference = Promise.resolve().then(() => provider.segment(els.video));
+      inference.catch(() => {}); // the timeout can win while a worker rejects later
+      try {
+        await Promise.race([
+          inference,
+          new Promise((_, reject) => {
+            timeoutHandle = setTimeout(() => reject(new Error('Matting inference timed out after ' + Math.round(timeoutMs) + ' ms')), timeoutMs);
+          })
+        ]);
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      }
       const dt = performance.now() - t0;
       if (i >= warmup) times.push(dt);
       // Never freeze the UI: let taps/paint run between frames, and stop early only when the device is clearly far too slow on TWO measured frames in a row.
