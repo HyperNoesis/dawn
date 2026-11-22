@@ -173,6 +173,9 @@ function withTimeout(promise, ms, label) {
 
       const provider = V.MatteEngines.createProvider('genesis-hybrid-tam');
       if (!provider || typeof provider.initialize !== 'function') throw new Error('MatteEngine factory did not construct the selected UltraMatte route');
+      if (!V.GLMatte) throw new Error('Studio GLMatte edge/decontamination stage was not loaded');
+      const edgeMatte = new V.GLMatte();
+      if (!edgeMatte.ok) throw new Error('Studio GLMatte failed to initialize: ' + (edgeMatte.error || 'unknown'));
       const tInit = performance.now();
       await Promise.race([
         provider.initialize('fast', { threads: 1 }),
@@ -199,6 +202,26 @@ function withTimeout(promise, ms, label) {
         const segmentMs = performance.now() - t0;
         const mask = output && output.segmentationMask;
         if (!mask || !(mask.width > 0 && mask.height > 0)) throw new Error('UltraMatte returned an invalid alpha image on frame ' + frame);
+
+        // Exercise the same GPU guided-upsample + temporal + edge-colour
+        // decontamination stage used by render-core.js, not a raw mask-only
+        // canvas composite. This makes the saved cutout preview representative
+        // of Genesis Studio's actual final foreground path.
+        const renderedForeground = edgeMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
+        if (!renderedForeground) throw new Error('Studio GLMatte returned no foreground on frame ' + frame);
+        const renderedPixels = renderedForeground.getContext('2d', { willReadFrequently: true })
+          .getImageData(0, 0, renderedForeground.width, renderedForeground.height).data;
+        let renderedForegroundCount = 0, renderedSoftCount = 0;
+        for (let i = 0; i < renderedPixels.length; i += 4) {
+          const alpha = renderedPixels[i + 3];
+          if (alpha > 16) renderedForegroundCount++;
+          if (alpha > 8 && alpha < 247) renderedSoftCount++;
+        }
+        const renderedPixelCount = renderedPixels.length / 4;
+        const renderedForegroundRatio = renderedForegroundCount / renderedPixelCount;
+        if (renderedForegroundRatio < 0.01 || renderedForegroundRatio > 0.98) {
+          throw new Error('Studio GLMatte returned an implausible foreground alpha: ' + renderedForegroundRatio);
+        }
 
         const canvas = document.createElement('canvas');
         canvas.width = mask.width; canvas.height = mask.height;
@@ -242,10 +265,7 @@ function withTimeout(promise, ms, label) {
           compositeCtx.fillStyle = ((x / cell + y / cell) % 2) ? '#c8c8c8' : '#eeeeee';
           compositeCtx.fillRect(x, y, cell, cell);
         }
-        compositeCtx.drawImage(sourceFrame, 0, 0, mask.width, mask.height);
-        compositeCtx.globalCompositeOperation = 'destination-in';
-        compositeCtx.drawImage(mask, 0, 0, mask.width, mask.height);
-        compositeCtx.globalCompositeOperation = 'source-over';
+        compositeCtx.drawImage(renderedForeground, 0, 0, mask.width, mask.height);
         preview = { comparison: comparison.toDataURL('image/png'), composite: composite.toDataURL('image/png') };
         if (invalid) throw new Error('UltraMatte produced non-finite alpha values');
         if (foregroundRatio < 0.01 || foregroundRatio > 0.98) {
@@ -256,7 +276,13 @@ function withTimeout(promise, ms, label) {
           width: mask.width, height: mask.height,
           foregroundRatio: +foregroundRatio.toFixed(4),
           softEdgeRatio: +(soft / pixels).toFixed(4),
-          alphaMean: +(alphaSum / pixels / 255).toFixed(4)
+          alphaMean: +(alphaSum / pixels / 255).toFixed(4),
+          renderEdgeStage: {
+            foregroundRatio: +renderedForegroundRatio.toFixed(4),
+            softEdgeRatio: +(renderedSoftCount / renderedPixelCount).toFixed(4),
+            outputWidth: renderedForeground.width,
+            outputHeight: renderedForeground.height
+          }
         });
         const frameHybrid = provider.hy || {};
         hybridFrames.push({
@@ -286,6 +312,7 @@ function withTimeout(promise, ms, label) {
           bandPct: hybrid.bandPct || 0, size: hybrid.size || null,
           errors: hybrid.errors || 0, snapshotFailures: hybrid.snapshotFailures || 0
         },
+        renderMatte: { active: !!edgeMatte.ok, error: edgeMatte.error || null },
         edgeTam: {
           status: edge.status, gateActive: !!edge.gateActive,
           error: edge.error || null
@@ -302,6 +329,7 @@ function withTimeout(promise, ms, label) {
     if (!result.hybridFrames.some((frame) => frame.tiles > 0 && frame.budget > 0 && frame.refined > 0)) {
       throw new Error('UltraMatte passed without executing high-resolution tile refinement on either camera frame: ' + JSON.stringify(result.hybridFrames));
     }
+    if (!result.renderMatte || !result.renderMatte.active) throw new Error('Studio GLMatte final edge/decontamination stage was not active: ' + JSON.stringify(result.renderMatte));
     if (result.edgeTam.status !== 'ready') throw new Error('EdgeTAM status is not ready: ' + JSON.stringify(result.edgeTam));
     if (!result.edgeTam.gateActive) throw new Error('EdgeTAM did not produce an active subject gate: ' + JSON.stringify(result.edgeTam));
     if (!pageErrors.length) {
