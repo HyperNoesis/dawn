@@ -209,8 +209,15 @@ function withTimeout(promise, ms, label) {
         // of Genesis Studio's actual final foreground path.
         const renderedForeground = edgeMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
         if (!renderedForeground) throw new Error('Studio GLMatte returned no foreground on frame ' + frame);
-        const renderedPixels = renderedForeground.getContext('2d', { willReadFrequently: true })
-          .getImageData(0, 0, renderedForeground.width, renderedForeground.height).data;
+        // The GLMatte canvas already owns a WebGL2 context; read it back by
+        // drawing into a separate 2D canvas (a canvas cannot switch context types).
+        const renderedReadback = document.createElement('canvas');
+        renderedReadback.width = renderedForeground.width;
+        renderedReadback.height = renderedForeground.height;
+        const renderedReadbackCtx = renderedReadback.getContext('2d', { willReadFrequently: true });
+        if (!renderedReadbackCtx) throw new Error('Could not create the GLMatte readback canvas context');
+        renderedReadbackCtx.drawImage(renderedForeground, 0, 0);
+        const renderedPixels = renderedReadbackCtx.getImageData(0, 0, renderedReadback.width, renderedReadback.height).data;
         let renderedForegroundCount = 0, renderedSoftCount = 0;
         for (let i = 0; i < renderedPixels.length; i += 4) {
           const alpha = renderedPixels[i + 3];
