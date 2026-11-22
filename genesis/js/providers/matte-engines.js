@@ -11,12 +11,12 @@
   const V = root.VS = root.VS || {};
   const KEY = 'vs_matte_engine';
   const ENGINES = [
-    ['modnet', 'MODNet (default)'],
+    ['modnet', 'MODNet (compatibility fallback)'],
     ['edgetam', 'MODNet + EdgeTAM cleanup (Apache-2.0, +30 MB)'],
     ['birefnet', 'BiRefNet lite (WebGPU, +115 MB, MIT)'],
     ['ppmatting-v2', 'PP-MattingV2 (BETA, +34 MB, Apache-2.0)'],
     ['genesis-hybrid', 'Genesis Hybrid (BETA: boundary refinement, +34 MB, Apache-2.0)'],
-    ['genesis-hybrid-tam', 'Genesis UltraMatte (BETA: EdgeTAM + boundary refinement, +64 MB, Apache-2.0)'],
+    ['genesis-hybrid-tam', 'Genesis UltraMatte (recommended advanced default, +64 MB, Apache-2.0)'],
     ['ppmatting-hrnet', 'PP-Matting HRNet (lab / export benchmark, +94 MB, Apache-2.0)']
   ];
 
@@ -48,9 +48,9 @@
 
   function pref() {
     try {
-      const value = localStorage.getItem(KEY) || 'modnet';
+      const value = localStorage.getItem(KEY) || 'genesis-hybrid-tam';
       return visibleEngines().some((e) => e[0] === value) ? value : 'modnet';
-    } catch (e) { return 'modnet'; }
+    } catch (e) { return 'genesis-hybrid-tam'; }
   }
 
   function setPref(value) {
@@ -206,9 +206,9 @@
 
     const explain = () => {
       if (select.value === 'birefnet' && !(navigator.gpu)) return 'BiRefNet requires WebGPU. This browser may not be able to run it.';
-      if (select.value === 'genesis-hybrid-tam') return 'Experimental. Runs PP-MattingV2, EdgeTAM subject gating and local boundary refinement. Quality and speed still require real-device validation.';
-      if (select.value === 'genesis-hybrid') return 'Experimental. Uses PP-MattingV2 with local boundary refinement. Quality and speed still require real-device validation.';
-      if (select.value === 'ppmatting-v2' || select.value === 'ppmatting-hrnet') return 'Experimental model. The live performance governor may resize it, but the selected engine will not be silently replaced.';
+      if (select.value === 'genesis-hybrid-tam') return 'Recommended advanced local pipeline: PP-MattingV2, EdgeTAM subject gating, uncertainty-band boundary refinement and motion-aware temporal processing. The runtime governor may reduce resolution or fall back when measured performance or model readiness requires it.';
+      if (select.value === 'genesis-hybrid') return 'Advanced local pipeline: PP-MattingV2 with uncertainty-band boundary refinement and motion-aware temporal processing.';
+      if (select.value === 'ppmatting-v2' || select.value === 'ppmatting-hrnet') return 'Alternative matting engine. The live performance governor may resize it; engine changes and fallback reasons remain visible.';
       if (select.value === 'edgetam') return 'Adds subject-level stray-object cleanup to the soft matte. It does not create hair alpha detail.';
       return 'Uses the standard MODNet matting path.';
     };
