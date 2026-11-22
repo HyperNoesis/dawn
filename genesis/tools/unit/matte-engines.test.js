@@ -51,10 +51,12 @@ assert.match(unavailable.label, /unavailable/i);
   V.GenesisHybridProvider = class { constructor() { this.kind = 'hybrid'; } };
   V.EdgeTAMCore = {};
   V.EdgeTAMGate = { create: (base) => ({ kind: 'ultramatte', base }) };
+  M.setPref('genesis-hybrid-tam');
   const advanced = new R();
   assert.strictEqual(advanced.kind, 'ultramatte');
   assert.strictEqual(advanced.base.kind, 'hybrid');
 
+  M.setPref('edgetam');
   await assert.rejects(unavailable.initialize(), /Missing/);
 
   // Once the exact EdgeTAM dependencies are available, construct that route.
