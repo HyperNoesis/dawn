@@ -315,8 +315,13 @@
       // A broken worker or backend must not pin Automatic mode in "testing"
       // forever. The candidate is disposed by its caller after this timeout.
       const timeoutMs = Math.max(1500, Math.min(12000, maxMs() * 8));
-      let timeoutHandle = null;
-      const inference = Promise.resolve().then(() => provider.segment(els.video));
+      let timeoutHandle = null, sourceFrame = null;
+      try { sourceFrame = captureSegmentationFrame(els.video); }
+      catch (snapshotError) { sourceFrame = els.video; } // safe legacy fallback when canvas allocation is unavailable
+      // Candidate probes use the same immutable frame and per-provider flight
+      // guard as foreground inference. A timeout must not destroy the frame or
+      // let the next candidate call overlap a still-running stateful provider.
+      const inference = segmentationFlight.run(provider, sourceFrame, () => provider.segment(sourceFrame));
       inference.catch(() => {}); // the timeout can win while a worker rejects later
       try {
         await Promise.race([
@@ -327,6 +332,7 @@
         ]);
       } finally {
         if (timeoutHandle) clearTimeout(timeoutHandle);
+        if (sourceFrame && sourceFrame !== els.video) releaseSegmentationFrame(sourceFrame);
       }
       const dt = performance.now() - t0;
       if (i >= warmup) times.push(dt);
