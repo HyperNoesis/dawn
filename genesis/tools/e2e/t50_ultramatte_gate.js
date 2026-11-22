@@ -230,6 +230,12 @@ function withTimeout(promise, ms, label) {
       if (!softEdgeMatte.ok) throw new Error('Soft-edge A/B GLMatte failed to initialize: ' + (softEdgeMatte.error || 'unknown'));
       softEdgeMatte.edgeLo = 0.15;
       softEdgeMatte.edgeHi = 0.85;
+      // A second, deliberately conservative transition tests whether the
+      // current 0.30/0.70 tightening is erasing useful hair/antialias alpha.
+      const featherEdgeMatte = new V.GLMatte();
+      if (!featherEdgeMatte.ok) throw new Error('Feather-edge A/B GLMatte failed to initialize: ' + (featherEdgeMatte.error || 'unknown'));
+      featherEdgeMatte.edgeLo = 0.05;
+      featherEdgeMatte.edgeHi = 0.95;
       const tInit = performance.now();
       await Promise.race([
         provider.initialize('fast', { threads: 1 }),
@@ -291,6 +297,16 @@ function withTimeout(promise, ms, label) {
         softReadbackCtx.drawImage(softForeground, 0, 0);
         const softPixels = softReadbackCtx.getImageData(0, 0, softReadback.width, softReadback.height).data;
         const softQuality = scoreAlpha(softPixels, 3, gtFullRgba, 0, softReadback.width, softReadback.height);
+        const featherForeground = featherEdgeMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
+        if (!featherForeground) throw new Error('Feather-edge A/B GLMatte returned no foreground on frame ' + frame);
+        const featherReadback = document.createElement('canvas');
+        featherReadback.width = featherForeground.width;
+        featherReadback.height = featherForeground.height;
+        const featherReadbackCtx = featherReadback.getContext('2d', { willReadFrequently: true });
+        if (!featherReadbackCtx) throw new Error('Could not create feather-edge A/B readback canvas');
+        featherReadbackCtx.drawImage(featherForeground, 0, 0);
+        const featherPixels = featherReadbackCtx.getImageData(0, 0, featherReadback.width, featherReadback.height).data;
+        const featherQuality = scoreAlpha(featherPixels, 3, gtFullRgba, 0, featherReadback.width, featherReadback.height);
         let renderedForegroundCount = 0, renderedSoftCount = 0;
         for (let i = 0; i < renderedPixels.length; i += 4) {
           const alpha = renderedPixels[i + 3];
@@ -374,6 +390,10 @@ function withTimeout(promise, ms, label) {
             edgeThresholdExperiment: {
               parameters: { edgeLo: 0.15, edgeHi: 0.85 },
               studioMatte: softQuality
+            },
+            featherEdgeExperiment: {
+              parameters: { edgeLo: 0.05, edgeHi: 0.95 },
+              studioMatte: featherQuality
             }
           }
         });
@@ -412,7 +432,11 @@ function withTimeout(promise, ms, label) {
         renderMatte: {
           active: !!edgeMatte.ok,
           error: edgeMatte.error || null,
-          edgeThresholdExperiment: { active: !!softEdgeMatte.ok, parameters: { edgeLo: 0.15, edgeHi: 0.85 } }
+          edgeThresholdExperiment: {
+            active: !!softEdgeMatte.ok,
+            parameters: { edgeLo: 0.15, edgeHi: 0.85 },
+            featherExperiment: { active: !!featherEdgeMatte.ok, parameters: { edgeLo: 0.05, edgeHi: 0.95 } }
+          }
         },
         edgeTam: {
           status: edge.status, gateActive: !!edge.gateActive,
