@@ -311,13 +311,13 @@
     if (provider.usingWebGPU) warmup = Math.max(warmup, 8);     // v0.80: WebGPU compiles its shaders on the first runs; those are not the model's speed
     try {
     for (let i = 0; i < warmup + frames; i++) {
-      const t0 = performance.now();
       // A broken worker or backend must not pin Automatic mode in "testing"
       // forever. The candidate is disposed by its caller after this timeout.
       const timeoutMs = Math.max(1500, Math.min(12000, maxMs() * 8));
       let timeoutHandle = null, sourceFrame = null;
       try { sourceFrame = captureSegmentationFrame(els.video); }
       catch (snapshotError) { sourceFrame = els.video; } // safe legacy fallback when canvas allocation is unavailable
+      const t0 = performance.now(); // match live timing: exclude snapshot setup, measure provider inference only
       // Candidate probes use the same immutable frame and per-provider flight
       // guard as foreground inference. A timeout must not destroy the frame or
       // let the next candidate call overlap a still-running stateful provider.

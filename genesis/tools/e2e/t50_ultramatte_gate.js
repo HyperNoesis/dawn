@@ -223,6 +223,13 @@ function withTimeout(promise, ms, label) {
       if (!V.GLMatte) throw new Error('Studio GLMatte edge/decontamination stage was not loaded');
       const edgeMatte = new V.GLMatte();
       if (!edgeMatte.ok) throw new Error('Studio GLMatte failed to initialize: ' + (edgeMatte.error || 'unknown'));
+      // Diagnostic-only A/B: widen the alpha transition while keeping every
+      // other renderer parameter identical. Do not change Studio defaults until
+      // labelled-reference scores and the existing edge suite agree.
+      const softEdgeMatte = new V.GLMatte();
+      if (!softEdgeMatte.ok) throw new Error('Soft-edge A/B GLMatte failed to initialize: ' + (softEdgeMatte.error || 'unknown'));
+      softEdgeMatte.edgeLo = 0.15;
+      softEdgeMatte.edgeHi = 0.85;
       const tInit = performance.now();
       await Promise.race([
         provider.initialize('fast', { threads: 1 }),
@@ -274,6 +281,16 @@ function withTimeout(promise, ms, label) {
         renderedReadbackCtx.drawImage(renderedForeground, 0, 0);
         const renderedPixels = renderedReadbackCtx.getImageData(0, 0, renderedReadback.width, renderedReadback.height).data;
         const renderedQuality = scoreAlpha(renderedPixels, 3, gtFullRgba, 0, renderedReadback.width, renderedReadback.height);
+        const softForeground = softEdgeMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
+        if (!softForeground) throw new Error('Soft-edge A/B GLMatte returned no foreground on frame ' + frame);
+        const softReadback = document.createElement('canvas');
+        softReadback.width = softForeground.width;
+        softReadback.height = softForeground.height;
+        const softReadbackCtx = softReadback.getContext('2d', { willReadFrequently: true });
+        if (!softReadbackCtx) throw new Error('Could not create soft-edge A/B readback canvas');
+        softReadbackCtx.drawImage(softForeground, 0, 0);
+        const softPixels = softReadbackCtx.getImageData(0, 0, softReadback.width, softReadback.height).data;
+        const softQuality = scoreAlpha(softPixels, 3, gtFullRgba, 0, softReadback.width, softReadback.height);
         let renderedForegroundCount = 0, renderedSoftCount = 0;
         for (let i = 0; i < renderedPixels.length; i += 4) {
           const alpha = renderedPixels[i + 3];
@@ -353,7 +370,11 @@ function withTimeout(promise, ms, label) {
           },
           syntheticGroundTruth: {
             rawMatte: rawQuality,
-            studioMatte: renderedQuality
+            studioMatte: renderedQuality,
+            edgeThresholdExperiment: {
+              parameters: { edgeLo: 0.15, edgeHi: 0.85 },
+              studioMatte: softQuality
+            }
           }
         });
         const frameHybrid = provider.hy || {};
@@ -388,7 +409,11 @@ function withTimeout(promise, ms, label) {
           bandPct: hybrid.bandPct || 0, size: hybrid.size || null,
           errors: hybrid.errors || 0, snapshotFailures: hybrid.snapshotFailures || 0
         },
-        renderMatte: { active: !!edgeMatte.ok, error: edgeMatte.error || null },
+        renderMatte: {
+          active: !!edgeMatte.ok,
+          error: edgeMatte.error || null,
+          edgeThresholdExperiment: { active: !!softEdgeMatte.ok, parameters: { edgeLo: 0.15, edgeHi: 0.85 } }
+        },
         edgeTam: {
           status: edge.status, gateActive: !!edge.gateActive,
           error: edge.error || null
