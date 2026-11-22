@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Genesis matte benchmark JSONL entry",
+  "type": "object",
+  "required": [
+    "id",
+    "prediction",
+    "target",
+    "usage_rights",
+    "provenance"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prediction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence": {
+      "type": "string"
+    },
+    "frame": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "split": {
+      "enum": [
+        "train",
+        "validation",
+        "test",
+        "benchmark"
+      ]
+    },
+    "usage_rights": {
+      "enum": [
+        "commercial-cleared",
+        "research-only",
+        "permission-pending"
+      ]
+    },
+    "provenance": {
+      "type": "string",
+      "minLength": 1
+    },
+    "consent_or_lawful_basis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

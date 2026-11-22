@@ -86,6 +86,7 @@ jobs:
           python server/studio-export/test_scene_logic.py
           python server/studio-export/test_export_safety.py
           python server/studio-export/test_export_e2e.py
+          python tools/matte-bench/test_metrics.py
           python gpu/test_export_api.py
 
       - name: Verify the deployable site builds

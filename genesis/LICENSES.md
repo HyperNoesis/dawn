@@ -64,5 +64,7 @@ models/modnet.onnx (Apache-2.0) and models/rvm_mobilenetv3_fp32.onnx (GPL-3.0) a
 
 ## Deployment notes (v0.83)
 - **Public repo:** everything committed here is public if the repo is public. No keys are committed (`js/config.js` ships blank; scan done 10 Nov 2026). Never put real secrets in `js/config.js`: every visitor can read it.
-- **GPU image:** `modal-deploy.yml` builds an image that contains BiRefNet (MIT) and, unless `GENESIS_INCLUDE_REFERENCE=0`, MatAnyone 2 (non-commercial). The reference engine is refused by the API unless `ALLOW_REFERENCE=1`.
+- **GPU image:** MatAnyone 2 is excluded by default. `GENESIS_INCLUDE_REFERENCE=1` is an explicit opt-in for permitted reference evaluation, and the API still refuses that engine unless `ALLOW_REFERENCE=1`. Do not enable either flag for a paid workflow without written commercial permission.
+- **BiRefNet:** code/weight licence labels do not settle every training dataset's terms. Obtain dataset-rights review before training or commercial deployment.
+- **RVM:** GPL-3.0 browser files remain in the public repository and site distribution even though the adaptive default route no longer probes RVM automatically. Review/replace them before a closed-source paid release.
 - **Website models:** `models/rvm_mobilenetv3_fp32.onnx` is RVM (GPL-3.0) and is served publicly with the site. Replace it before commercial use.

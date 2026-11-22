@@ -113,6 +113,8 @@
       row('Hybrid tiles refined / budget', hy ? hy.refined + ' / ' + hy.budget : '--') +
       row('Boundary tiles / cached', hy ? hy.tiles + ' / ' + hy.cached : '--') +
       row('Boundary band', hy ? hy.bandPct + '%' : '--') +
+      row('Detail demand (heuristic)', hy && hy.critic ? hy.critic.detailDemandPct + '%' : '--') +
+      row('Textured boundary (heuristic)', hy && hy.critic ? hy.critic.texturedBoundaryPct + '%' : '--') +
       row('Hybrid errors', hy ? hy.errors + (hy.lastError ? ' · ' + hy.lastError : '') : '--') +
       row('Edge quality', e ? (e.value === '2' ? 'High' : 'Fast') : '--') +
       row('Quality mode', q ? (FRIENDLY[q.value] || q.value) : '--') +
