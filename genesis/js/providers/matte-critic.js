@@ -25,8 +25,9 @@ function analyse(alpha,width,height,options){
    // Compare adjacent native luma-grid cells. Wider source-space offsets can
    // alias alternating texture patterns and make thin strands look textureless.
    const sx=gridX(x),sy=gridY(y);
-   const gx=Math.abs((Number(luma[sy*lw+Math.min(lw-1,sx+1)])||0)-(Number(luma[sy*lw+Math.max(0,sx-1)])||0))/255;
-   const gy=Math.abs((Number(luma[Math.min(lh-1,sy+1)*lw+sx])||0)-(Number(luma[Math.max(0,sy-1)*lw+sx])||0))/255;
+   const centre=Number(luma[sy*lw+sx])||0;
+   const gx=Math.max(Math.abs((Number(luma[sy*lw+Math.min(lw-1,sx+1)])||0)-centre),Math.abs((Number(luma[sy*lw+Math.max(0,sx-1)])||0)-centre))/255;
+   const gy=Math.max(Math.abs((Number(luma[Math.min(lh-1,sy+1)*lw+sx])||0)-centre),Math.abs((Number(luma[Math.max(0,sy-1)*lw+sx])||0)-centre))/255;
    texture=smoothstep(0.04,0.28,gx+gy);
   }
   if(edge>0.12&&texture>0.2)textured++;priority[i]=Math.round(255*clamp01(edge*(hasLuma?0.25+0.75*texture:1)));
