@@ -40,6 +40,10 @@ if (!fs.existsSync(path.join(FIX, 'webcam_clip.mjpeg'))) {
   console.error('FAIL synthetic camera fixture missing: ' + path.join(FIX, 'webcam_clip.mjpeg'));
   process.exit(1);
 }
+if (!fs.existsSync(path.join(FIX, 'gt_alpha_640x480.png'))) {
+  console.error('FAIL synthetic ground-truth alpha fixture missing: ' + path.join(FIX, 'gt_alpha_640x480.png'));
+  process.exit(1);
+}
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -171,6 +175,49 @@ function withTimeout(promise, ms, label) {
         poll();
       });
 
+      // The camera clip is generated from a labelled synthetic subject. Keep
+      // the exact alpha reference in the report so we can track quality changes
+      // over time; this is a deterministic regression fixture, not real-person proof.
+      const loadImage = (url) => new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Could not load reference image: ' + url));
+        image.src = url;
+      });
+      const gtImage = await loadImage(baseUrl + '/tools/e2e/fixtures/gt_alpha_640x480.png');
+      if (gtImage.naturalWidth !== 640 || gtImage.naturalHeight !== 480) {
+        throw new Error('Synthetic ground-truth alpha must be 640x480, got ' + gtImage.naturalWidth + 'x' + gtImage.naturalHeight);
+      }
+      const gtCanvas = document.createElement('canvas');
+      gtCanvas.width = 640; gtCanvas.height = 480;
+      const gtCtx = gtCanvas.getContext('2d', { willReadFrequently: true });
+      if (!gtCtx) throw new Error('Could not create ground-truth alpha readback canvas');
+      gtCtx.drawImage(gtImage, 0, 0, 640, 480);
+      const gtFullRgba = gtCtx.getImageData(0, 0, 640, 480).data;
+      const scoreAlpha = (prediction, predictionChannel, reference, referenceChannel, width, height) => {
+        const count = width * height;
+        let absolute = 0, edgeAbsolute = 0, edgeCount = 0;
+        let intersection = 0, union = 0, predForeground = 0, refForeground = 0;
+        for (let i = 0; i < count; i++) {
+          const p = prediction[i * 4 + predictionChannel];
+          const g = reference[i * 4 + referenceChannel];
+          absolute += Math.abs(p - g);
+          if (g > 8 && g < 247) { edgeAbsolute += Math.abs(p - g); edgeCount++; }
+          const pf = p > 127, gf = g > 127;
+          if (pf) predForeground++;
+          if (gf) refForeground++;
+          if (pf && gf) intersection++;
+          if (pf || gf) union++;
+        }
+        return {
+          alphaMAE: +(absolute / Math.max(1, count) / 255).toFixed(4),
+          edgeMAE: edgeCount ? +(edgeAbsolute / edgeCount / 255).toFixed(4) : null,
+          foregroundIoU: +(intersection / Math.max(1, union)).toFixed(4),
+          predictedForegroundRatio: +(predForeground / Math.max(1, count)).toFixed(4),
+          referenceForegroundRatio: +(refForeground / Math.max(1, count)).toFixed(4)
+        };
+      };
+
       const provider = V.MatteEngines.createProvider('genesis-hybrid-tam');
       if (!provider || typeof provider.initialize !== 'function') throw new Error('MatteEngine factory did not construct the selected UltraMatte route');
       if (!V.GLMatte) throw new Error('Studio GLMatte edge/decontamination stage was not loaded');
@@ -218,6 +265,7 @@ function withTimeout(promise, ms, label) {
         if (!renderedReadbackCtx) throw new Error('Could not create the GLMatte readback canvas context');
         renderedReadbackCtx.drawImage(renderedForeground, 0, 0);
         const renderedPixels = renderedReadbackCtx.getImageData(0, 0, renderedReadback.width, renderedReadback.height).data;
+        const renderedQuality = scoreAlpha(renderedPixels, 3, gtFullRgba, 0, renderedReadback.width, renderedReadback.height);
         let renderedForegroundCount = 0, renderedSoftCount = 0;
         for (let i = 0; i < renderedPixels.length; i += 4) {
           const alpha = renderedPixels[i + 3];
@@ -235,6 +283,11 @@ function withTimeout(promise, ms, label) {
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         ctx.drawImage(mask, 0, 0);
         const rgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        // Resize the labelled alpha to the exact provider output size.
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(gtImage, 0, 0, canvas.width, canvas.height);
+        const gtMaskRgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const rawQuality = scoreAlpha(rgba, 3, gtMaskRgba, 0, canvas.width, canvas.height);
         let foreground = 0, soft = 0, alphaSum = 0, invalid = 0;
         for (let i = 0; i < rgba.length; i += 4) {
           const a = rgba[i + 3];
@@ -289,6 +342,10 @@ function withTimeout(promise, ms, label) {
             softEdgeRatio: +(renderedSoftCount / renderedPixelCount).toFixed(4),
             outputWidth: renderedForeground.width,
             outputHeight: renderedForeground.height
+          },
+          syntheticGroundTruth: {
+            rawMatte: rawQuality,
+            studioMatte: renderedQuality
           }
         });
         const frameHybrid = provider.hy || {};
@@ -310,6 +367,10 @@ function withTimeout(promise, ms, label) {
         ortSource: V.ortSource || 'unknown',
         ortVersion: ort.env && ort.env.versions ? ort.env.versions.web : 'unknown',
         initMs: Math.round(initMs),
+        syntheticGroundTruth: {
+          source: 'tools/e2e/fixtures/gt_alpha_640x480.png',
+          scope: 'synthetic labelled fixture only; not real-person accuracy evidence'
+        },
         samples,
         hybridFrames,
         preview,
