@@ -241,9 +241,17 @@ function withTimeout(promise, ms, label) {
         const sourceFrame = document.createElement('canvas');
         sourceFrame.width = video.videoWidth; sourceFrame.height = video.videoHeight;
         sourceFrame.getContext('2d').drawImage(video, 0, 0);
+        // Mirror app.js captureSegmentationFrame(): the model, tracker and
+        // renderer must consume this one immutable frame, not the live camera
+        // which may advance while inference is awaiting its worker.
+        Object.defineProperties(sourceFrame, {
+          videoWidth: { configurable: true, value: sourceFrame.width },
+          videoHeight: { configurable: true, value: sourceFrame.height },
+          __vsSegmentationFrame: { configurable: true, value: true }
+        });
         const t0 = performance.now();
         const output = await Promise.race([
-          provider.segment(video),
+          provider.segment(sourceFrame),
           new Promise((_, reject) => setTimeout(() => reject(new Error('UltraMatte frame ' + frame + ' timed out')), 120000))
         ]);
         const segmentMs = performance.now() - t0;
