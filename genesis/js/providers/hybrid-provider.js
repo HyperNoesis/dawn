@@ -69,7 +69,12 @@
       // EdgeTAM tracker and every high-resolution tile must describe the SAME camera
       // frame; reading the live <video> again after the worker responds mixes frames.
       let refineFrame = null;
-      if (hyOn() && !this.hy.off && isFullFrameRect(this._rect, video)) {
+      // Hybrid tiles need a snapshot while active. The outer EdgeTAM wrapper also
+      // needs that same source frame when Hybrid is disabled or its circuit-breaker
+      // has opened, so it can still apply the subject gate to the base matte.
+      const hybridEnabled = hyOn() && !this.hy.off;
+      const trackerNeedsFallbackFrame = !!this.trackerHook;
+      if ((hybridEnabled || trackerNeedsFallbackFrame) && isFullFrameRect(this._rect, video)) {
         try {
           refineFrame = this._snapshotFrame(video);
           // Keep the exact input available to a wrapping EdgeTAM fallback.

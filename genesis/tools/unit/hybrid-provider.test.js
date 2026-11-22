@@ -1,7 +1,8 @@
 // Smoke test of GenesisHybridProvider with a fake parent provider, fake canvas and fake model worker (no browser).
 const assert = require('assert');
 global.window = global; global.VS = {};
-global.localStorage = { getItem: () => null };
+let hybridEnabled = null;
+global.localStorage = { getItem: (key) => key === 'vs_hy' ? hybridEnabled : null };
 const PC = require('../../js/providers/ppmatting-core.js'); VS.PPMattingCore = PC;
 require('../../js/providers/band-refine-core.js');
 const W = 1280, H = 720, CW = 320, CH = 192;
@@ -98,5 +99,22 @@ require('../../js/providers/hybrid-provider.js');
   const T = new VS.GenesisHybridProvider(); T._send = async () => { throw new Error('boom'); };
   let last; for (let i = 0; i < 4; i++) last = await T.segment(video);
   assert.ok(T.hy.off && last.segmentationMask.tag === 'parent', 'falls back to parent after repeated errors');
+  // Even when Hybrid detail is disabled or its circuit-breaker is open,
+  // EdgeTAM's outer wrapper still needs the paired source frame for fallback.
+  for (const scenario of [
+    { name: 'Hybrid detail disabled', enabled: '0', off: false },
+    { name: 'Hybrid circuit breaker open', enabled: null, off: true }
+  ]) {
+    hybridEnabled = scenario.enabled;
+    const fallback = new VS.GenesisHybridProvider();
+    fallback.hy.off = scenario.off;
+    fallback.setTrackerHook({ ready: () => true, async step() { return true; } });
+    const sourceFrameId = video.frameId;
+    await fallback.segment(video);
+    assert.ok(fallback._hyLastFrame, scenario.name + ' must preserve a source snapshot for EdgeTAM fallback');
+    assert.strictEqual(fallback._hyLastFrame.frameId, sourceFrameId, scenario.name + ' snapshot is paired with base inference');
+    assert.notStrictEqual(fallback._hyLastFrame.frameId, video.frameId, scenario.name + ' must not fall back to the advanced live frame');
+  }
+  hybridEnabled = null;
   console.log('hybrid-provider: all assertions passed (' + JSON.stringify(P.hy) + ')');
 })().catch((e) => { console.error(e); process.exit(1); });
