@@ -76,10 +76,15 @@ require('../../js/providers/hybrid-provider.js');
     const blobParent = Parent.prototype.segment;
     Parent.prototype.segment = async function (video) { global.__parentFrameId = video.frameId; await Promise.resolve(); video.frameId++; const a = coarseMatte(); for (let y = 150; y < 190; y++) for (let x = 10; x < 60; x++) a[y * CW + x] = x % 2 ? 128 : 255; this.lastRaw = a; this.lastRefined = null; this.lastSize = [CW, CH]; this.lastGuard = null; return { segmentationMask: { tag: 'parent' } }; };
     const plain = new VS.GenesisHybridProvider(); await plain.segment(video);
-    const tr = new VS.GenesisHybridProvider(); let called = 0;
-    tr.setTrackerHook({ ready: () => true, async step(v, alpha, w, h) { called++; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < w * 0.25) alpha[y * w + x] = 0; return true; } });
+    const tr = new VS.GenesisHybridProvider(); let called = 0, trackerFrameId = null;
+    tr.setTrackerHook({ ready: () => true, async step(v, alpha, w, h) {
+      called++; trackerFrameId = v.frameId;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < w * 0.25) alpha[y * w + x] = 0;
+      return true;
+    } });
     await tr.segment(video);
     assert.ok(called === 1 && tr.hy.tracked === true, 'tracker hook ran and reported tracked');
+    assert.strictEqual(trackerFrameId, global.__parentFrameId, 'EdgeTAM tracker must receive the exact pre-inference frame snapshot used by the coarse matte');
     assert.ok(tr.hy.tiles < plain.hy.tiles, 'stray blob removed before the band: tiles ' + plain.hy.tiles + ' -> ' + tr.hy.tiles);
     const bad = new VS.GenesisHybridProvider(); bad.setTrackerHook({ ready: () => true, async step() { throw new Error('tam down'); } });
     const rb = await bad.segment(video); assert.ok(rb.segmentationMask.width >= 192 && bad.hy.tracked === false && bad.hy.errors === 0, 'a failing tracker never breaks the hybrid');

@@ -164,7 +164,10 @@
       this._frames++;
       const up = PC.resizeAlpha(coarse, cw, ch, OW, OH, this._up);
       const T = this.trackerHook;
-      if (T && T.ready()) { try { this.hy.tracked = !!(await T.step(video, up, OW, OH)); } catch (e) { this.hy.tracked = false; } }   // tracker mask first, then band + tiles
+      // The coarse mask and Hybrid's own tiles are tied to refineFrame, the
+      // snapshot captured before asynchronous base inference. EdgeTAM must
+      // inspect that exact image too, never the now-advanced live <video>.
+      if (T && T.ready()) { try { this.hy.tracked = !!(await T.step(refineFrame, up, OW, OH)); } catch (e) { this.hy.tracked = false; } }   // tracker mask first, then band + tiles
       const band = B.buildBand(up, OW, OH, { dilate: 5 }), soft = B.feather(band, OW, OH, 2);
       const cands = B.pickTiles(band, OW, OH, TILE, { minCount: 12 });
       // Incremental detail allowance, independent of coarse inference latency.
