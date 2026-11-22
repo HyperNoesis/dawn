@@ -212,9 +212,12 @@
         const ageB = b.cached ? this._frames - (b.cached.frame || 0) : 1e9;
         return ageB - ageA || b.core.count - a.core.count;
       });
-      let refined = 0, rejected = 0; const fresh = new Set();
+      // Budget actual model invocations, not accepted tiles. Rejected outputs
+      // still consumed the worker/GPU time and must not trigger extra attempts.
+      let attempted = 0, refined = 0, rejected = 0; const fresh = new Set();
       for (const c of stale) {
-        if (refined >= budget) break;
+        if (attempted >= budget) break;
+        attempted++;
         const t1 = performance.now(), r = await this._refineTile(frameSnapshot, c.core, OW, OH, vw, vh);
         this._tileMs = this._tileMs * 0.7 + (performance.now() - t1) * 0.3;
         if (B.tileSane(c.coarse, r)) {
@@ -248,7 +251,7 @@
       const px = this._oimg.data;
       for (let i = 0, n = OW * OH; i < n; i++) { const o = i * 4; px[o] = px[o + 1] = px[o + 2] = 255; px[o + 3] = up[i]; }
       this._oc.x.putImageData(this._oimg, 0, 0);
-      Object.assign(this.hy, { tiles: cands.length, budget, budgetMs: target, tileMs: Math.round(this._tileMs), bandPct: Math.round(100 * B.count(band) / (OW * OH) * 10) / 10, refined, cached, rejected, warped, size: [OW, OH] });
+      Object.assign(this.hy, { tiles: cands.length, budget, budgetMs: target, tileMs: Math.round(this._tileMs), bandPct: Math.round(100 * B.count(band) / (OW * OH) * 10) / 10, attempted, refined, cached, rejected, warped, size: [OW, OH] });
       return this._oc.c;
     }
   }

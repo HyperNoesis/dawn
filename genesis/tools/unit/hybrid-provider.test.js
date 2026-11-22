@@ -101,6 +101,9 @@ require('../../js/providers/hybrid-provider.js');
   // bad model output (all zero) must be rejected and never crash
   mode = 'bad'; const Q = new VS.GenesisHybridProvider(); await Q.segment(video);
   assert.ok(Q.hy.rejected > 0 || Q.hy.budget === 0, 'garbage tile rejected: ' + JSON.stringify(Q.hy));
+  assert.ok(Q.hy.attempted <= Q.hy.budget, 'rejected model runs still consume the per-frame inference budget: ' + JSON.stringify(Q.hy));
+  assert.strictEqual(Q.hy.attempted, Q.hy.refined + Q.hy.rejected,
+    'every attempted tile is accounted for as accepted or rejected');
   // a throwing worker 3x switches the hybrid stage off and falls back to the parent matte
   const T = new VS.GenesisHybridProvider(); T._send = async () => { throw new Error('boom'); };
   let last; for (let i = 0; i < 4; i++) last = await T.segment(video);

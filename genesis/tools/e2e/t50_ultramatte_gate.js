@@ -261,7 +261,7 @@ function withTimeout(promise, ms, label) {
         const frameHybrid = provider.hy || {};
         hybridFrames.push({
           frame, tiles: frameHybrid.tiles || 0, budget: frameHybrid.budget || 0,
-          refined: frameHybrid.refined || 0, cached: frameHybrid.cached || 0,
+          attempted: frameHybrid.attempted || 0, refined: frameHybrid.refined || 0, cached: frameHybrid.cached || 0,
           rejected: frameHybrid.rejected || 0, bandPct: frameHybrid.bandPct || 0,
           errors: frameHybrid.errors || 0, snapshotFailures: frameHybrid.snapshotFailures || 0
         });
@@ -282,7 +282,7 @@ function withTimeout(promise, ms, label) {
         preview,
         hybrid: {
           tiles: hybrid.tiles || 0, budget: hybrid.budget || 0,
-          refined: hybrid.refined || 0, rejected: hybrid.rejected || 0,
+          attempted: hybrid.attempted || 0, refined: hybrid.refined || 0, rejected: hybrid.rejected || 0,
           bandPct: hybrid.bandPct || 0, size: hybrid.size || null,
           errors: hybrid.errors || 0, snapshotFailures: hybrid.snapshotFailures || 0
         },
@@ -295,6 +295,9 @@ function withTimeout(promise, ms, label) {
 
     if (result.hybrid.errors || result.hybrid.snapshotFailures) {
       throw new Error('Hybrid refinement reported an internal error: ' + JSON.stringify(result.hybrid));
+    }
+    if (!result.hybridFrames.every((frame) => frame.attempted <= frame.budget && frame.attempted === frame.refined + frame.rejected)) {
+      throw new Error('UltraMatte exceeded its inference budget or failed to account for attempted tiles: ' + JSON.stringify(result.hybridFrames));
     }
     if (!result.hybridFrames.some((frame) => frame.tiles > 0 && frame.budget > 0 && frame.refined > 0)) {
       throw new Error('UltraMatte passed without executing high-resolution tile refinement on either camera frame: ' + JSON.stringify(result.hybridFrames));
