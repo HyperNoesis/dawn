@@ -43,7 +43,7 @@
       super();
       this.title = 'Genesis UltraMatte';
       this.label = 'Genesis UltraMatte · PP-MattingV2 (beta, local)';
-      this.hy = { tiles: 0, budget: 0, bandPct: 0, attempted: 0, deferred: 0, refined: 0, cached: 0, rejected: 0, warped: 0, ms: 0, size: null, errors: 0, lastError: '', snapshotFailures: 0, lastSnapshotError: '', off: false };
+      this.hy = { tiles: 0, budget: 0, bandPct: 0, attempted: 0, deferred: 0, refined: 0, cached: 0, rejected: 0, warped: 0, ms: 0, size: null, critic: null, errors: 0, lastError: '', snapshotFailures: 0, lastSnapshotError: '', off: false };
       this._hyReset();
     }
 
@@ -58,6 +58,7 @@
 
     async initialize(qualityMode, opts) {
       if (!V.BandRefineCore) await V.loadScript('js/providers/band-refine-core.js');
+      if (!V.MatteCritic) await V.loadScript('js/providers/matte-critic.js');
       return super.initialize(qualityMode, opts);
     }
 
@@ -180,10 +181,15 @@
       // A tiny luma grid lets tile ranking favour uncertain, texture-rich
       // boundaries (flyaway hair/fabric) instead of only large smooth edges.
       const frame = this._readFrameLuma(frameSnapshot, vw, vh);
-      const cands = B.pickTiles(band, OW, OH, TILE, {
+      let cands = B.pickTiles(band, OW, OH, TILE, {
         minCount: 12, guideLuma: frame.data, guideWidth: frame.width, guideHeight: frame.height,
         textureWeight: 1.25, textureThreshold: 14
       });
+      // The critic is a boundary-demand heuristic, not calibrated confidence.
+      const critic = V.MatteCritic && V.MatteCritic.analyse
+        ? V.MatteCritic.analyse(up, OW, OH, { luma: frame.data, lumaWidth: frame.width, lumaHeight: frame.height })
+        : null;
+      if (critic) cands = V.MatteCritic.rankTiles(cands, critic.priority, OW, OH, band);
       // Incremental detail allowance, independent of coarse inference latency.
       const target = lsNum('vs_hy_target_ms', 60, 15, 300), maxTiles = lsNum('vs_hy_tiles', 3, 0, 8);
       // Start from a conservative independent tile estimate. Deriving it from
@@ -231,7 +237,7 @@
         const failedA = this._rejects.get(a.core.key), failedB = this._rejects.get(b.core.key);
         const ageA = a.cached ? this._frames - (a.cached.frame || 0) : failedA ? this._frames - failedA.frame : 1e9;
         const ageB = b.cached ? this._frames - (b.cached.frame || 0) : failedB ? this._frames - failedB.frame : 1e9;
-        return ageB - ageA || b.core.count - a.core.count;
+        return ageB - ageA || (b.core.criticPriority || 0) - (a.core.criticPriority || 0) || b.core.count - a.core.count;
       });
       // Budget actual model invocations, not accepted tiles. Rejected outputs
       // still consumed the worker/GPU time and must not trigger extra attempts.
@@ -277,7 +283,7 @@
       const px = this._oimg.data;
       for (let i = 0, n = OW * OH; i < n; i++) { const o = i * 4; px[o] = px[o + 1] = px[o + 2] = 255; px[o + 3] = up[i]; }
       this._oc.x.putImageData(this._oimg, 0, 0);
-      Object.assign(this.hy, { tiles: cands.length, budget, budgetMs: target, tileMs: Math.round(this._tileMs), bandPct: Math.round(100 * B.count(band) / (OW * OH) * 10) / 10, attempted, deferred, refined, cached, rejected, warped, size: [OW, OH] });
+      Object.assign(this.hy, { tiles: cands.length, budget, budgetMs: target, tileMs: Math.round(this._tileMs), bandPct: Math.round(100 * B.count(band) / (OW * OH) * 10) / 10, critic: critic ? critic.stats : null, attempted, deferred, refined, cached, rejected, warped, size: [OW, OH] });
       return this._oc.c;
     }
   }
