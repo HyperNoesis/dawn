@@ -155,8 +155,8 @@
       return out;
     }
 
-    async _hybrid(video, coarse, cw, ch, coarseMs) {
-      const B = V.BandRefineCore, PC = V.PPMattingCore, vw = video.videoWidth || video.width, vh = video.videoHeight || video.height;
+    async _hybrid(frameSnapshot, coarse, cw, ch, coarseMs) {
+      const B = V.BandRefineCore, PC = V.PPMattingCore, vw = frameSnapshot.videoWidth || frameSnapshot.width, vh = frameSnapshot.videoHeight || frameSnapshot.height;
       const longCap = lsNum('vs_hy_long', 512, 256, 768), long = Math.min(Math.max(vw, vh), 2 * Math.max(cw, ch), longCap), sc = long / Math.max(vw, vh);
       const OW = Math.round(vw * sc / 2) * 2, OH = Math.round(vh * sc / 2) * 2;
       if (OW < IN || OH < IN) return null;                                   // too small for 192 px crops: plain PP-MattingV2
@@ -164,10 +164,9 @@
       this._frames++;
       const up = PC.resizeAlpha(coarse, cw, ch, OW, OH, this._up);
       const T = this.trackerHook;
-      // The coarse mask and Hybrid's own tiles are tied to refineFrame, the
-      // snapshot captured before asynchronous base inference. EdgeTAM must
-      // inspect that exact image too, never the now-advanced live <video>.
-      if (T && T.ready()) { try { this.hy.tracked = !!(await T.step(refineFrame, up, OW, OH)); } catch (e) { this.hy.tracked = false; } }   // tracker mask first, then band + tiles
+      // frameSnapshot is the immutable canvas captured before asynchronous base inference.
+      // EdgeTAM, luma/cache checks and high-resolution tile crops all consume this same frame.
+      if (T && T.ready()) { try { this.hy.tracked = !!(await T.step(frameSnapshot, up, OW, OH)); } catch (e) { this.hy.tracked = false; } }   // tracker mask first, then band + tiles
       const band = B.buildBand(up, OW, OH, { dilate: 5 }), soft = B.feather(band, OW, OH, 2);
       const cands = B.pickTiles(band, OW, OH, TILE, { minCount: 12 });
       // Incremental detail allowance, independent of coarse inference latency.
@@ -181,7 +180,7 @@
       // above the allowance. Without exploration, a pessimistic estimate could
       // permanently switch refinement off for the rest of the session.
       if (budget === 0 && maxTiles > 0 && this._frames % 30 === 0) budget = 1;
-      const frame = this._readFrameLuma(video, vw, vh);
+      const frame = this._readFrameLuma(frameSnapshot, vw, vh);
       const cores = cands.map((core) => ({
         core,
         coarse: B.extract(up, core, OW),
@@ -207,7 +206,7 @@
       let refined = 0, rejected = 0; const fresh = new Set();
       for (const c of stale) {
         if (refined >= budget) break;
-        const t1 = performance.now(), r = await this._refineTile(video, c.core, OW, OH, vw, vh);
+        const t1 = performance.now(), r = await this._refineTile(frameSnapshot, c.core, OW, OH, vw, vh);
         this._tileMs = this._tileMs * 0.7 + (performance.now() - t1) * 0.3;
         if (B.tileSane(c.coarse, r)) {
           this._cache.set(c.core.key, { coarse: c.coarse, alpha: r, signature: c.signature, frame: this._frames });

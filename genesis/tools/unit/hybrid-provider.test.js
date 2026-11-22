@@ -85,6 +85,7 @@ require('../../js/providers/hybrid-provider.js');
     await tr.segment(video);
     assert.ok(called === 1 && tr.hy.tracked === true, 'tracker hook ran and reported tracked');
     assert.strictEqual(trackerFrameId, global.__parentFrameId, 'EdgeTAM tracker must receive the exact pre-inference frame snapshot used by the coarse matte');
+    assert.notStrictEqual(trackerFrameId, video.frameId, 'EdgeTAM must not read the advanced live camera frame');
     assert.ok(tr.hy.tiles < plain.hy.tiles, 'stray blob removed before the band: tiles ' + plain.hy.tiles + ' -> ' + tr.hy.tiles);
     const bad = new VS.GenesisHybridProvider(); bad.setTrackerHook({ ready: () => true, async step() { throw new Error('tam down'); } });
     const rb = await bad.segment(video); assert.ok(rb.segmentationMask.width >= 192 && bad.hy.tracked === false && bad.hy.errors === 0, 'a failing tracker never breaks the hybrid');
