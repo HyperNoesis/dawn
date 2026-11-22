@@ -764,6 +764,8 @@
   let asyncSegBusy = false, asyncSegPromise = null, asyncSegLastAt = 0, asyncSegDone = 0, asyncSegMinGap = 150;
   let cachedMaskBitmap = null;     // last full-size mask, reused while async inference is in flight
   const maskMotion = window.VS.MaskMotion ? new window.VS.MaskMotion.MaskMotion() : null;
+  // Tracks timed-out inference jobs so snapshots remain valid until the underlying provider truly settles.
+  const segmentationFlight = window.VS.SegmentationFlight.create();
   let segMsEma = 0;                // smoothed wall-clock cost of one segmentation call, ms
   let loopToken = 0;               // bumped on every start/stop: a superseded processLoop iteration exits instead of racing the new loop
   let perfBannerShown = false;     // true only while the degrade banner is showing a PERFORMANCE message (not camera-lost / crash)
@@ -1793,9 +1795,15 @@
     return frame;
   }
 
+  function releaseSegmentationFrameNow(frame) {
+    try { frame.width = 1; frame.height = 1; } catch (e) { /* best-effort release */ }
+  }
+
   function releaseSegmentationFrame(frame) {
     if (!frame) return;
-    try { frame.width = 1; frame.height = 1; } catch (e) { /* best-effort release */ }
+    // A watchdog timeout ends the UI wait, not necessarily the worker's use
+    // of this canvas. Defer shrinking it until every provider job releases it.
+    segmentationFlight.releaseFrame(frame, releaseSegmentationFrameNow);
   }
 
   function maskMotionEnabled() {
@@ -1883,6 +1891,9 @@
   }
 
   function startAsyncSeg(token) {
+    // A timed-out provider remains quarantined until its underlying promise
+    // settles or the governor swaps it out; do not enqueue work on it.
+    if (segmentationFlight.isBusy(segProvider)) return;
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
     let sourceFrame = null;
@@ -1960,6 +1971,14 @@
 
     let results = null, maskFrame = null;
     if (runInference) {
+      if (segmentationFlight.isBusy(segProvider)) {
+        // The previous call exceeded its watchdog. Keep the last rendered
+        // frame rather than corrupting a still-in-use snapshot or overlapping
+        // stateful temporal/tile inference on the same provider.
+        dropPerson();
+        scheduleNext();
+        return;
+      }
       const segStart = performance.now(); maskFrame = camFrames();
       try {
         results = await segWithWatchdog(segProvider, inferenceSnapshot || els.video);
@@ -2419,7 +2438,8 @@
     const lim = segMsEma > 0 ? Math.max(4000, Math.min(15000, segMsEma * 12)) : 10000;
     let timer;
     const guard = new Promise((_, rej) => { timer = setTimeout(() => { if (!ladderSwapping && !upgrading && !benchBusy) govStalls++; rej(new Error('the matting engine did not answer within ' + Math.round(lim / 1000) + ' s')); }, lim); });
-    const run = p.segment(video); run.catch(() => {});
+    const run = segmentationFlight.run(p, video, () => p.segment(video));
+    run.catch(() => {});
     return Promise.race([run, guard]).finally(() => clearTimeout(timer));
   }
   async function govSwap(a, gv) {
