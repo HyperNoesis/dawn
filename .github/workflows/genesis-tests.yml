@@ -73,6 +73,11 @@ jobs:
           node tools/e2e/t44_threads_gate.js
           node tools/e2e/t42_enhance.js
           node tools/e2e/t49_matte_edge_gate.js
+          # Diagnostic-only profile comparison across clean, noisy, low-contrast,
+          # dark, hair-strand and motion-lag synthetic edge cases. Keep production
+          # defaults unchanged until these profiles and real footage agree.
+          MATTE_PARAMS='{"edgeLo":0.15,"edgeHi":0.85}' node tools/e2e/t49_matte_edge_gate.js --report
+          MATTE_PARAMS='{"edgeLo":0.05,"edgeHi":0.95}' node tools/e2e/t49_matte_edge_gate.js --report
           node tools/e2e/t50_ultramatte_gate.js
 
       - name: Run export safety and API regression suites

@@ -67,17 +67,53 @@
     return out;
   }
 
-  /** Grid of `tile` px cores that contain at least minCount band pixels, busiest first. */
+  /**
+   * Grid of tile cores ranked by expected detail value. Band occupancy remains
+   * the baseline signal; optional guide-luma gradients boost regions where
+   * uncertain alpha overlaps fine image texture (hair/fabric/fingers).
+   * This is deliberately bounded to the small luma grid, not full-res pixels.
+   */
   function pickTiles(band, w, h, tile, opt) {
     opt = opt || {};
-    const minCount = opt.minCount != null ? opt.minCount : 24, maxTiles = opt.maxTiles != null ? opt.maxTiles : Infinity, list = [];
+    const minCount = opt.minCount != null ? opt.minCount : 24;
+    const maxTiles = opt.maxTiles != null ? opt.maxTiles : Infinity;
+    const luma = opt.guideLuma;
+    const lw = opt.guideWidth | 0, lh = opt.guideHeight | 0;
+    const textureWeight = Math.max(0, Math.min(2, Number(opt.textureWeight) || 0));
+    const textureThreshold = opt.textureThreshold != null ? opt.textureThreshold : 14;
+    const hasGuide = !!(luma && lw > 1 && lh > 1 && luma.length >= lw * lh && textureWeight > 0);
+    const list = [];
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     for (let ty = 0; ty * tile < h; ty++) for (let tx = 0; tx * tile < w; tx++) {
       const x0 = tx * tile, y0 = ty * tile, tw = Math.min(tile, w - x0), th = Math.min(tile, h - y0);
       let c = 0;
       for (let y = 0; y < th; y++) { const row = (y0 + y) * w + x0; for (let x = 0; x < tw; x++) c += band[row + x]; }
-      if (c >= minCount) list.push({ x: x0, y: y0, w: tw, h: th, count: c, key: tx + ',' + ty });
+      if (c < minCount) continue;
+
+      let textureDensity = 0;
+      if (hasGuide) {
+        const gx0 = Math.max(0, Math.floor(x0 / w * lw));
+        const gy0 = Math.max(0, Math.floor(y0 / h * lh));
+        const gx1 = Math.min(lw, Math.ceil((x0 + tw) / w * lw));
+        const gy1 = Math.min(lh, Math.ceil((y0 + th) / h * lh));
+        let bandSamples = 0, texturedSamples = 0;
+        for (let gy = gy0; gy < gy1; gy++) for (let gx = gx0; gx < gx1; gx++) {
+          const ax = clamp(Math.floor((gx + 0.5) * w / lw), x0, x0 + tw - 1);
+          const ay = clamp(Math.floor((gy + 0.5) * h / lh), y0, y0 + th - 1);
+          if (!band[ay * w + ax]) continue;
+          bandSamples++;
+          const left = gy * lw + Math.max(0, gx - 1), right = gy * lw + Math.min(lw - 1, gx + 1);
+          const top = Math.max(0, gy - 1) * lw + gx, bottom = Math.min(lh - 1, gy + 1) * lw + gx;
+          const dx = Math.abs(luma[right] - luma[left]);
+          const dy = Math.abs(luma[bottom] - luma[top]);
+          if (dx + dy >= textureThreshold) texturedSamples++;
+        }
+        textureDensity = texturedSamples / Math.max(1, bandSamples);
+      }
+      const score = c * (1 + textureWeight * textureDensity);
+      list.push({ x: x0, y: y0, w: tw, h: th, count: c, textureDensity, score, key: tx + ',' + ty });
     }
-    list.sort((a, b) => b.count - a.count);
+    list.sort((a, b) => b.score - a.score || b.count - a.count);
     return list.slice(0, maxTiles);
   }
 

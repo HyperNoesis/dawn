@@ -58,6 +58,26 @@ t('pickTiles returns the busiest tile first and honours minCount and maxTiles', 
   assert.strictEqual(B.pickTiles(band, w, h, 128, { minCount: 5, maxTiles: 1 }).length, 1);
 });
 
+t('pickTiles prioritizes textured uncertain boundaries when occupancy is equal', () => {
+  const w = 256, h = 128, lw = 16, lh = 8, band = new Uint8Array(w * h);
+  const luma = new Uint8Array(lw * lh).fill(100);
+  // Equal one-sample-per-cell band occupancy in both 128px tiles.
+  for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) {
+    const ax = Math.floor((x + 0.5) * w / lw), ay = Math.floor((y + 0.5) * h / lh);
+    band[ay * w + ax] = 1;
+    if (x < 8) luma[y * lw + x] = ((x + y) & 1) ? 220 : 20;
+  }
+  const ranked = B.pickTiles(band, w, h, 128, {
+    minCount: 1, guideLuma: luma, guideWidth: lw, guideHeight: lh,
+    textureWeight: 1.25, textureThreshold: 14
+  });
+  assert.strictEqual(ranked.length, 2);
+  assert.strictEqual(ranked[0].key, '0,0');
+  assert.strictEqual(ranked[0].count, ranked[1].count);
+  assert.ok(ranked[0].textureDensity > ranked[1].textureDensity);
+  assert.ok(ranked[0].score > ranked[1].score);
+});
+
 t('cropRect is always size x size, inside the image and covers the core', () => {
   const W = 768, H = 432, size = 192, margin = 32;
   for (const core of [{ x: 0, y: 0, w: 128, h: 128 }, { x: 640, y: 384, w: 128, h: 48 }, { x: 256, y: 128, w: 128, h: 128 }, { x: 640, y: 0, w: 128, h: 128 }]) {

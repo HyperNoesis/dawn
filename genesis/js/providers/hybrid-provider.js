@@ -177,7 +177,13 @@
       // EdgeTAM, luma/cache checks and high-resolution tile crops all consume this same frame.
       if (T && T.ready()) { try { this.hy.tracked = !!(await T.step(frameSnapshot, up, OW, OH)); } catch (e) { this.hy.tracked = false; } }   // tracker mask first, then band + tiles
       const band = B.buildBand(up, OW, OH, { dilate: 5 }), soft = B.feather(band, OW, OH, 2);
-      const cands = B.pickTiles(band, OW, OH, TILE, { minCount: 12 });
+      // A tiny luma grid lets tile ranking favour uncertain, texture-rich
+      // boundaries (flyaway hair/fabric) instead of only large smooth edges.
+      const frame = this._readFrameLuma(frameSnapshot, vw, vh);
+      const cands = B.pickTiles(band, OW, OH, TILE, {
+        minCount: 12, guideLuma: frame.data, guideWidth: frame.width, guideHeight: frame.height,
+        textureWeight: 1.25, textureThreshold: 14
+      });
       // Incremental detail allowance, independent of coarse inference latency.
       const target = lsNum('vs_hy_target_ms', 60, 15, 300), maxTiles = lsNum('vs_hy_tiles', 3, 0, 8);
       // Start from a conservative independent tile estimate. Deriving it from
@@ -189,7 +195,6 @@
       // above the allowance. Without exploration, a pessimistic estimate could
       // permanently switch refinement off for the rest of the session.
       if (budget === 0 && maxTiles > 0 && this._frames % 30 === 0) budget = 1;
-      const frame = this._readFrameLuma(frameSnapshot, vw, vh);
       const cores = cands.map((core) => ({
         core,
         coarse: B.extract(up, core, OW),
