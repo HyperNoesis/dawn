@@ -25,10 +25,16 @@ assert.notStrictEqual(R, Worker_);
 assert.strictEqual(R.isSupported(), true);
 assert.strictEqual(R.threadsFor(), 4);
 
-// Default pref: original behaviour, instanceof intact.
+// New installs default to the complete advanced pipeline. Existing explicit preferences remain respected.
+assert.strictEqual(M.pref(), 'genesis-hybrid-tam');
+M.setPref('modnet');
 let a = new R();
 assert.strictEqual(a.kind, 'worker');
 assert.ok(a instanceof R && a instanceof Worker_ && a instanceof Seg);
+M.setPref('genesis-hybrid-tam');
+const initialAdvanced = new R();
+assert.strictEqual(initialAdvanced.requestedEngine, 'genesis-hybrid-tam');
+assert.match(initialAdvanced.label, /unavailable/i);
 
 // Explicit EdgeTAM selection with missing dependencies must fail visibly,
 // not silently claim that the selected engine is running.
@@ -37,6 +43,18 @@ const unavailable = new R();
 assert.strictEqual(unavailable.requestedEngine, 'edgetam');
 assert.match(unavailable.label, /unavailable/i);
 (async () => {
+  await assert.rejects(initialAdvanced.initialize(), /Missing/);
+
+  // The recommended default constructs the complete UltraMatte route when dependencies exist.
+  V.ModelStore = {}; V.PPMattingCore = {}; V.TemporalMatte = {}; V.BandRefineCore = {};
+  V.PPMattingV2Provider = class { constructor() { this.kind = 'ppv2'; } };
+  V.GenesisHybridProvider = class { constructor() { this.kind = 'hybrid'; } };
+  V.EdgeTAMCore = {};
+  V.EdgeTAMGate = { create: (base) => ({ kind: 'ultramatte', base }) };
+  const advanced = new R();
+  assert.strictEqual(advanced.kind, 'ultramatte');
+  assert.strictEqual(advanced.base.kind, 'hybrid');
+
   await assert.rejects(unavailable.initialize(), /Missing/);
 
   // Once the exact EdgeTAM dependencies are available, construct that route.
