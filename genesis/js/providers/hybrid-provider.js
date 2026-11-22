@@ -43,12 +43,12 @@
       super();
       this.title = 'Genesis UltraMatte';
       this.label = 'Genesis UltraMatte · PP-MattingV2 (beta, local)';
-      this.hy = { tiles: 0, budget: 0, bandPct: 0, refined: 0, cached: 0, rejected: 0, warped: 0, ms: 0, size: null, errors: 0, lastError: '', snapshotFailures: 0, lastSnapshotError: '', off: false };
+      this.hy = { tiles: 0, budget: 0, bandPct: 0, attempted: 0, deferred: 0, refined: 0, cached: 0, rejected: 0, warped: 0, ms: 0, size: null, errors: 0, lastError: '', snapshotFailures: 0, lastSnapshotError: '', off: false };
       this._hyReset();
     }
 
     _hyReset() {
-      this._cache = new Map(); this._prevOut = null; this._prevLuma = null; this._ow = 0; this._oh = 0; this._tileMs = 0; this._frames = 0;
+      this._cache = new Map(); this._rejects = new Map(); this._prevOut = null; this._prevLuma = null; this._ow = 0; this._oh = 0; this._tileMs = 0; this._frames = 0;
     }
 
     /** Tracker-first mode (EdgeTAM): the hook cleans the coarse matte BEFORE the uncertainty band is built, so stray blobs never cost refinement tiles. */
@@ -207,9 +207,25 @@
       };
       // Oldest and never-refined tiles get first claim on the budget so a few
       // high-band tiles cannot starve the remainder of the subject outline.
-      const stale = cores.filter(needsRefresh).sort((a, b) => {
-        const ageA = a.cached ? this._frames - (a.cached.frame || 0) : 1e9;
-        const ageB = b.cached ? this._frames - (b.cached.frame || 0) : 1e9;
+      // A tile that failed the coarse-consistency check is temporarily cooled
+      // down. Retry immediately if its coarse matte or local source signature
+      // changes; otherwise let other boundary tiles use the limited budget.
+      const retryFrames = lsNum('vs_hy_reject_backoff', 4, 1, 12);
+      let deferred = 0;
+      const stale = cores.filter((c) => {
+        if (!needsRefresh(c)) return false;
+        const failed = this._rejects.get(c.core.key);
+        if (failed) {
+          const age = this._frames - failed.frame;
+          const changed = B.meanAbsDiff(failed.coarse, c.coarse) > 4 ||
+            B.meanAbsDiff(failed.signature, c.signature) > 10;
+          if (age < retryFrames && !changed) { deferred++; return false; }
+        }
+        return true;
+      }).sort((a, b) => {
+        const failedA = this._rejects.get(a.core.key), failedB = this._rejects.get(b.core.key);
+        const ageA = a.cached ? this._frames - (a.cached.frame || 0) : failedA ? this._frames - failedA.frame : 1e9;
+        const ageB = b.cached ? this._frames - (b.cached.frame || 0) : failedB ? this._frames - failedB.frame : 1e9;
         return ageB - ageA || b.core.count - a.core.count;
       });
       // Budget actual model invocations, not accepted tiles. Rejected outputs
@@ -221,9 +237,14 @@
         const t1 = performance.now(), r = await this._refineTile(frameSnapshot, c.core, OW, OH, vw, vh);
         this._tileMs = this._tileMs * 0.7 + (performance.now() - t1) * 0.3;
         if (B.tileSane(c.coarse, r)) {
+          this._rejects.delete(c.core.key);
           this._cache.set(c.core.key, { coarse: c.coarse, alpha: r, signature: c.signature, frame: this._frames });
           fresh.add(c.core.key); refined++;
-        } else { this._cache.delete(c.core.key); rejected++; }
+        } else {
+          this._cache.delete(c.core.key);
+          this._rejects.set(c.core.key, { coarse: c.coarse.slice(), signature: c.signature.slice(), frame: this._frames });
+          rejected++;
+        }
       }
       let cached = 0;
       for (const c of cores) {
@@ -232,7 +253,7 @@
         B.mergeCore(up, e.alpha, c.core, soft, OW);
         if (!fresh.has(c.core.key)) cached++;
       }
-      const keep = new Set(cands.map((c) => c.key)); for (const k of this._cache.keys()) if (!keep.has(k)) this._cache.delete(k);
+      const keep = new Set(cands.map((c) => c.key)); for (const k of this._cache.keys()) if (!keep.has(k)) this._cache.delete(k); for (const k of this._rejects.keys()) if (!keep.has(k)) this._rejects.delete(k);
 
       let warped = 0;
       const luma = frame.data;
@@ -251,7 +272,7 @@
       const px = this._oimg.data;
       for (let i = 0, n = OW * OH; i < n; i++) { const o = i * 4; px[o] = px[o + 1] = px[o + 2] = 255; px[o + 3] = up[i]; }
       this._oc.x.putImageData(this._oimg, 0, 0);
-      Object.assign(this.hy, { tiles: cands.length, budget, budgetMs: target, tileMs: Math.round(this._tileMs), bandPct: Math.round(100 * B.count(band) / (OW * OH) * 10) / 10, attempted, refined, cached, rejected, warped, size: [OW, OH] });
+      Object.assign(this.hy, { tiles: cands.length, budget, budgetMs: target, tileMs: Math.round(this._tileMs), bandPct: Math.round(100 * B.count(band) / (OW * OH) * 10) / 10, attempted, deferred, refined, cached, rejected, warped, size: [OW, OH] });
       return this._oc.c;
     }
   }

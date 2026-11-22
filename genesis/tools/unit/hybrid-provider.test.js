@@ -7,7 +7,7 @@ const PC = require('../../js/providers/ppmatting-core.js'); VS.PPMattingCore = P
 require('../../js/providers/band-refine-core.js');
 const W = 1280, H = 720, CW = 320, CH = 192;
 function coarseMatte() { const a = new Uint8Array(CW * CH); for (let y = 20; y < 180; y++) for (let x = 100; x < 220; x++) a[y * CW + x] = (x < 106 || x > 213) ? 128 : 255; return a; }
-let sends = [], mode = 'good';
+let sends = [], mode = 'good', frameLuma = 100;
 class Parent {
   // Match the real MODNet/PP parent: _rect is a full-frame object even when
   // ROI cropping is disabled. Hybrid must not mistake this for an active crop.
@@ -43,7 +43,7 @@ global.document = { createElement: () => {
     },
     putImageData() {},
     createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
-    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(100) })
+    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(frameLuma) })
   });
   return canvas;
 } };
@@ -104,6 +104,15 @@ require('../../js/providers/hybrid-provider.js');
   assert.ok(Q.hy.attempted <= Q.hy.budget, 'rejected model runs still consume the per-frame inference budget: ' + JSON.stringify(Q.hy));
   assert.strictEqual(Q.hy.attempted, Q.hy.refined + Q.hy.rejected,
     'every attempted tile is accounted for as accepted or rejected');
+  const firstBadKeys = Q.hy.rejected;
+  assert.ok(firstBadKeys > 0, 'the deliberately invalid model output records rejected tiles');
+  await Q.segment(video);
+  assert.ok(Q.hy.deferred > 0, 'unchanged rejected tiles are cooled down so other edges can use the budget');
+  assert.ok(Q.hy.attempted <= Q.hy.budget, 'cooldown does not bypass the inference budget');
+  frameLuma = 160; // a materially changed local image signature must bypass the cooldown
+  await Q.segment(video);
+  assert.ok(Q.hy.attempted > 0, 'meaningful source changes immediately reopen rejected tiles');
+  frameLuma = 100;
   // a throwing worker 3x switches the hybrid stage off and falls back to the parent matte
   const T = new VS.GenesisHybridProvider(); T._send = async () => { throw new Error('boom'); };
   let last; for (let i = 0; i < 4; i++) last = await T.segment(video);

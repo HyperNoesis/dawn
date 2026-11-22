@@ -261,7 +261,7 @@ function withTimeout(promise, ms, label) {
         const frameHybrid = provider.hy || {};
         hybridFrames.push({
           frame, tiles: frameHybrid.tiles || 0, budget: frameHybrid.budget || 0,
-          attempted: frameHybrid.attempted || 0, refined: frameHybrid.refined || 0, cached: frameHybrid.cached || 0,
+          attempted: frameHybrid.attempted || 0, deferred: frameHybrid.deferred || 0, refined: frameHybrid.refined || 0, cached: frameHybrid.cached || 0,
           rejected: frameHybrid.rejected || 0, bandPct: frameHybrid.bandPct || 0,
           errors: frameHybrid.errors || 0, snapshotFailures: frameHybrid.snapshotFailures || 0
         });
@@ -282,7 +282,7 @@ function withTimeout(promise, ms, label) {
         preview,
         hybrid: {
           tiles: hybrid.tiles || 0, budget: hybrid.budget || 0,
-          attempted: hybrid.attempted || 0, refined: hybrid.refined || 0, rejected: hybrid.rejected || 0,
+          attempted: hybrid.attempted || 0, deferred: hybrid.deferred || 0, refined: hybrid.refined || 0, rejected: hybrid.rejected || 0,
           bandPct: hybrid.bandPct || 0, size: hybrid.size || null,
           errors: hybrid.errors || 0, snapshotFailures: hybrid.snapshotFailures || 0
         },
