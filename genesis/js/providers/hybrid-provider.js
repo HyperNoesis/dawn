@@ -118,6 +118,10 @@
       const w = video && (video.videoWidth || video.width);
       const h = video && (video.videoHeight || video.height);
       if (!(w > 0 && h > 0)) throw new Error('Cannot snapshot a frame without dimensions');
+      // The app hands providers a dedicated canvas captured in the same JS
+      // turn as the render frame. It remains immutable until segment() resolves,
+      // so reusing it avoids a second full-resolution canvas copy on every call.
+      if (video && video.__vsSegmentationFrame === true && video.width === w && video.height === h) return video;
       if (!this._hyFrame || this._hyFrame.c.width !== w || this._hyFrame.c.height !== h) {
         this._hyFrame = this._canvas(w, h, false);
       }

@@ -51,6 +51,12 @@ global.performance = { now: () => Date.now() };
 require('../../js/providers/hybrid-provider.js');
 (async () => {
   const P = new VS.GenesisHybridProvider(), video = { videoWidth: W, videoHeight: H, frameId: 0 };
+  const immutableInput = { width: W, height: H, videoWidth: W, videoHeight: H, __vsSegmentationFrame: true };
+  assert.strictEqual(P._snapshotFrame(immutableInput), immutableInput,
+    'the app-owned immutable source canvas is reused without a second full-frame copy');
+  const liveInput = { videoWidth: W, videoHeight: H };
+  assert.notStrictEqual(P._snapshotFrame(liveInput), liveInput,
+    'live video inputs still receive an owned snapshot before asynchronous inference');
   const r1 = await P.segment(video);
   const firstTileFrames = global.__tileFrameIds.splice(0);
   assert.ok(r1.segmentationMask && r1.segmentationMask.width >= 192, 'hybrid canvas returned ' + JSON.stringify(P.hy));

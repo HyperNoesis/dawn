@@ -1785,7 +1785,10 @@
     // the existing ONNX provider contract without changing the underlying frame.
     Object.defineProperties(frame, {
       videoWidth: { configurable: true, value: width },
-      videoHeight: { configurable: true, value: height }
+      videoHeight: { configurable: true, value: height },
+      // Providers may safely reuse this per-inference immutable source instead
+      // of copying the entire camera frame into another scratch canvas.
+      __vsSegmentationFrame: { configurable: true, value: true }
     });
     return frame;
   }
