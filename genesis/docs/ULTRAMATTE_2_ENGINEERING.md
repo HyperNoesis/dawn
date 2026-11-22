@@ -115,3 +115,12 @@ New unit tests cover:
 - rejecting a tile that contradicts confident alpha pixels.
 
 These tests are wired into the repository's existing tools/unit/run-all.js discovery convention. The branch still needs its CI run, a production build and hands-on browser/device validation before merge or deployment.
+
+
+## Default runtime policy (quality-first)
+
+New installations select Genesis UltraMatte (engine ID: genesis-hybrid-tam) by default. This composes the licensed PP-MattingV2 coarse matte, EdgeTAM subject gate, uncertainty-band tile refinement and the provider's motion-aware temporal path. MODNet and MediaPipe remain compatibility/emergency routes rather than the first-choice quality path. Existing explicit user selections are preserved.
+
+The advanced route is not allowed to hide failures: dependency/model initialization errors, provider fallback reasons and the active engine must remain observable. The runtime quality governor is responsible for measured, reversible resolution/engine adaptation; it must not silently label a compatibility matte as UltraMatte. The default does not override a user's stored choice or bypass a device's safety/performance limits.
+
+**Important release boundary:** selecting the advanced pipeline by default is a product-policy change, not proof that its output is universally superior. The model still needs real-person alpha-reference evaluation and physical-device validation. No synthetic-only result may be described as real-world accuracy, and no app release should claim perfect segmentation.
