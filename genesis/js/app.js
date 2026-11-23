@@ -1183,11 +1183,22 @@
     const VSNS = window.VS;
     // Wait for the optional engine router and its selected model dependencies.
     // A rapid Start tap must not race the dynamic loader and start on the base model.
-    if (VSNS.matteEnginesReady) await VSNS.matteEnginesReady;
-    const matteChoice = VSNS.MatteEngines && VSNS.MatteEngines.pref ? VSNS.MatteEngines.pref() : 'modnet';
+    // Never let the optional engine router block Start: a stuck loader used to leave the camera step on "2" with a black preview.
+    // Each wait is time-limited; on timeout the light built-in model runs and the reason goes to Diagnostics.
+    const softWait = (p, ms) => Promise.race([Promise.resolve(p).catch(() => null), new Promise((r) => setTimeout(() => r('timeout'), ms))]);
+    if (VSNS.matteEnginesReady) {
+      const w = await softWait(VSNS.matteEnginesReady, 5000);
+      if (w === 'timeout') console.warn('Engine router was not ready after 5 s; continuing without waiting.');
+    }
+    let matteChoice = VSNS.MatteEngines && VSNS.MatteEngines.pref ? VSNS.MatteEngines.pref() : 'modnet';
     if (VSNS.MatteEngines && matteChoice !== 'modnet') {
-      const prepared = await VSNS.MatteEngines.ensureEngine(matteChoice);
-      if (!prepared.ok) VSNS.MatteEngines.reportActive(null, prepared.error);
+      const prepared = await softWait(VSNS.MatteEngines.ensureEngine(matteChoice), 20000);
+      if (prepared === 'timeout' || !prepared || !prepared.ok) {
+        const why = prepared === 'timeout' ? 'Selected engine took too long to prepare; using the standard engine for this start.' : (prepared && prepared.error) || 'Selected engine could not be prepared.';
+        VSNS.MatteEngines.reportActive(null, why);
+        try { showBenchNote(why); } catch (e) {}
+        matteChoice = 'modnet';
+      }
     }
     const pref = (els.modelSelect && els.modelSelect.value) || 'auto';
     const knownBench = readBench();
