@@ -1,4 +1,4 @@
-/* Segmentation diagnostics (v0.74). Presentation only: reads measured values the engine already publishes
+/* Segmentation diagnostics (v1.00). Presentation only: reads measured values the engine already publishes
    (#stats, #renderHud, #transportStatus, #degradeBanner, the model and quality selects). Nothing is invented: "--" until measured.
    Technical names appear only here; the stage shows a plain-language status pill. */
 (function () {
@@ -7,7 +7,7 @@
   var anchor = $('segState'); if (!anchor) return;
   var FRIENDLY = { fast: 'Performance', balanced: 'Balanced', quality: 'Detail', ultra: 'Ultra' };
   var det = document.createElement('details'); det.className = 'seg-diag';
-  det.innerHTML = '<summary>Diagnostics</summary><dl id="segDiag"></dl><p class="seg-note">Measured in this session. Frame time is sampled once a second.</p>';
+  det.innerHTML = '<summary>Diagnostics</summary><dl id="segDiag"></dl><p class="seg-note">Measured in this session. Frame time is sampled once a second.</p><section id="segRuntimeErrors" aria-live="polite" style="margin-top:10px"></section>';
   var motionToggle = document.createElement('button');
   motionToggle.type = 'button';
   motionToggle.className = 'seg-motion-toggle';
@@ -21,6 +21,35 @@
   anchor.parentNode.insertBefore(det, anchor.nextSibling);
   window.VS = window.VS || {};
   window.VS.segmentationPreviewEnabled = false;
+  // Keep actionable browser error details. The previous panel showed only the message,
+  // which made rejected async work (for example, "V is not defined") impossible to trace.
+  var runtimeErrors = [], errorPanel = $('segRuntimeErrors');
+  function recordRuntimeError(kind, message, detail) {
+    var item = { kind: String(kind || 'error'), message: String(message || 'Unknown error'), detail: String(detail || ''), at: new Date().toLocaleTimeString() };
+    runtimeErrors.push(item); if (runtimeErrors.length > 8) runtimeErrors.shift();
+    renderRuntimeErrors();
+  }
+  function renderRuntimeErrors() {
+    if (!errorPanel) return;
+    errorPanel.textContent = '';
+    if (!runtimeErrors.length) return;
+    var heading = document.createElement('b'); heading.textContent = 'Runtime errors (' + runtimeErrors.length + ')'; errorPanel.appendChild(heading);
+    runtimeErrors.slice().reverse().forEach(function (item) {
+      var entry = document.createElement('pre');
+      entry.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.4 ui-monospace,monospace;padding:8px;margin:6px 0;border-radius:8px;background:rgba(180,60,60,.10);';
+      entry.textContent = '[' + item.at + '] ' + item.kind + ': ' + item.message + (item.detail ? '\\n' + item.detail : '');
+      errorPanel.appendChild(entry);
+    });
+  }
+  window.addEventListener('error', function (event) {
+    var loc = event.filename ? event.filename + ':' + (event.lineno || 0) + ':' + (event.colno || 0) : '';
+    var stack = event.error && event.error.stack ? event.error.stack : loc;
+    recordRuntimeError('window.error', event.message || 'Script error', stack || loc);
+  });
+  window.addEventListener('unhandledrejection', function (event) {
+    var reason = event.reason, message = reason && reason.message ? reason.message : String(reason || 'Unhandled promise rejection');
+    recordRuntimeError('unhandledrejection', message, reason && reason.stack ? reason.stack : 'No stack trace was provided by the browser.');
+  });
   det.addEventListener('toggle', function () {
     window.VS.segmentationPreviewEnabled = !!det.open;
     if (det.open) renderPreview();
