@@ -24,7 +24,8 @@
   const MODEL_LOAD_TIMEOUT_MS = 15000;
   // ---- Model choice + one-time device speed test ----
   const MODNET_LOAD_TIMEOUT_MS = 45000;   // the model is bundled now; this only matters for the web version's first load
-  const MODNET_MAX_MS = 100;              // slower than this per mask -> use the lighter model (was 70: too strict, a phone at 72-100 ms still beats the light model's blocky edges; the fps ladder steps down if the picture gets choppy). localStorage vs_max_ms overrides.
+  const MODNET_MAX_MS = 100;              // baseline per-mask budget; runtime measurements decide promotion.
+  const MAX_ASYNC_MASK_MS = 150;          // cap async mask age to reduce stale edges during motion.
   // v0.98 QUALITY FIRST (default on): the good model never gives way to the weak one. MODNet is the live engine at a 256 px floor; when a phone is slow the
   // mask is refreshed less often (stride) instead. The weak MediaPipe engine is only used if MODNet cannot load at all. localStorage vs_quality_first = 0 restores the old ladder.
   function qualityFirst() {   // v0.98: phones no longer start on MODNet (1.2 s/frame on a Mali-G52 = 2 FPS). Explicit '1'/'0' still wins; otherwise only desktops default to quality-first.
@@ -44,11 +45,14 @@
   }
   const QF_EDGE = 256;
   function maxMs() {
-    try { const v = +localStorage.getItem('vs_max_ms'); if (v >= 20 && v <= 2000) return v; } catch (e) {}
-    // v0.80: a camera that only delivers 10-15 fps (dim room, auto exposure) gives the model more time per mask before it counts as "too slow" (a mask is only needed once per camera frame).
-    let cam = 0; try { cam = camRate || window.__camFps || 0; } catch (e) { cam = window.__camFps || 0; }   // camRate is declared further down: the try guards its first use
+    let override = 0;
+    try { override = +localStorage.getItem('vs_max_ms') || 0; } catch (e) {}
+    let cam = 0; try { cam = camRate || window.__camFps || 0; } catch (e) { cam = window.__camFps || 0; }
     const base = cam > 0 && cam < 24 ? Math.min(150, Math.max(MODNET_MAX_MS, Math.round((1000 / cam) * 1.4))) : MODNET_MAX_MS;
-    return asyncSegOn() ? base * 3 : base;   // v0.93: segmentation runs off the render path, so the model may take ~3 frames per mask
+    const budget = override >= 20 && override <= 2000 ? override : base;
+    // Async inference may reuse a mask, but adaptive promotion must not accept
+    // a route that refreshes so slowly that ordinary motion visibly outruns it.
+    return asyncSegOn() ? Math.min(budget, MAX_ASYNC_MASK_MS) : budget;
   }
   // v0.93 decoupled pipeline: draw every camera frame at once with the LATEST mask; segment asynchronously (<= ~6 masks/s). localStorage vs_async_seg=0 turns it off.
   function asyncSegOn() { try { return localStorage.getItem('vs_async_seg') !== '0'; } catch (e) { return true; } }
@@ -199,7 +203,7 @@
             // size predicted to fit the budget (cost ~ edge^2) instead of walking every step. Each skipped step was 8 slow frames of frozen preview.
             const mobileTest = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
             if (mobileTest && typeof cand.longEdge === 'number' && cand.longEdge > 320) cand.longEdge = 320;
-            let m = await timeProvider(cand, 4, 1, 600), edge = cand.longEdge;
+            let m = await timeProvider(cand, 8, 3, 800), edge = cand.longEdge;
             const steps = [448, 384, 320, 256, 224].filter((e) => e < edge);
             let i = 0;
             if (m > maxMs() && steps.length) {
@@ -212,7 +216,7 @@
               if (stale()) return null;
               showBenchNote('Too slow at ' + edge + ' px (' + Math.round(m) + ' ms). Trying ' + c.name + ' at ' + e + ' px...');
               cand.longEdge = e; edge = e;
-              m = await timeProvider(cand, 3, 1, 600);
+              m = await timeProvider(cand, 8, 3, 800);
             }
             return { ms: m, edge };
           };
@@ -225,14 +229,14 @@
             const edge = cand.longEdge; try { cand.dispose?.(); } catch (e0) {} cand = c.make(); cand.lowLightBoost = lowLightBoostEnabled;
             await withTimeout(cand.initialize(quality, { threads: 1 }), 45000, c.name + ' single-thread initialization timed out after 45 seconds'); cand.longEdge = edge;
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
-            const one = await timeProvider(cand, 4, 1, 600);
+            const one = await timeProvider(cand, 8, 3, 800);
             if (one < ms) { ms = one; results.threads = 1; }
           }
           if (!clearlySlow && ms > maxMs()) {
             showBenchNote(c.name + ' measured ' + Math.round(ms) + ' ms. Measuring once more when the camera has settled...');
             await new Promise((r) => setTimeout(r, 1500));
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
-            const again = await timeProvider(cand, 4, 1, 600);
+            const again = await timeProvider(cand, 8, 3, 800);
             if (again < ms) ms = again;
           }
           benchBusy = false;

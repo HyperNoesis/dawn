@@ -246,9 +246,20 @@ function withTimeout(promise, ms, label) {
         throw new Error('EdgeTAM did not become ready: ' + JSON.stringify(provider.edgetam || {}));
       }
 
-      const samples = [], hybridFrames = [], masks = [];
+      const samples = [], hybridFrames = [];
       let preview = null;
-      for (let frame = 0; frame < 2; frame++) {
+      const waitForNextVideoFrame = () => new Promise((resolve, reject) => {
+        if (typeof video.requestVideoFrameCallback !== 'function') {
+          setTimeout(resolve, 100);
+          return;
+        }
+        const timer = setTimeout(() => reject(new Error('Synthetic camera stopped delivering frames')), 5000);
+        video.requestVideoFrameCallback(() => { clearTimeout(timer); resolve(); });
+      });
+      for (let frame = 0; frame < 10; frame++) {
+        // Advance the synthetic camera between inferences; do not benchmark
+        // repeated snapshots of the same decoded frame.
+        await waitForNextVideoFrame();
         // Capture the source immediately before inference so the saved visual
         // comparison is paired with the exact input frame used by the provider.
         const sourceFrame = document.createElement('canvas');
@@ -404,9 +415,19 @@ function withTimeout(promise, ms, label) {
           rejected: frameHybrid.rejected || 0, bandPct: frameHybrid.bandPct || 0,
           errors: frameHybrid.errors || 0, snapshotFailures: frameHybrid.snapshotFailures || 0
         });
-        masks.push(mask);
       }
 
+      const timings = samples.map((sample) => sample.segmentMs).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+      const percentile = (values, p) => values.length ? values[Math.max(0, Math.ceil(values.length * p) - 1)] : 0;
+      const p75 = percentile(timings, 0.75);
+      const performance = {
+        frameCount: samples.length,
+        p50SegmentMs: percentile(timings, 0.50),
+        p75SegmentMs: p75,
+        p95SegmentMs: percentile(timings, 0.95),
+        maxSegmentMs: timings.length ? timings[timings.length - 1] : 0,
+        estimatedMaskUpdatesPerSecondAtP75: p75 > 0 ? +(1000 / p75).toFixed(2) : 0
+      };
       const hybrid = provider.hy || {};
       const edge = provider.edgetam || {};
       provider.dispose();
@@ -416,6 +437,7 @@ function withTimeout(promise, ms, label) {
         ortSource: V.ortSource || 'unknown',
         ortVersion: ort.env && ort.env.versions ? ort.env.versions.web : 'unknown',
         initMs: Math.round(initMs),
+        performance,
         syntheticGroundTruth: {
           source: 'tools/e2e/fixtures/gt_alpha_640x480.png',
           scope: 'synthetic labelled fixture only; not real-person accuracy evidence'
@@ -471,7 +493,7 @@ function withTimeout(promise, ms, label) {
     }
     fs.writeFileSync(REPORT, JSON.stringify({ pass: true, ...result, pageErrors }, null, 2));
     console.log('ULTRAMATTE_REPORT ' + JSON.stringify(result));
-    console.log('PASS UltraMatte returned non-empty alpha on 2 camera frames');
+    console.log('PASS UltraMatte returned non-empty alpha on ' + result.performance.frameCount + ' sequential camera frames');
   } catch (error) {
     fs.writeFileSync(REPORT, JSON.stringify({ pass: false, error: String(error && error.stack || error), pageErrors }, null, 2));
     throw error;

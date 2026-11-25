@@ -188,17 +188,21 @@
   /** First rung for a classified device. Static guess only; the ladder corrects it at runtime. */
   function startRung(tier) { return LADDER_MAX_FIRST_RUNG[tier] != null ? LADDER_MAX_FIRST_RUNG[tier] : 0; }
 
-  /** Speed-test statistic. With enough samples, use the lower quartile to discount
-   * occasional renderer contention. With fewer than five samples (early-aborted
-   * slow probes), use the median so one lucky frame cannot promote a slideshow. */
+  /** Lower-quartile timing is diagnostic only; it must never decide promotion. */
   function lowQuartile(times) {
     const t = (times || []).filter((x) => typeof x === 'number' && isFinite(x) && x >= 0).sort((a, b) => a - b);
     return t.length ? t[Math.floor((t.length - 1) / 4)] : 0;
   }
+  /**
+   * Conservative speed-test statistic for adaptive engine promotion.
+   * With >=5 samples use nearest-rank P75 so a few unusually fast frames
+   * cannot make an otherwise slow route look suitable for live use. Tiny
+   * early-aborted samples use the median.
+   */
   function measuredFrameMs(times) {
     const t = (times || []).filter((x) => typeof x === 'number' && isFinite(x) && x >= 0).sort((a, b) => a - b);
     if (!t.length) return 0;
-    if (t.length >= 5) return t[Math.floor((t.length - 1) / 4)];
+    if (t.length >= 5) return t[Math.max(0, Math.ceil(t.length * 0.75) - 1)];
     const mid = t.length >> 1;
     return t.length % 2 ? t[mid] : (t[mid - 1] + t[mid]) / 2;
   }
