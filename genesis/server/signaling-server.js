@@ -22,7 +22,7 @@ let nextPeerId = 1;
 
 function safeName(value) {
   if (typeof value !== 'string') return 'Guest';
-  const clean = value.replace(CONTROL_CHARS, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  const clean = value.replace(CONTROL_CHARS, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
   return clean || 'Guest';
 }
 function validRoom(value) {

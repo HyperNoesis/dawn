@@ -1,5 +1,6 @@
 // Unit tests for the optional AI re-render path (client runner + relay). No network beyond loopback. Run: node tools/e2e/unit_render.js
 const http = require('http');
+const crypto = require('crypto');
 const assert = require('assert');
 const RP = require('../../js/providers/render-provider.js');
 const { createRelay, createAimlapiProvider, createMockProvider } = require('../../server/render-relay.js');
@@ -9,6 +10,40 @@ async function t(name, fn) { try { await fn(); pass++; console.log('PASS ' + nam
 const noSleep = () => Promise.resolve();
 const listen = (srv) => new Promise((r) => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
 const seq = (...a) => { let i = 0; return () => a[Math.min(i++, a.length - 1)]; };
+
+// Relay integration tests use a real HS256-shaped Supabase access token.
+// Production uses the private Supabase JWT secret; this secret exists only
+// inside this loopback test process.
+const TEST_JWT_SECRET = 'genesis-loopback-test-secret-do-not-use-in-production';
+const TEST_SUPABASE_URL = 'https://genesis-test.supabase.co';
+const TEST_USER_ID = '00000000-0000-4000-8000-000000000001';
+function testAccessToken(userId = TEST_USER_ID) {
+  const encode = (v) => Buffer.from(JSON.stringify(v)).toString('base64url');
+  const header = encode({ alg: 'HS256', typ: 'JWT' });
+  const payload = encode({
+    sub: userId, aud: 'authenticated', role: 'authenticated',
+    iss: TEST_SUPABASE_URL + '/auth/v1',
+    exp: Math.floor(Date.now() / 1000) + 3600
+  });
+  const signature = crypto.createHmac('sha256', TEST_JWT_SECRET).update(header + '.' + payload).digest('base64url');
+  return header + '.' + payload + '.' + signature;
+}
+const TEST_AUTH = { Authorization: 'Bearer ' + testAccessToken() };
+function relayOptions(provider, extra = {}) {
+  return Object.assign({
+    provider: provider || null,
+    supabaseJwtSecret: TEST_JWT_SECRET,
+    supabaseUrl: TEST_SUPABASE_URL,
+    allowOrigin: 'http://127.0.0.1',
+    maxMB: 1,
+    dailyCap: 10,
+    maxActive: 5,
+    maxActivePerUser: 2
+  }, extra);
+}
+function relayHeaders(extra = {}) {
+  return Object.assign({}, TEST_AUTH, extra);
+}
 
 function fakeAdapter(over) {
   return Object.assign({
@@ -93,12 +128,12 @@ function fakeAdapter(over) {
   });
   const upPort = await listen(upstream);
   const provider = createAimlapiProvider({ key: 'sk-UPSTREAM-SECRET', base: 'http://127.0.0.1:' + upPort + '/v2' });
-  const relay = createRelay({ provider, token: 'tok', maxMB: 1, dailyCap: 2, maxActive: 5 });
+  const relay = createRelay(relayOptions(provider, { dailyCap: 2, maxActive: 5 }));
   const rPort = await listen(relay); const base = 'http://127.0.0.1:' + rPort;
   const clip = new Blob([Buffer.alloc(2048, 7)], { type: 'video/mp4' });
 
   await t('end to end: client -> relay -> upstream; request matches the documented contract', async () => {
-    const adapter = RP.createRelayAdapter({ baseUrl: base, token: 'tok' });
+    const adapter = RP.createRelayAdapter({ baseUrl: base, token: testAccessToken() });
     const r = await RP.runRenderJob({ adapter, clip, prompt: RP.LEVEL3_PROMPT, options: { resolution: '720p', duration: 6 }, pollMs: 10, sleep: (ms) => new Promise((x) => setTimeout(x, 5)) }).promise;
     assert.strictEqual(r.ok, true, JSON.stringify(r)); assert.strictEqual(Buffer.from(await r.result.blob.arrayBuffer()).toString(), 'FAKEMP4RESULT');
     const p = seen.posts[0];
@@ -107,46 +142,46 @@ function fakeAdapter(over) {
     assert.strictEqual(p.body.audio_setting, 'origin'); assert.strictEqual(p.body.watermark, false); assert.ok(p.body.prompt.includes('Remove the original chair'));
   });
   await t('the upstream key never appears in any relay response', async () => {
-    const res = await fetch(base + '/render/jobs', { method: 'POST', headers: { Authorization: 'Bearer tok', 'Content-Type': 'video/mp4' }, body: clip });
+    const res = await fetch(base + '/render/jobs', { method: 'POST', headers: relayHeaders({ 'Content-Type': 'video/mp4' }), body: clip });
     const txt = await res.text(); assert.ok(!/UPSTREAM-SECRET/.test(txt));
   });
   await t('daily cap -> 429 (cost guard)', async () => {
-    const res = await fetch(base + '/render/jobs', { method: 'POST', headers: { Authorization: 'Bearer tok', 'Content-Type': 'video/mp4' }, body: clip });
+    const res = await fetch(base + '/render/jobs', { method: 'POST', headers: relayHeaders({ 'Content-Type': 'video/mp4' }), body: clip });
     assert.strictEqual(res.status, 429);
   });
   await t('wrong/missing token -> 401', async () => {
     assert.strictEqual((await fetch(base + '/render/jobs', { method: 'POST', headers: { 'Content-Type': 'video/mp4' }, body: clip })).status, 401);
   });
   await t('wrong content type -> 415; oversize -> 413', async () => {
-    const r2 = createRelay({ provider: createMockProvider({ ms: 0 }), maxMB: 1 }); const p2 = await listen(r2); const b2 = 'http://127.0.0.1:' + p2;
-    assert.strictEqual((await fetch(b2 + '/render/jobs', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'x' })).status, 415);
-    const big = await fetch(b2 + '/render/jobs', { method: 'POST', headers: { 'Content-Type': 'video/mp4' }, body: Buffer.alloc(1.5 * 1048576) }).then((r) => r.status).catch(() => 413);
+    const r2 = createRelay(relayOptions(createMockProvider({ ms: 0 }), { maxMB: 1 })); const p2 = await listen(r2); const b2 = 'http://127.0.0.1:' + p2;
+    assert.strictEqual((await fetch(b2 + '/render/jobs', { method: 'POST', headers: relayHeaders({ 'Content-Type': 'text/plain' }), body: 'x' })).status, 415);
+    const big = await fetch(b2 + '/render/jobs', { method: 'POST', headers: relayHeaders({ 'Content-Type': 'video/mp4' }), body: Buffer.alloc(1.5 * 1048576) }).then((r) => r.status).catch(() => 413);
     assert.strictEqual(big, 413); r2.close();
   });
   await t('no provider configured -> 503 and nothing forwarded', async () => {
-    const r3 = createRelay({}); const p3 = await listen(r3); const res = await fetch('http://127.0.0.1:' + p3 + '/render/jobs', { method: 'POST', headers: { 'Content-Type': 'video/mp4' }, body: clip });
+    const r3 = createRelay(relayOptions(null)); const p3 = await listen(r3); const res = await fetch('http://127.0.0.1:' + p3 + '/render/jobs', { method: 'POST', headers: relayHeaders({ 'Content-Type': 'video/mp4' }), body: clip });
     assert.strictEqual(res.status, 503); const h = await (await fetch('http://127.0.0.1:' + p3 + '/render/health')).json(); assert.strictEqual(h.provider, null); r3.close();
   });
   await t('mock provider completes through the same client path', async () => {
-    const r4 = createRelay({ provider: createMockProvider({ ms: 20 }) }); const p4 = await listen(r4);
-    const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + p4 }), clip, pollMs: 15, downloadResult: false, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
+    const r4 = createRelay(relayOptions(createMockProvider({ ms: 20 })) ); const p4 = await listen(r4);
+    const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + p4, token: testAccessToken() }), clip, pollMs: 15, downloadResult: false, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
     assert.strictEqual(r.ok, true); assert.ok(/mock-result/.test(r.result.url)); r4.close();
   });
   await t('upstream refusal (401) surfaces as a safe 502, not the raw upstream text', async () => {
     const bad = createAimlapiProvider({ key: 'x', base: 'http://127.0.0.1:' + upPort + '/nope' });
-    const r5 = createRelay({ provider: bad }); const p5 = await listen(r5);
-    const res = await fetch('http://127.0.0.1:' + p5 + '/render/jobs', { method: 'POST', headers: { 'Content-Type': 'video/mp4' }, body: clip });
+    const r5 = createRelay(relayOptions(bad)); const p5 = await listen(r5);
+    const res = await fetch('http://127.0.0.1:' + p5 + '/render/jobs', { method: 'POST', headers: relayHeaders({ 'Content-Type': 'video/mp4' }), body: clip });
     assert.ok(res.status >= 429); r5.close();
   });
 
   await t('self-hosted worker: relay -> worker runs the command -> result downloads (end to end)', async () => {
     const { createWorker } = require('../../server/render-worker.js'); const { createWorkerProvider } = require('../../server/render-relay.js');
     const w = createWorker({ cmd: 'cat {in} > {out}; test -s {prompt}', token: 'wt' }); const wp = await listen(w);
-    const rl = createRelay({ provider: createWorkerProvider({ base: 'http://127.0.0.1:' + wp, token: 'wt' }), token: 'rt' }); const rp = await listen(rl);
-    const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + rp, token: 'rt' }), clip, prompt: 'hello', pollMs: 20, fetchImpl: undefined, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
+    const rl = createRelay(relayOptions(createWorkerProvider({ base: 'http://127.0.0.1:' + wp, token: 'wt' })) ); const rp = await listen(rl);
+    const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + rp, token: testAccessToken() }), clip, prompt: 'hello', pollMs: 20, fetchImpl: undefined, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
     assert.strictEqual(r.ok, true, JSON.stringify(r)); assert.ok(r.result.blob && r.result.blob.size === 2048, 'relay proxies the worker result so the worker token never reaches the browser');
-    const bad = createWorker({ cmd: 'exit 3' }); const bp = await listen(bad); const rj = await fetch('http://127.0.0.1:' + bp + '/jobs', { method: 'POST', body: 'x' }); const id = (await rj.json()).id;
-    await new Promise((x) => setTimeout(x, 400)); const st = await (await fetch('http://127.0.0.1:' + bp + '/jobs/' + id)).json(); assert.strictEqual(st.status, 'error');
+    const bad = createWorker({ cmd: 'exit 3', token: 'bad-wt' }); const bp = await listen(bad); const rj = await fetch('http://127.0.0.1:' + bp + '/jobs', { method: 'POST', headers: { Authorization: 'Bearer bad-wt' }, body: 'x' }); const id = (await rj.json()).id;
+    await new Promise((x) => setTimeout(x, 400)); const st = await (await fetch('http://127.0.0.1:' + bp + '/jobs/' + id, { headers: { Authorization: 'Bearer bad-wt' } })).json(); assert.strictEqual(st.status, 'error');
     w.close(); rl.close(); bad.close();
   });
 
@@ -154,8 +189,8 @@ function fakeAdapter(over) {
     const { createGeminiProvider } = require('../../server/render-relay.js'); let seenReq = null;
     const g = http.createServer((req, res) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => { seenReq = { url: req.url, key: req.headers['x-goog-api-key'], body: JSON.parse(b) };
       setTimeout(() => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ id: 'v1_x', status: 'completed', steps: [{ type: 'user_input' }, { type: 'thought' }, { type: 'model_output', content: [{ type: 'video', mime_type: 'video/mp4', data: Buffer.from('GEMINIRESULT').toString('base64') }] }] })); }, 60); }); });
-    const gp = await listen(g); const rl = createRelay({ provider: createGeminiProvider({ key: 'AIza-SECRET', base: 'http://127.0.0.1:' + gp + '/v1beta' }) }); const rp = await listen(rl);
-    const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + rp }), clip, prompt: RP.LEVEL3_PROMPT, pollMs: 20, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
+    const gp = await listen(g); const rl = createRelay(relayOptions(createGeminiProvider({ key: 'AIza-SECRET', base: 'http://127.0.0.1:' + gp + '/v1beta' }))); const rp = await listen(rl);
+    const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + rp, token: testAccessToken() }), clip, prompt: RP.LEVEL3_PROMPT, pollMs: 20, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
     assert.strictEqual(r.ok, true, JSON.stringify(r)); assert.strictEqual(Buffer.from(await r.result.blob.arrayBuffer()).toString(), 'GEMINIRESULT');
     assert.strictEqual(seenReq.url, '/v1beta/interactions'); assert.strictEqual(seenReq.key, 'AIza-SECRET'); assert.strictEqual(seenReq.body.model, 'gemini-omni-1.1-flash'); assert.strictEqual(seenReq.body.response_format.type, 'video');
     const c = seenReq.body.input[0].content; assert.strictEqual(c[0].type, 'video'); assert.ok(c[0].data.length > 100); assert.strictEqual(c[1].type, 'text');
@@ -164,7 +199,7 @@ function fakeAdapter(over) {
   await t('gemini provider: refusal (403) becomes a safe message that mentions the region limit, not raw upstream text', async () => {
     const { createGeminiProvider } = require('../../server/render-relay.js');
     const g = http.createServer((req, res) => { req.resume(); req.on('end', () => { res.statusCode = 403; res.end(JSON.stringify({ error: { message: 'secret detail AIza-LEAK' } })); }); });
-    const gp = await listen(g); const rl = createRelay({ provider: createGeminiProvider({ key: 'k', base: 'http://127.0.0.1:' + gp }) }); const rp = await listen(rl);
+    const gp = await listen(g); const rl = createRelay(relayOptions(createGeminiProvider({ key: 'k', base: 'http://127.0.0.1:' + gp }))); const rp = await listen(rl);
     const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + rp }), clip, pollMs: 20, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
     assert.strictEqual(r.ok, false); assert.ok(/EEA/.test(r.error) && !/LEAK/.test(r.error)); g.close(); rl.close();
   });
