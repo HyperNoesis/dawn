@@ -910,8 +910,9 @@
       card.innerHTML = `
         <div class="env-thumb" style="${envProvider.getPreviewStyle(env.id)}"></div>
         <div class="env-body">
-          <div class="env-name">${env.name}</div>
+          <div class="env-name"></div>
         </div>`;
+      card.querySelector('.env-name').textContent = String(env.name || 'Custom environment');
       card.addEventListener('click', () => {
         els.envSelect.value = env.id;
         els.envMiniGrid.querySelectorAll('.env-card').forEach(c => c.classList.remove('selected'));
