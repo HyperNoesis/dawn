@@ -113,15 +113,22 @@ class SupabaseStorageProvider {
   }
 
   async _userId() {
-    const { data: { session } } = await this.client.auth.getSession();
+    const { data: { session }, error } = await this.client.auth.getSession();
+    if (error) throw new Error('Could not verify your cloud session: ' + error.message);
     if (!session) throw new Error('You must be signed in to save recordings to the cloud.');
     return session.user.id;
+  }
+
+  _recordingPath(userId, id, mime) {
+    const type = String(mime || '').toLowerCase();
+    const extension = type.includes('mp4') || type.includes('quicktime') ? 'mp4' : 'webm';
+    return userId + '/' + id + '.' + extension;
   }
 
   async saveRecording(blob, meta) {
     const userId = await this._userId();
     const id = crypto.randomUUID();
-    const path = `${userId}/${id}.webm`;
+    const path = this._recordingPath(userId, id, blob && blob.type);
     const { error: upErr } = await this.client.storage.from('recordings').upload(path, blob, {
       contentType: blob.type || 'video/webm',
     });
@@ -149,6 +156,7 @@ class SupabaseStorageProvider {
     const { data: signed, error: urlErr } = await this.client.storage.from('recordings').createSignedUrl(row.storage_path, 3600);
     if (urlErr) throw new Error('Could not access recording file: ' + urlErr.message);
     const res = await fetch(signed.signedUrl);
+    if (!res.ok) throw new Error('Could not download recording (HTTP ' + res.status + ').');
     const blob = await res.blob();
     return this._rowToRecord(row, blob);
   }
@@ -169,7 +177,9 @@ class SupabaseStorageProvider {
     const { data: row, error } = await this.client.from('recordings').select('*').eq('id', id).single();
     if (error || !row) throw new Error('Recording not found');
     const newId = crypto.randomUUID();
-    const newPath = `${userId}/${newId}.webm`;
+    const extension = String(row.storage_path || '').split('.').pop().toLowerCase();
+    const safeExtension = extension === 'mp4' ? 'mp4' : 'webm';
+    const newPath = userId + '/' + newId + '.' + safeExtension;
     const { error: copyErr } = await this.client.storage.from('recordings').copy(row.storage_path, newPath);
     if (copyErr) throw new Error('Duplicate failed: ' + copyErr.message);
     const newTitle = (row.title || row.environment || 'Recording') + ' copy';
@@ -178,7 +188,13 @@ class SupabaseStorageProvider {
       title: newTitle, environment: row.environment, quality: row.quality,
       meta: { ...row.meta, title: newTitle },
     });
-    if (dbErr) throw new Error(dbErr.message);
+    if (dbErr) {
+      const cleanup = await this.client.storage.from('recordings').remove([newPath]);
+      if (cleanup && cleanup.error) {
+        throw new Error('Duplicate metadata failed (' + dbErr.message + ') and temporary file cleanup failed (' + cleanup.error.message + ').');
+      }
+      throw new Error('Duplicate metadata failed: ' + dbErr.message);
+    }
     return newId;
   }
 
@@ -190,10 +206,16 @@ class SupabaseStorageProvider {
   }
 
   async deleteRecording(id) {
-    const { data: row } = await this.client.from('recordings').select('storage_path').eq('id', id).single();
-    if (row) await this.client.storage.from('recordings').remove([row.storage_path]).catch(() => {});
+    const { data: row, error: readError } = await this.client.from('recordings').select('storage_path').eq('id', id).single();
+    if (readError) throw new Error('Could not locate recording: ' + readError.message);
+    if (!row || !row.storage_path) throw new Error('Recording file reference is missing; nothing was deleted.');
+    const { error: storageError } = await this.client.storage.from('recordings').remove([row.storage_path]);
+    if (storageError) {
+      // Keep the metadata row when blob deletion fails so the user can retry.
+      throw new Error('Could not delete recording file: ' + storageError.message);
+    }
     const { error } = await this.client.from('recordings').delete().eq('id', id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error('File deleted, but recording metadata could not be removed: ' + error.message);
   }
 }
 

@@ -29,9 +29,9 @@ create policy "profiles are insertable by owner"
   with check (auth.uid() = id);
 
 
--- Lets a signed-in user delete their OWN account (and everything cascades
--- via the "on delete cascade" foreign keys above — recordings, environments,
--- usage_events, profile all go with it). security definer so it can reach
+-- Lets a signed-in user delete their OWN account. Metadata cascades through
+-- auth.users foreign keys; Storage objects are explicitly removed first because
+-- they do not have a cascading user foreign key. SECURITY DEFINER lets it reach
 -- auth.users, which a plain RLS policy can't touch — but it's hard-locked to
 -- auth.uid() internally, so it can never be used to delete anyone else.
 create or replace function public.delete_own_account()
@@ -41,6 +41,16 @@ security definer
 set search_path = public
 as $$
 begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  -- Storage objects do not cascade with auth.users foreign keys.
+  -- Remove this user's private media before cascading the metadata rows.
+  delete from storage.objects
+   where bucket_id in ('recordings', 'environments')
+     and (storage.foldername(name))[1] = auth.uid()::text;
+
   delete from auth.users where id = auth.uid();
 end;
 $$;
