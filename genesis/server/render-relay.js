@@ -36,6 +36,7 @@ function createMockProvider(opts) {
       const t = jobs.get(id); if (!t) return { status: 'error', error: 'unknown mock job' };
       return Date.now() - t >= ms ? { status: 'done', resultUrl: 'https://example.invalid/mock-result.mp4' } : { status: 'running' };
     },
+    async delete(id) { jobs.delete(id); },
   };
 }
 

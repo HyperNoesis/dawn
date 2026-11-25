@@ -200,7 +200,7 @@ function fakeAdapter(over) {
     const { createGeminiProvider } = require('../../server/render-relay.js');
     const g = http.createServer((req, res) => { req.resume(); req.on('end', () => { res.statusCode = 403; res.end(JSON.stringify({ error: { message: 'secret detail AIza-LEAK' } })); }); });
     const gp = await listen(g); const rl = createRelay(relayOptions(createGeminiProvider({ key: 'k', base: 'http://127.0.0.1:' + gp }))); const rp = await listen(rl);
-    const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + rp }), clip, pollMs: 20, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
+    const r = await RP.runRenderJob({ adapter: RP.createRelayAdapter({ baseUrl: 'http://127.0.0.1:' + rp, token: testAccessToken() }), clip, pollMs: 20, sleep: (ms) => new Promise((x) => setTimeout(x, ms)) }).promise;
     assert.strictEqual(r.ok, false); assert.ok(/EEA/.test(r.error) && !/LEAK/.test(r.error)); g.close(); rl.close();
   });
 
