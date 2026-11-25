@@ -238,6 +238,10 @@ function createRelay(cfg) {
       const user = verifyAccessToken(req);
       if (!user) return send(res, 401, { error: 'A valid signed-in cloud session is required.' }, req);
       if (!provider) return send(res, 503, { error: 'AI re-render is not set up on this server.' }, req);
+      if (provider.id === 'mock' && req.method === 'GET' && url.pathname === '/render/mock-result.mp4') {
+        res.writeHead(200, { 'Content-Type': 'video/mp4', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        return res.end(Buffer.from('MOCKMP4'));
+      }
 
       if (req.method === 'POST' && url.pathname === '/render/jobs') {
         const type = String(req.headers['content-type'] || '').split(';')[0];

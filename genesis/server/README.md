@@ -1,74 +1,66 @@
-# Genesis signaling server
+# Genesis signalling and render services
 
-## What this is, in one paragraph
+## Signalling
 
-A WebSocket relay that lets browsers in the same call find each other and
-exchange the handshake info WebRTC needs (offer/answer/ICE candidates).
-Once two browsers are connected, video and audio flow directly between
-them — this server never touches, stores, or sees a single video frame.
-It costs almost nothing to run because it does almost nothing.
+The WebSocket relay carries only room membership and WebRTC signalling. Audio/video
+media remains peer-to-peer. It enforces a six-peer room limit, bounded message
+payloads, per-connection rate limits, a global connection/room cap, one-room-per-
+socket membership and heartbeat cleanup.
 
-## What it does NOT do (read this before you rely on it)
+Configure the browser origins that may connect:
 
-- **No media relay (no SFU).** Every participant uploads their video once
-  per other participant in the room (pure mesh). Fine for the 6-person
-  cap this server enforces; not fine for a real "meeting room" product
-  with dozens of people. That needs a real SFU (LiveKit, mediasoup) —
-  a different, bigger project, not a setting to flip here.
-- **No TURN server.** Only STUN (Google's public one, free). Most home
-  and office networks connect fine on STUN alone; some corporate
-  networks and strict NATs won't. Adding TURN is a real, ongoing cost
-  (bandwidth-metered) — worth doing once you have real users hitting
-  this wall, not before.
-- **No recording, no chat, no screen share yet.** Camera + mic only, v1.
-
-## Deploy it (pick one — all free at this scale)
-
-### Option A: Render.com (easiest, free tier)
-1. Push this `server/` folder to its own GitHub repo (or a subfolder of
-   an existing one — Render lets you set a root directory).
-2. On Render: New → Web Service → connect the repo.
-3. Build command: `npm install`. Start command: `npm start`.
-4. Render gives you a URL like `genesis-signaling.onrender.com`. Your
-   `signalingUrl` in `js/config.js` is `wss://genesis-signaling.onrender.com`
-   (note `wss://`, not `https://`).
-5. Free-tier services on Render sleep after inactivity and take ~30s to
-   wake on the next call — real limitation, not a bug. Paid tier removes it.
-
-### Option B: Fly.io (free allowance, no sleep)
-1. `fly launch` inside `server/` (accept the Node.js detection).
-2. `fly deploy`.
-3. Your URL is `wss://<your-app-name>.fly.dev`.
-
-### Option C: Your own server/VM
-1. Copy `server/` to the machine, `npm install`, then run it behind a
-   process manager (`pm2 start signaling-server.js` or a systemd unit)
-   so it survives reboots.
-2. Put it behind a reverse proxy (nginx/Caddy) with a real TLS cert if
-   you want `wss://` on a domain you own — browsers block plain `ws://`
-   from an `https://` page.
-
-## After deploying
-
-Open `js/config.js` and set:
-```js
-signalingUrl: 'wss://your-deployed-url-here'
+```sh
+ALLOWED_ORIGINS=https://hypernoesis.github.io,https://your-custom-domain.example
 ```
-Leave it empty and `call.html` shows a plain, honest "not set up yet"
-screen instead of pretending to connect — same pattern as leaving
-`supabaseUrl` empty for local-only accounts.
 
-## Local testing (before you deploy anywhere)
+The default is the GitHub Pages origin. Local testing must explicitly allow the
+local origin, for example `ALLOWED_ORIGINS=http://localhost:8080`. Do not use a
+wildcard origin for a public signalling server. The app validates room codes and
+the server strips control characters and caps participant display names.
 
-```
-cd server
+Run it with:
+
+```sh
 npm install
-npm start
+ALLOWED_ORIGINS=https://hypernoesis.github.io npm start
 ```
-Then set `signalingUrl: 'ws://localhost:8787'` in `js/config.js` (note:
-`ws://`, not `wss://`, for localhost) and open `call.html` from two
-different browser profiles/devices on the same network.
 
-## Optional: render relay (server/render-relay.js)
-Separate from the signalling server. Forwards a RECORDED clip to one AI video-editing provider so the API key stays off the phone. Off unless `RENDER_PROVIDER` is set. `RENDER_PROVIDER=mock node render-relay.js` to rehearse; `aimlapi` needs `AIMLAPI_KEY` (price/free tier UNVERIFIED). Caps: `RELAY_DAILY_CAP` (10), `RELAY_MAX_MB` (20), `RELAY_MAX_ACTIVE` (2). Set `RELAY_TOKEN` and `ALLOW_ORIGIN` on any public host. Clips are never written to disk or logged. See docs/LEVEL3_EXPERIMENT.md.
+The server has no TURN relay. Some restrictive networks will still fail to
+establish a peer connection; a production calling service needs a managed TURN
+provider or an SFU such as LiveKit. The current pure-mesh design is not suitable
+for large meetings.
 
+## Hosted render relay
+
+The optional relay accepts recorded clips only. It does not receive the live
+camera stream. Its endpoints require a verified Supabase user access token;
+the Supabase JWT signing secret is server-side only and must never be placed in
+`js/config.js`.
+
+Required environment:
+- `SUPABASE_URL`
+- `SUPABASE_JWT_SECRET`
+- `ALLOW_ORIGIN` (the exact deployed Studio origin)
+- `RENDER_PROVIDER` and the selected provider's server-side API key/URL
+
+Optional limits:
+- `RELAY_MAX_MB` (default 20)
+- `RELAY_DAILY_CAP` (default 10 jobs per user/day)
+- `RELAY_MAX_ACTIVE` (default 2 total)
+- `RELAY_MAX_ACTIVE_PER_USER` (default 1)
+- `RELAY_TTL_MIN` (default 60)
+
+If JWT verification is not configured, hosted rendering is disabled. Local-only
+and guest accounts cannot call the hosted relay. Each job is bound to the
+authenticated Supabase user; one user cannot inspect, download or cancel
+another user's job.
+
+For a worker provider, also set `RENDER_WORKER_URL` and `WORKER_TOKEN`.
+The worker refuses to start without its server-side token, caps input/output
+size and job count, and deletes temporary workspaces after completion or expiry.
+Do not expose the worker directly to browsers.
+
+The relay itself keeps incoming clips in memory while forwarding them. A
+self-hosted worker necessarily writes its temporary working files to disk and
+removes them after completion, cancellation or expiry. Review the selected
+upstream provider's own retention policy before enabling it for customer clips.

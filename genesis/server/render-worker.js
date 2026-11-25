@@ -64,6 +64,10 @@ function createWorker(cfg) {
       ended = true;
       clearTimeout(job.timer);
       running = null;
+      if (!jobs.has(id)) {
+        removeFiles(job);
+        return;
+      }
       if (ok && fs.existsSync(job.outPath)) {
         const size = fs.statSync(job.outPath).size;
         if (size > maxOutputBytes) {

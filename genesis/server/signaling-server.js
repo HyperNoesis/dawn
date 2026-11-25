@@ -49,7 +49,7 @@ function removeMembership(state) {
 function createSignalingServer(options = {}) {
   const origins = options.allowedOrigins || defaultOrigins;
   const wss = new WebSocketServer({
-    port: options.port || PORT,
+    port: options.port == null ? PORT : options.port,
     maxPayload: MAX_MESSAGE_BYTES,
     perMessageDeflate: false,
     clientTracking: true,

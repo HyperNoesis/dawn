@@ -47,6 +47,11 @@ jobs:
       - name: Install Python test dependencies
         run: python -m pip install -q pillow numpy opencv-python-headless scipy scikit-image imageio-ffmpeg fastapi httpx uvicorn
 
+      - name: Install and test protected signalling/render services
+        run: |
+          npm install --prefix server --no-audit --no-fund
+          npm test --prefix server
+
       - name: Run provider and pure-logic unit suites
         run: |
           npm run test:unit
