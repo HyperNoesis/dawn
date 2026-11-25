@@ -43,9 +43,14 @@ assert(!editor.includes('clipSelect.innerHTML = recordings.map'),
   'clip picker options must not interpolate user-controlled titles');
 
 const environmentProvider = read('js/providers/environment-provider.js');
+const manifest = read('android/app/src/main/AndroidManifest.xml');
+const capacitor = read('capacitor.config.json');
 assert(app.includes('file.size > 20 * 1024 * 1024'), 'Studio background uploads enforce a byte limit');
 assert(environments.includes('file.size > 20 * 1024 * 1024'), 'environment gallery uploads enforce a byte limit');
 assert(app.includes('file.size > 5 * 1024 * 1024'), 'brand logo uploads enforce a byte limit');
 assert(environmentProvider.includes('sourceWidth * sourceHeight > 24000000'), 'shared image persistence enforces a decoded-pixel limit');
 
-console.log('security-sinks: untrusted strings, PDF limits and media ingestion budgets are guarded');
+assert(manifest.includes('android:allowBackup="false"'), 'Android backups must not silently copy local recordings');
+assert(!capacitor.includes('"url": "https://hypernoesis.github.io'), 'Android must load bundled web assets instead of trusting remote app code');
+
+console.log('security-sinks: untrusted strings, PDF/media limits and native privacy guards are covered');
