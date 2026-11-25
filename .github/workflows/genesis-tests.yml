@@ -2,6 +2,7 @@ name: Genesis segmentation adaptive regression gates
 
 on:
   push:
+    branches: [main]
     paths:
       - "genesis/**"
       - ".github/workflows/genesis-tests.yml"
@@ -11,8 +12,9 @@ on:
       - ".github/workflows/genesis-tests.yml"
   workflow_dispatch:
 
-# Cancel superseded validation runs for the same branch; keep push and PR runs
-# on the same head ref from consuming the full browser/model matrix twice.
+# Cancel superseded runs within each event type. Feature branches are validated
+# by their pull_request event; only main gets a separate push-triggered run.
+# This avoids push/PR concurrency groups cancelling each other on the same commit.
 concurrency:
   group: genesis-segmentation-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
