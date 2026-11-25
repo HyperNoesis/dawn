@@ -153,7 +153,7 @@
         card.tabIndex = 0; card.setAttribute('role', 'button'); card.setAttribute('aria-label', `Preview ${spHtml(env.name)}`);
         card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview(filtered, filtered.indexOf(env), card); } });
         card.innerHTML = `
-          <div class="env-thumb" style="${envProvider.getPreviewStyle(env.id)}"></div>
+          <div class="env-thumb" style="${spHtml(envProvider.getPreviewStyle(env.id))}"></div>
           <div class="env-body">
             <div class="env-txt"><div class="env-name">${spHtml(env.name)}</div><div class="env-use">${spHtml(useLine(env))}</div></div>
             <div class="env-cat">${spHtml(env.type === 'image' ? 'Custom upload' : env.category || 'Built-in')}</div>

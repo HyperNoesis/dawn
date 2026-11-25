@@ -196,7 +196,7 @@
           if (stale()) { cand.dispose?.(); cand = null; return; }
           showBenchNote('Testing speed on this device (' + c.name + ')...');
           benchBusy = true;
-          // One bad reading must never decide a phone's model. Rules: 3 warm-up frames, lower-quartile timing, and when the result is too slow we
+          // One bad reading must never decide a phone's model. Rules: 3 warm-up frames, conservative P75 timing, and when the result is too slow we
           // (1) try again with ONE thread (extra threads can lose to the camera and renderer on phones), (2) wait for things to settle and measure once more.
           const measureLadder = async () => {
             // v0.98: phones start the test at <=320 px (a 448 px test costs ~800 ms/frame on a Mali-G52 and freezes the preview for ~10 s) and the ladder JUMPS to the
@@ -308,7 +308,7 @@
       benchBusy = false; upgrading = false;
     }
   }
-  /** Per-frame time (ms) of a provider on the live camera after warm-up: lower quartile, so a hitch cannot fake a slow phone. */
+  /** Per-frame time (ms) of a provider on the live camera after warm-up: conservative P75, so rare fast frames cannot mask a slow route. */
   async function timeProvider(provider, frames = 10, warmup = 3, abortAboveMs = 0) {
     const times = [];
     const roiWas = provider.useRoi; provider.useRoi = false;   // v0.80: measure one fixed input shape (the crop keeps the same pixel cost)

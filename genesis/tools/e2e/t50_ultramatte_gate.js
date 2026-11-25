@@ -417,6 +417,7 @@ function withTimeout(promise, ms, label) {
         });
       }
 
+      if (samples.length !== 10) throw new Error('UltraMatte sustained gate expected 10 sequential frames but observed ' + samples.length);
       const timings = samples.map((sample) => sample.segmentMs).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
       const percentile = (values, p) => values.length ? values[Math.max(0, Math.ceil(values.length * p) - 1)] : 0;
       const p75 = percentile(timings, 0.75);
