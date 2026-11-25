@@ -54,6 +54,10 @@ jobs:
           npm install --prefix server --no-audit --no-fund
           npm test --prefix server
 
+      - name: Validate browser, worker, build and server JavaScript syntax
+        run: |
+          find js tools/e2e server scripts -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+
       - name: Run provider and pure-logic unit suites
         run: |
           npm run test:unit
