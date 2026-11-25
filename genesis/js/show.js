@@ -61,7 +61,21 @@
 
   // ---- editor <-> cue
   const $ = (id) => document.getElementById(id);
-  function fillSelect(sel, items, keep) { const v = sel.value; sel.innerHTML = '<option value="">Leave as it is</option>' + items.map((i) => '<option value="' + i[0] + '">' + i[1] + '</option>').join(''); sel.value = keep != null ? keep : v; }
+  function fillSelect(sel, items, keep) {
+    const previous = sel.value;
+    sel.textContent = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Leave as it is';
+    sel.appendChild(placeholder);
+    (items || []).forEach((item) => {
+      const option = document.createElement('option');
+      option.value = String(item[0] == null ? '' : item[0]);
+      option.textContent = String(item[1] == null ? '' : item[1]);
+      sel.appendChild(option);
+    });
+    sel.value = keep != null ? keep : previous;
+  }
   function openEditor(index) {
     editing = index; const c = index >= 0 ? cues[index] : { label: 'Step ' + (cues.length + 1), say: '', gfx: {} }; const g = c.gfx || {};
     fillSelect($('seLook'), (window.VS.Looks ? window.VS.Looks.list() : []).map((l) => [l.id, l.name]), c.look || '');

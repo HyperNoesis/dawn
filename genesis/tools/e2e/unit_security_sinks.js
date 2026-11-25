@@ -44,6 +44,8 @@ assert(!editor.includes('clipSelect.innerHTML = recordings.map'),
 
 const environmentProvider = read('js/providers/environment-provider.js');
 const manifest = read('android/app/src/main/AndroidManifest.xml');
+const audio = read('js/audio-studio.js');
+const show = read('js/show.js');
 const capacitor = read('capacitor.config.json');
 assert(app.includes('file.size > 20 * 1024 * 1024'), 'Studio background uploads enforce a byte limit');
 assert(environments.includes('file.size > 20 * 1024 * 1024'), 'environment gallery uploads enforce a byte limit');
@@ -61,5 +63,11 @@ assert(!config.includes('renderRelayToken:'), 'shared relay tokens must not be b
 assert(!transcription.includes('config.groqApiKey'), 'transcription must not read a shared config secret');
 assert(app.includes('const params = `width=1280&height=720&seed=${seed}`'),
   'Pollinations remains on the no-key public route');
+
+assert(!audio.includes('clipSelect.innerHTML = recordings.map'), 'Audio recording titles are not interpolated into options');
+assert(audio.includes('option.textContent = clipTitle(recording)'), 'Audio recording title uses textContent');
+assert(!show.includes("sel.innerHTML = '<option value=\"\">Leave as it is</option>'"),
+  'Show look and preset labels are not interpolated into options');
+assert(show.includes('option.textContent = String(item[1]'), 'Show option labels use textContent');
 
 console.log('security-sinks: user-content, PDF/media limits, native privacy and client-secret boundaries are guarded');

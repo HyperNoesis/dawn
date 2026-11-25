@@ -64,7 +64,13 @@
     return;
   }
   els.audioBody.style.display = 'block';
-  els.clipSelect.innerHTML = recordings.map(r => `<option value="${r.id}">${clipTitle(r)} — ${r.meta.createdAt || ''}</option>`).join('');
+  els.clipSelect.textContent = '';
+  recordings.forEach((recording) => {
+    const option = document.createElement('option');
+    option.value = String(recording.id);
+    option.textContent = clipTitle(recording) + ' — ' + String(recording.meta.createdAt || '');
+    els.clipSelect.appendChild(option);
+  });
 
   if (!els.video.captureStream && !els.video.mozCaptureStream) {
     els.exportBtn.disabled = true;
