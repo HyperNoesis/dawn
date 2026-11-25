@@ -6,14 +6,16 @@
     "www": "node scripts/vendor-tasks.js && node scripts/make-www.js",
     "sync": "npm run www && npx cap sync android",
     "models": "node scripts/fetch-models.js",
-    "test:unit": "node tools/unit/run-all.js"
+    "test:unit": "node tools/unit/run-all.js",
+    "android:debug": "npm run sync && cd android && ./gradlew assembleDebug --no-daemon",
+    "android:release": "npm run sync && cd android && ./gradlew bundleRelease --no-daemon"
   },
   "dependencies": {
-    "@capacitor/android": "^6.2.0",
-    "@capacitor/core": "^6.2.0"
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.2.0",
+    "@capacitor/cli": "^8.6.2",
     "@mediapipe/tasks-vision": "0.10.21"
   }
 }
