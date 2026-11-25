@@ -72,6 +72,11 @@
     // v0.59 large scene preview: arrows / swipe-free buttons, Esc closes, focus returns to the card that opened it
     let spBack = null, spList = [], spIdx = 0, spOpener = null;
     function spEsc(t) { return String(t).replace(/[<>&"]/g, ''); }
+    function spHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[char]));
+    }
     function spRender() {
       const env = spList[spIdx]; if (!env) return;
       spBack.querySelector('.sp-img').setAttribute('style', envProvider.getPreviewStyle(env.id));
@@ -125,7 +130,7 @@
     function renderTabs(list) {
       const tabs = categoriesFrom(list);
       const el = document.getElementById('categoryTabs');
-      el.innerHTML = tabs.map(t => `<button class="tab ${t === activeCategory ? 'active' : ''}" data-cat="${t}">${t}</button>`).join('');
+      el.innerHTML = tabs.map(t => `<button class="tab ${t === activeCategory ? 'active' : ''}" data-cat="${spHtml(t)}">${spHtml(t)}</button>`).join('');
       el.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', () => { activeCategory = btn.dataset.cat; render(); });
       });
@@ -145,16 +150,16 @@
       filtered.forEach(env => {
         const card = document.createElement('div');
         card.className = 'env-card';
-        card.tabIndex = 0; card.setAttribute('role', 'button'); card.setAttribute('aria-label', `Preview ${env.name}`);
+        card.tabIndex = 0; card.setAttribute('role', 'button'); card.setAttribute('aria-label', `Preview ${spHtml(env.name)}`);
         card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview(filtered, filtered.indexOf(env), card); } });
         card.innerHTML = `
           <div class="env-thumb" style="${envProvider.getPreviewStyle(env.id)}"></div>
           <div class="env-body">
-            <div class="env-txt"><div class="env-name">${env.name}</div><div class="env-use">${useLine(env)}</div></div>
-            <div class="env-cat">${env.type === 'image' ? 'Custom upload' : env.category || 'Built-in'}</div>
+            <div class="env-txt"><div class="env-name">${spHtml(env.name)}</div><div class="env-use">${spHtml(useLine(env))}</div></div>
+            <div class="env-cat">${spHtml(env.type === 'image' ? 'Custom upload' : env.category || 'Built-in')}</div>
           </div>
-          <button type="button" class="fav-btn" data-id="${env.id}" aria-pressed="${favs().includes(env.id)}" aria-label="Favourite ${env.name.replace(/"/g, '')}">${window.VS.icon('star', 16)}</button>
-          ${env.type === 'image' ? `<button data-id="${env.id}" class="link-btn remove-env" aria-label="Remove ${env.name.replace(/"/g, '')}">Remove</button>` : ''}`;
+          <button type="button" class="fav-btn" data-id="${spHtml(env.id)}" aria-pressed="${favs().includes(env.id)}" aria-label="Favourite ${spHtml(env.name)}">${window.VS.icon('star', 16)}</button>
+          ${env.type === 'image' ? `<button data-id="${spHtml(env.id)}" class="link-btn remove-env" aria-label="Remove ${spHtml(env.name)}">Remove</button>` : ''}`;
         card.querySelector('.fav-btn').addEventListener('click', (e) => { e.stopPropagation(); const on = toggleFav(env.id); e.currentTarget.setAttribute('aria-pressed', String(on)); if (activeCategory === 'Favourites' || (!on && !favs().length)) { if (!favs().length) activeCategory = 'All'; render(); } else renderTabs(envProvider.list()); });
         card.querySelector('.fav-btn').addEventListener('keydown', (e) => e.stopPropagation());
         card.addEventListener('click', (e) => {
