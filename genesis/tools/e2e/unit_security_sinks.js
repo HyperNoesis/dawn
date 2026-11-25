@@ -22,21 +22,21 @@ assert.match(app, /MAX_PDF_PAGES = 40/);
 assert.match(app, /MAX_PDF_TOTAL_PIXELS/);
 assert.match(app, /MAX_IMAGE_TOTAL_PIXELS/);
 
-assert.doesNotMatch(app, /<div class="env-name">\\$\\{env\\.name\\}<\\/div>/,
+assert(!app.includes('<div class="env-name">${env.name}</div>'),
   'Studio mini environment cards must not interpolate uploaded filenames');
-assert.match(app, /card\\.querySelector\\('\\.env-name'\\)\\.textContent = String\\(env\\.name/,
+assert(app.includes("card.querySelector('.env-name').textContent = String(env.name"),
   'Studio environment names are placed into the DOM as text');
-assert.match(environments, /function spHtml\\(value\\)/,
+assert(environments.includes('function spHtml(value)'),
   'environment gallery has an HTML escaping helper');
-assert.doesNotMatch(environments, /<div class="env-name">\\$\\{env\\.name\\}<\\/div>/,
+assert(!environments.includes('<div class="env-name">${env.name}</div>'),
   'environment gallery must not interpolate uploaded filenames raw');
-assert.doesNotMatch(editor, /\\$\\{m\\.label\\}|\\$\\{item\\.title\\}/,
+assert(!editor.includes('${m.label}') && !editor.includes('${item.title}'),
   'user-authored marker labels and recording titles must never enter HTML');
-assert.match(editor, /label\\.textContent = fmt\\(m\\.time\\)/,
+assert(editor.includes('label.textContent = fmt(m.time)'),
   'marker label is rendered as text');
-assert.match(editor, /title\\.textContent = String\\(i \\+ 1\\)/,
+assert(editor.includes('title.textContent = String(i + 1)'),
   'sequence title is rendered as text');
-assert.doesNotMatch(editor, /clipSelect\\.innerHTML = recordings\\.map/,
+assert(!editor.includes('clipSelect.innerHTML = recordings.map'),
   'clip picker options must not interpolate user-controlled titles');
 
 console.log('security-sinks: untrusted strings, PDF resource caps and editor/environment paths are guarded');
