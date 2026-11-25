@@ -84,13 +84,22 @@ class StaticEnvironmentProvider {
    * every page, not just the one it was uploaded from.
    */
   static async persistCustomImage(name, imageElement) {
+    const sourceWidth = Number(imageElement && imageElement.naturalWidth);
+    const sourceHeight = Number(imageElement && imageElement.naturalHeight);
+    if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight) ||
+        sourceWidth < 1 || sourceHeight < 1 || sourceWidth > 8192 || sourceHeight > 8192 ||
+        sourceWidth * sourceHeight > 24000000) {
+      throw new Error('Image dimensions exceed the safe limit (8192 px per edge, 24 megapixels total).');
+    }
     const maxWidth = 1280;
-    const scale = Math.min(1, maxWidth / imageElement.naturalWidth);
-    const w = Math.round(imageElement.naturalWidth * scale);
-    const h = Math.round(imageElement.naturalHeight * scale);
+    const scale = Math.min(1, maxWidth / sourceWidth);
+    const w = Math.max(1, Math.round(sourceWidth * scale));
+    const h = Math.max(1, Math.round(sourceHeight * scale));
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
-    c.getContext('2d').drawImage(imageElement, 0, 0, w, h);
+    const context = c.getContext('2d');
+    if (!context) throw new Error('This browser could not allocate an environment image surface.');
+    context.drawImage(imageElement, 0, 0, w, h);
     const dataUrl = c.toDataURL('image/jpeg', 0.85);
 
     const id = 'custom-' + Date.now();

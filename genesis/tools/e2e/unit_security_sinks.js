@@ -39,4 +39,10 @@ assert(editor.includes('title.textContent = String(i + 1)'),
 assert(!editor.includes('clipSelect.innerHTML = recordings.map'),
   'clip picker options must not interpolate user-controlled titles');
 
-console.log('security-sinks: untrusted strings, PDF resource caps and editor/environment paths are guarded');
+const environmentProvider = read('js/providers/environment-provider.js');
+assert(app.includes('file.size > 20 * 1024 * 1024'), 'Studio background uploads enforce a byte limit');
+assert(environments.includes('file.size > 20 * 1024 * 1024'), 'environment gallery uploads enforce a byte limit');
+assert(app.includes('file.size > 5 * 1024 * 1024'), 'brand logo uploads enforce a byte limit');
+assert(environmentProvider.includes('sourceWidth * sourceHeight > 24000000'), 'shared image persistence enforces a decoded-pixel limit');
+
+console.log('security-sinks: untrusted strings, PDF limits and media ingestion budgets are guarded');

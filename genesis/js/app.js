@@ -3149,7 +3149,13 @@
 
   els.uploadBg.addEventListener('change', (e) => {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/i.test(file.type) || file.size <= 0 || file.size > 20 * 1024 * 1024) {
+      alert('Choose a PNG, JPEG or WebP image up to 20 MB.');
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = async () => {
       try {
@@ -3161,9 +3167,15 @@
         pushEnvironment(id);
       } catch (err) {
         alert(err.message);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
       }
     };
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      alert('Could not decode that image. Try a PNG, JPEG or WebP file.');
+    };
+    img.src = objectUrl;
   });
 
   els.genBtn.addEventListener('click', async () => {
@@ -3883,17 +3895,33 @@
   els.logoUploadTrigger.addEventListener('click', () => els.logoUpload.click());
   els.logoUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/i.test(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024) {
+      window.VS.reportError('Choose a PNG, JPEG or WebP logo up to 5 MB.');
+      return;
+    }
     const reader = new FileReader();
+    reader.onerror = () => window.VS.reportError('Could not read that logo file.');
     reader.onload = () => {
-      brandKit.logoDataUrl = reader.result;
-      els.logoFileLabel.textContent = 'Logo set (click to replace)';
-      logoImg = new Image();
-      logoImg.onload = pushLogoBitmap;
-      logoImg.src = brandKit.logoDataUrl;
-      els.watermarkToggle.checked = true;
-      brandKit.watermark = true;
-      pushWatermarkOn();
+      const candidate = new Image();
+      candidate.onerror = () => window.VS.reportError('Could not decode that logo image.');
+      candidate.onload = () => {
+        if (!candidate.naturalWidth || !candidate.naturalHeight ||
+            candidate.naturalWidth > 4096 || candidate.naturalHeight > 4096 ||
+            candidate.naturalWidth * candidate.naturalHeight > 16000000) {
+          window.VS.reportError('Logo dimensions must be no larger than 4096 px per edge and 16 megapixels total.');
+          return;
+        }
+        brandKit.logoDataUrl = reader.result;
+        els.logoFileLabel.textContent = 'Logo set (click to replace)';
+        logoImg = candidate;
+        pushLogoBitmap();
+        els.watermarkToggle.checked = true;
+        brandKit.watermark = true;
+        pushWatermarkOn();
+      };
+      candidate.src = reader.result;
     };
     reader.readAsDataURL(file);
   });
