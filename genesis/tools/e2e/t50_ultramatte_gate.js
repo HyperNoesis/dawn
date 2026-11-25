@@ -420,7 +420,7 @@ function withTimeout(promise, ms, label) {
       const timings = samples.map((sample) => sample.segmentMs).filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
       const percentile = (values, p) => values.length ? values[Math.max(0, Math.ceil(values.length * p) - 1)] : 0;
       const p75 = percentile(timings, 0.75);
-      const performance = {
+      const performanceMetrics = {
         frameCount: samples.length,
         p50SegmentMs: percentile(timings, 0.50),
         p75SegmentMs: p75,
@@ -437,7 +437,7 @@ function withTimeout(promise, ms, label) {
         ortSource: V.ortSource || 'unknown',
         ortVersion: ort.env && ort.env.versions ? ort.env.versions.web : 'unknown',
         initMs: Math.round(initMs),
-        performance,
+        performance: performanceMetrics,
         syntheticGroundTruth: {
           source: 'tools/e2e/fixtures/gt_alpha_640x480.png',
           scope: 'synthetic labelled fixture only; not real-person accuracy evidence'
