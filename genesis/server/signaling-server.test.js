@@ -9,6 +9,9 @@ const { createSignalingServer, safeName, validRoom } = require('./signaling-serv
   assert.strictEqual(validRoom('bad room'), false);
   assert.strictEqual(validRoom(''), false);
   assert.strictEqual(safeName('  Ada\u0000\nLovelace  '), 'Ada Lovelace');
+  const serverSource = require('fs').readFileSync(require('path').join(__dirname, 'signaling-server.js'), 'utf8');
+  assert(serverSource.includes('https://localhost') && serverSource.includes('capacitor://localhost'),
+    'default CORS allowlist includes Capacitor WebView origins');
   assert.strictEqual(safeName('<img src=x onerror=alert(1)>'), '<img src=x onerror=alert(1)>',
     'server preserves ordinary punctuation; client rendering must keep the name as text');
 

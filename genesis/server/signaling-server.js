@@ -13,7 +13,7 @@ const RATE_WINDOW_MS = 10_000;
 const ROOM_RE = /^[A-Za-z0-9_-]{6,64}$/;
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
 const defaultOrigins = new Set(
-  String(process.env.ALLOWED_ORIGINS || 'https://hypernoesis.github.io')
+  String(process.env.ALLOWED_ORIGINS || 'https://hypernoesis.github.io,https://localhost,capacitor://localhost')
     .split(',').map((value) => value.trim()).filter(Boolean)
 );
 const rooms = new Map();

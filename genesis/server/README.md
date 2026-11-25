@@ -13,9 +13,12 @@ Configure the browser origins that may connect:
 ALLOWED_ORIGINS=https://hypernoesis.github.io,https://your-custom-domain.example
 ```
 
-The default is the GitHub Pages origin. Local testing must explicitly allow the
-local origin, for example `ALLOWED_ORIGINS=http://localhost:8080`. Do not use a
-wildcard origin for a public signalling server. The app validates room codes and
+The defaults allow the GitHub Pages web app and Capacitor's Android/iOS local
+WebView origins (`https://localhost` and `capacitor://localhost`). Add every
+custom web deployment origin explicitly, for example
+`ALLOWED_ORIGINS=https://hypernoesis.github.io,https://localhost,capacitor://localhost,https://studio.example.com`.
+For local browser development, also add the exact origin such as
+`http://localhost:8080`. Do not use a wildcard origin for a public signalling server. The app validates room codes and
 the server strips control characters and caps participant display names.
 
 Run it with:
