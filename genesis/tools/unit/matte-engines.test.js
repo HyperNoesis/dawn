@@ -110,7 +110,7 @@ assert.strictEqual(M.isAutomaticDefault(), true);
   assert.strictEqual(new R().kind, 'worker');
   M.setPref('auto');
   assert.strictEqual(M.getStatus().selected, 'auto');
-  assert.strictEqual(M.getStatus().selectedLabel, 'Automatic (adaptive)');
+  assert.strictEqual(M.getStatus().selectedLabel, 'Advanced Adaptive (default)');
   delete globalThis.navigator;
 
   console.log('matte-engines: all assertions passed');
