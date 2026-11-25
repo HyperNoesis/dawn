@@ -11,7 +11,7 @@
   const V = root.VS = root.VS || {};
   const KEY = 'vs_matte_engine';
   const ENGINES = [
-    ['modnet', 'MODNet (default)'],
+    ['modnet', 'MODNet (safe fallback)'],
     ['edgetam', 'MODNet + EdgeTAM cleanup (Apache-2.0, +30 MB)'],
     ['birefnet', 'BiRefNet lite (WebGPU, +115 MB, MIT)'],
     ['ppmatting-v2', 'PP-MattingV2 (BETA, +34 MB, Apache-2.0)'],
@@ -46,10 +46,11 @@
     });
   }
 
-  // Automatic mode starts with the known-safe local matting route, then the
-  // live app probes the advanced routes in quality order and promotes only the
-  // best one that actually meets this device's measured frame-time budget.
-  // This avoids making the first camera frame wait on the heaviest model.
+  // First-run mode is Advanced Adaptive. MODNet is only the immediate safe
+  // bootstrap matte: app.js probes UltraMatte -> Hybrid -> PP-MattingV2 and
+  // promotes the strongest route that initializes and meets this device's
+  // measured frame-time budget. Weak devices keep the safe matte; no device is
+  // forced to run the heaviest model just to satisfy a default setting.
   function defaultEngine() { return 'modnet'; }
 
   function isAutomaticDefault() {
@@ -227,7 +228,7 @@
     const automatic = isAutomaticDefault();
     return {
       selected: automatic ? 'auto' : pref(),
-      selectedLabel: automatic ? 'Automatic (adaptive)' : (visibleEngines().find((e) => e[0] === pref()) || [null, 'Unknown engine'])[1],
+      selectedLabel: automatic ? 'Advanced Adaptive (default)' : (visibleEngines().find((e) => e[0] === pref()) || [null, 'Unknown engine'])[1],
       automatic,
       active: provider ? String(provider.current || provider.label || 'Unknown engine') : activeLabel,
       fallback: !!fallbackReason,
@@ -267,7 +268,7 @@
     select.id = 'matteEngineSelect';
     select.setAttribute('aria-label', 'High-quality matting engine');
     const automaticOption = document.createElement('option');
-    automaticOption.value = 'auto'; automaticOption.textContent = 'Automatic (adaptive)';
+    automaticOption.value = 'auto'; automaticOption.textContent = 'Advanced Adaptive (default)';
     select.appendChild(automaticOption);
     for (const [value, label] of visibleEngines()) {
       const option = document.createElement('option');
@@ -282,7 +283,7 @@
     note.setAttribute('aria-live', 'polite');
 
     const explain = () => {
-      if (select.value === 'auto') return 'Automatic mode starts immediately on a safe local matte, then measures Genesis UltraMatte, Hybrid and PP-MattingV2 in the background. It keeps the best route this device can sustain and retains a safe fallback.';
+      if (select.value === 'auto') return 'Advanced Adaptive starts immediately with a safe local matte, then tests Genesis UltraMatte (PP-MattingV2 + EdgeTAM + boundary tiles), Hybrid and PP-MattingV2. It promotes the strongest route this device can sustain and keeps a safe fallback if performance or startup conditions change.';
       if (select.value === 'birefnet' && !(navigator.gpu)) return 'BiRefNet requires WebGPU. This browser may not be able to run it.';
       if (select.value === 'genesis-hybrid-tam') return 'Experimental. Runs PP-MattingV2, EdgeTAM subject gating and local boundary refinement. Quality and speed still require real-device validation.';
       if (select.value === 'genesis-hybrid') return 'Experimental. Uses PP-MattingV2 with local boundary refinement. Quality and speed still require real-device validation.';
