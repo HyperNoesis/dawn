@@ -21,6 +21,8 @@ permissions:
 
 jobs:
   debug-build:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -39,6 +41,20 @@ jobs:
           cache: gradle
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Commit generated lockfile on first-party branch pushes
+        if: github.event_name == 'push' && github.actor == 'HyperNoesis'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- package-lock.json; then
+            echo "Capacitor dependency lock is already current."
+          else
+            git add package-lock.json
+            git commit -m "chore: lock resolved Capacitor 8 dependencies"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
       - name: Preserve CI-regenerated Capacitor 8 dependency lock
         uses: actions/upload-artifact@v4
         with:
