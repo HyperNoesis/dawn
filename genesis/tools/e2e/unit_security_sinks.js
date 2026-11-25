@@ -8,6 +8,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const call = read('js/call.js');
 const errors = read('js/error-boundary.js');
 const app = read('js/app.js');
+const environments = read('environments.html');
+const editor = read('js/editor.js');
 
 assert.match(call, /displayName\.textContent = String\(name/);
 assert.doesNotMatch(call, /<div class="call-tile-label"><span>\$\{name\}<\/span>/);
@@ -20,4 +22,21 @@ assert.match(app, /MAX_PDF_PAGES = 40/);
 assert.match(app, /MAX_PDF_TOTAL_PIXELS/);
 assert.match(app, /MAX_IMAGE_TOTAL_PIXELS/);
 
-console.log('security-sinks: untrusted display strings and PDF resource caps are guarded');
+assert.doesNotMatch(app, /<div class="env-name">\\$\\{env\\.name\\}<\\/div>/,
+  'Studio mini environment cards must not interpolate uploaded filenames');
+assert.match(app, /card\\.querySelector\\('\\.env-name'\\)\\.textContent = String\\(env\\.name/,
+  'Studio environment names are placed into the DOM as text');
+assert.match(environments, /function spHtml\\(value\\)/,
+  'environment gallery has an HTML escaping helper');
+assert.doesNotMatch(environments, /<div class="env-name">\\$\\{env\\.name\\}<\\/div>/,
+  'environment gallery must not interpolate uploaded filenames raw');
+assert.doesNotMatch(editor, /\\$\\{m\\.label\\}|\\$\\{item\\.title\\}/,
+  'user-authored marker labels and recording titles must never enter HTML');
+assert.match(editor, /label\\.textContent = fmt\\(m\\.time\\)/,
+  'marker label is rendered as text');
+assert.match(editor, /title\\.textContent = String\\(i \\+ 1\\)/,
+  'sequence title is rendered as text');
+assert.doesNotMatch(editor, /clipSelect\\.innerHTML = recordings\\.map/,
+  'clip picker options must not interpolate user-controlled titles');
+
+console.log('security-sinks: untrusted strings, PDF resource caps and editor/environment paths are guarded');
