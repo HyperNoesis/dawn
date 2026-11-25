@@ -180,12 +180,54 @@ class SupabaseAuthProvider {
   }
 
   async deleteAccount() {
-    // Deleting a user record itself needs elevated (service-role) privileges
-    // that must never live in frontend code — so this calls a Postgres
-    // function (security definer, see supabase/schema.sql's
-    // delete_own_account()) that only ever deletes auth.uid()'s own row.
+    // Storage objects are external blobs and do not cascade with auth.users.
+    // Enumerate only this authenticated user's own prefix, remove via the
+    // Supabase Storage API, then delete the metadata/account through the
+    // SECURITY DEFINER function. Never delete storage.objects rows with SQL.
+    const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
+    if (sessionError) throw new Error('Could not verify your account session: ' + sessionError.message);
+    const userId = sessionData && sessionData.session && sessionData.session.user && sessionData.session.user.id;
+    if (!userId) throw new Error('You must be signed in to delete your account.');
+
+    const MAX_OBJECTS = 10000;
+    const PAGE_SIZE = 500;
+    const CHUNK_SIZE = 100;
+    for (const bucket of ['recordings', 'environments']) {
+      const paths = [];
+      const collect = async (prefix, depth) => {
+        if (depth > 5) throw new Error('Storage folder nesting exceeded the safe account-cleanup limit.');
+        let offset = 0;
+        for (;;) {
+          const { data, error } = await this.client.storage.from(bucket).list(prefix, {
+            limit: PAGE_SIZE, offset, sortBy: { column: 'name', order: 'asc' }
+          });
+          if (error) throw new Error('Could not inspect your ' + bucket + ' files: ' + error.message);
+          const items = data || [];
+          for (const item of items) {
+            if (!item || !item.name || item.name === '.' || item.name === '..') continue;
+            const path = prefix + '/' + item.name;
+            if (item.id || item.metadata) {
+              paths.push(path);
+              if (paths.length > MAX_OBJECTS) {
+                throw new Error('This account has more than 10,000 stored objects. Contact support for assisted deletion; your account has not been deleted.');
+              }
+            } else {
+              await collect(path, depth + 1);
+            }
+          }
+          if (items.length < PAGE_SIZE) break;
+          offset += items.length;
+        }
+      };
+      await collect(userId, 0);
+      for (let i = 0; i < paths.length; i += CHUNK_SIZE) {
+        const { error } = await this.client.storage.from(bucket).remove(paths.slice(i, i + CHUNK_SIZE));
+        if (error) throw new Error('Could not safely remove your ' + bucket + ' files: ' + error.message + '. Your account has not been deleted.');
+      }
+    }
+
     const { error } = await this.client.rpc('delete_own_account');
-    if (error) throw new Error(error.message);
+    if (error) throw new Error('Storage was cleaned, but account deletion failed: ' + error.message);
     await this.client.auth.signOut();
   }
 }
