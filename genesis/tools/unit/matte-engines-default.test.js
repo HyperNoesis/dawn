@@ -32,7 +32,10 @@ const MatteEngines = require('../../js/providers/matte-engines.js');
 
 assert.strictEqual(MatteEngines.defaultEngine(), 'modnet', 'the safe local matting route is the immediate default');
 assert.strictEqual(MatteEngines.pref(), 'modnet', 'no saved choice starts on MODNet');
-assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'first-run MODNet remains an automatic selection');
+assert.strictEqual(MatteEngines.isAutomaticDefault(), true, 'first-run Advanced Adaptive is enabled by default');
+const initialStatus = MatteEngines.getStatus();
+assert.strictEqual(initialStatus.selected, 'auto', 'the selected architecture is adaptive, not a fixed baseline model');
+assert.strictEqual(initialStatus.selectedLabel, 'Advanced Adaptive (default)', 'the UI identifies the advanced adaptive default clearly');
 
 // Legacy explicit preferences remain explicit until the new picker is changed.
 storage.set('vs_live_engine', 'rvm');
