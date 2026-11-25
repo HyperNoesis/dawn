@@ -37,6 +37,7 @@
     signIn: async (...a) => { const r = await provider.signIn(...a); try { localStorage.removeItem(GUEST_KEY); } catch (e) {} return r; },
     signOut: async (...a) => { try { localStorage.removeItem(GUEST_KEY); } catch (e) {} return provider.signOut(...a); },
     getCurrentUser,
+    getAccessToken: () => typeof provider.getAccessToken === 'function' ? provider.getAccessToken() : Promise.resolve(null),
     continueAsGuest,
     isGuest: isGuestFlag,
     updateProfile: (...a) => provider.updateProfile(...a),

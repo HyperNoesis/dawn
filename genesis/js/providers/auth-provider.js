@@ -51,6 +51,8 @@ class LocalAuthProvider {
     return { name: user.name, email };
   }
 
+  async getAccessToken() { return null; }
+
   async signOut() {
     localStorage.removeItem(this.SESSION_KEY);
   }
@@ -140,6 +142,12 @@ class SupabaseAuthProvider {
     const name = data.user.user_metadata?.name || email;
     await this.client.from('profiles').upsert({ id: data.user.id, name, email: data.user.email }).select().maybeSingle().catch(() => {});
     return { name, email };
+  }
+
+  async getAccessToken() {
+    const { data, error } = await this.client.auth.getSession();
+    if (error) throw new Error(error.message);
+    return data && data.session ? data.session.access_token : null;
   }
 
   async signOut() {

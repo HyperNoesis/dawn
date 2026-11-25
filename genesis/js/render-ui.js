@@ -20,7 +20,20 @@
       if (job) return;
       if (!window.confirm(RP.PRIVACY_NOTICE + '\n\nContinue?')) return;
       btn.disabled = true; cancel.style.display = ''; msg.textContent = 'Starting...';
-      const adapter = RP.createRelayAdapter({ baseUrl: relayUrl(), token: cfg().renderRelayToken || '' });
+      let accessToken = null;
+      try {
+        accessToken = window.VS.auth && await window.VS.auth.getAccessToken();
+      } catch (error) {
+        msg.textContent = 'Could not verify your cloud session: ' + String(error && error.message || error);
+      }
+      if (!accessToken) {
+        job = null;
+        cancel.style.display = 'none';
+        btn.disabled = false;
+        msg.textContent = 'AI re-render requires a signed-in cloud account. Local and guest sessions cannot access the hosted render service.';
+        return;
+      }
+      const adapter = RP.createRelayAdapter({ baseUrl: relayUrl(), token: accessToken });
       job = RP.runRenderJob({ adapter, clip: blob, prompt: RP.LEVEL3_PROMPT, options: { resolution: '720p', duration: 6 }, onState: (s, x) => { msg.textContent = (x && x.message) || LABEL[s] || (s === 'done' ? 'Done.' : s === 'cancelled' ? 'Cancelled.' : ''); } });
       const r = await job.promise; job = null; cancel.style.display = 'none'; btn.disabled = false;
       if (r.ok && r.result && r.result.blob) { msg.textContent = 'Done. The AI version was saved as a NEW recording; your original is untouched. Check it carefully: it is experimental.'; try { onResult && onResult(r.result.blob); } catch (e) { /* ignore */ } }
