@@ -39,6 +39,12 @@ jobs:
           cache: gradle
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Preserve CI-regenerated Capacitor 8 dependency lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: Genesis-capacitor-8-package-lock
+          path: genesis/package-lock.json
+          if-no-files-found: error
       - name: Sync bundled app into native shell
         run: |
           node --version
