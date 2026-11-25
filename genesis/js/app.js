@@ -165,7 +165,7 @@
 
   /** True when an earlier speed test on this device already showed EVERY candidate is too slow (so we do not re-download and re-test on each start). */
   function benchSaysSlow(b, cands) { return !!b && window.VS.PerfProfile.benchFresh(b) && cands.length > 0 && (b.clearlySlow === true || cands.every((c) => typeof b[c.key + 'Ms'] === 'number' && b[c.key + 'Ms'] > maxMs() * 1.4)); }   // v0.80: only a CLEARLY slow verdict (1.4x over budget) skips the upgrade next time; a borderline one is re-measured
-  /** Load the best live matting engine while the camera is already live; swap it in only if this device runs it fast enough. Tries RVM, then MODNet. */
+  /** Promote the strongest eligible local route only after it initializes and meets this device's measured live budget: UltraMatte -> Hybrid -> PP-MattingV2. Keep the current matte live while candidates are prepared and measured. */
   async function backgroundUpgrade(quality, sessionToken) {
     if (upgrading) return;
     upgrading = true;
