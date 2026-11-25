@@ -31,26 +31,8 @@ window.VS.config = {
   // Optional button text for the relay button (e.g. 'Studio Export: clean cutout on scene' when renderRelayUrl points at the gpu/ Studio Export service).
   renderRelayLabel: '',
 
-  // Powers real file transcription (Projects → Transcribe) via Groq's
-  // free-tier Whisper API. Get a free key at console.groq.com/keys and
-  // paste it here — set once by you, not typed in by each user.
-  // IMPORTANT: this is still a client-side static site with no backend,
-  // so anything in this file ships to every visitor's browser and is
-  // readable via view-source/devtools. Don't treat this as a secret the
-  // way you would on a server — a free/low-tier key is fine here, but
-  // don't reuse a key you use elsewhere for anything sensitive.
-  groqApiKey: '',
+  // Shared provider secrets must never be added to this public static file.
+  // Groq accepts only a personal per-device key in localStorage.
+  // Pollinations world generation uses its no-key public route.
 
-  // Powers "Create a world" (AI environment generation) via Pollinations'
-  // current Unified API. Their older no-key endpoint (image.pollinations.ai)
-  // is now marked legacy/deprecated in their own docs and has grown
-  // unreliable — this is the actively-maintained replacement.
-  // Get a key from the "Secrets" section (not "Apps") at enter.pollinations.ai/keys —
-  // it'll start with sk_. The "Apps" pk_ keys are OAuth client IDs for login
-  // flows, not generation, and raw legacy pk_ keys are rate-limited to
-  // 1 image/hour and often blocked from specific models.
-  // Same client-side caveat as the Groq key above: this ships to every
-  // visitor's browser and isn't truly hidden/secret. Fine for a low-stakes
-  // free-tier project; don't reuse this key anywhere sensitive.
-  pollinationsApiKey: ''
 };

@@ -3190,11 +3190,10 @@
       // error here instead of a confusing "tainted canvas" error later on save.
       // Swapping in a paid provider (Fal.ai/Replicate) later is a one-function change here.
       async function fetchGeneration(attempt) {
-        const key = (window.VS && window.VS.config && window.VS.config.pollinationsApiKey || '').trim();
         // Seed must fit Pollinations' documented range (0…2147483647 / int32) — Date.now()
         // alone is ~1.7 trillion and gets rejected as "Query parameter validation failed".
         const seed = (Date.now() + attempt) % 2147483647;
-        const params = `width=1280&height=720&seed=${seed}${key ? `&key=${encodeURIComponent(key)}` : ''}`;
+        const params = `width=1280&height=720&seed=${seed}`;
         const apiPrompt = (els.genSceneMode && els.genSceneMode.checked && SceneEng) ? SceneEng.scenePrompt(prompt) : prompt;
         const url = `https://gen.pollinations.ai/image/${encodeURIComponent(apiPrompt)}?${params}`;
         const controller = new AbortController();
@@ -3228,11 +3227,11 @@
           }
         } catch (_) { /* body already consumed or unreadable — fall back to status only */ }
         const reason = res.status === 401
-          ? `Pollinations.ai rejected the API key (HTTP 401)${serverMessage ? ': ' + serverMessage : ''}. Get a fresh key at enter.pollinations.ai/keys and paste it into js/config.js.`
+          ? `Pollinations.ai rejected the generation request (HTTP 401)${serverMessage ? ': ' + serverMessage : ''}.`
           : res.status === 402
-            ? `Pollinations.ai says this key is out of Pollen (HTTP 402)${serverMessage ? ': ' + serverMessage : ''}.`
+            ? `Pollinations.ai reported a quota or billing limit (HTTP 402)${serverMessage ? ': ' + serverMessage : ''}.`
             : res.status === 429
-              ? 'Pollinations.ai is rate-limiting (the free key allows about 1 generation per hour) — wait a bit and try again.'
+              ? 'Pollinations.ai is rate-limiting requests — wait a bit and try again.'
               : res.status >= 500
                 ? `Pollinations.ai's server had an error (HTTP ${res.status}) after a retry — this is on their end, try again shortly.`
                 : `Generation failed (HTTP ${res.status})${serverMessage ? ': ' + serverMessage : ''}. Try a different description.`;

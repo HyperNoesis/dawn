@@ -17,10 +17,11 @@
   const ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
   const MODEL = 'whisper-large-v3-turbo';
 
+  // Only a personal per-device key is accepted. Do not bundle a shared
+  // owner/provider credential in config.js; static assets are public.
   function getApiKey() {
-    const configured = (window.VS && window.VS.config && window.VS.config.groqApiKey || '').trim();
-    if (configured) return configured;
-    return (localStorage.getItem('vs_groq_api_key') || '').trim();
+    try { return (localStorage.getItem('vs_groq_api_key') || '').trim(); }
+    catch (_) { return ''; }
   }
 
   class GroqTranscriptionProvider {

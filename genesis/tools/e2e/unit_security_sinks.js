@@ -53,4 +53,12 @@ assert(environmentProvider.includes('sourceWidth * sourceHeight > 24000000'), 's
 assert(manifest.includes('android:allowBackup="false"'), 'Android backups must not silently copy local recordings');
 assert(!capacitor.includes('"url": "https://hypernoesis.github.io'), 'Android must load bundled web assets instead of trusting remote app code');
 
-console.log('security-sinks: untrusted strings, PDF/media limits and native privacy guards are covered');
+const config = read('js/config.js');
+const transcription = read('js/providers/groq-transcription.js');
+assert(!config.includes('groqApiKey:'), 'shared Groq keys must not be bundled in public config');
+assert(!config.includes('pollinationsApiKey:'), 'shared Pollinations keys must not be bundled in public config');
+assert(!transcription.includes('config.groqApiKey'), 'transcription must not read a shared config secret');
+assert(app.includes('const params = `width=1280&height=720&seed=${seed}`'),
+  'Pollinations remains on the no-key public route');
+
+console.log('security-sinks: user-content, PDF/media limits, native privacy and client-secret boundaries are guarded');
