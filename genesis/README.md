@@ -21,13 +21,19 @@ Browser virtual studio (cutout, scenes, broadcast tools) plus an optional GPU se
 Full click-by-click guide, costs and safety limits: [`docs/DEPLOY_FROM_PHONE.md`](docs/DEPLOY_FROM_PHONE.md).
 
 ## Models
-Nothing over 100 MB is on `main` (GitHub blocks it). **The four heavy models are also stored in this repo**, on the `models` branch, split into 90 MB parts (`sh restore.sh` there joins and verifies them); `fetch_models.sh` falls back to that branch automatically if an original release link disappears. The export models (BiRefNet matting and portrait, BiRefNet general ONNX, MatAnyone 2 reference) are pulled from their GitHub releases at pinned versions and SHA-256-checked by `server/studio-export/fetch_models.sh`; the Modal image build runs it, so cold starts download nothing. The browser models (MODNet, RVM) are small and are in `models/`.
+Nothing over 100 MB is on `main` (GitHub blocks it). **The four heavy models are also stored in this repo**, on the `models` branch, split into 90 MB parts (`sh restore.sh` there joins and verifies them); `fetch_models.sh` falls back to that branch automatically if an original release link disappears. The export models (BiRefNet matting and portrait, BiRefNet general ONNX, MatAnyone 2 reference) are pulled from their GitHub releases at pinned versions and SHA-256-checked by `server/studio-export/fetch_models.sh`; the Modal image build runs it, so cold starts download nothing. The browser stack includes MODNet and MediaPipe as bootstrap/fallback paths, plus PP-MattingV2 and EdgeTAM for the Advanced Adaptive live route. RVM and BiRefNet remain explicit opt-ins, not members of the automatic promotion chain.
+
+## Live segmentation default
+
+**Advanced Adaptive is the first-run default.** Studio opens with a safe local matte (MediaPipe on mobile/constrained devices; MODNet on suitable desktop routes), then benchmarks these commercial-use candidate routes in order: **Genesis UltraMatte (PP-MattingV2 + EdgeTAM + boundary tiles) → Genesis Hybrid → PP-MattingV2**. A candidate is promoted only after it initializes and its measured frame time fits the device's live budget. The quality governor can reduce resolution, move to a lighter route, and recover when the device has headroom again.
+
+This is an adaptive architecture, not a guarantee that the heaviest model runs on every phone. RVM is excluded from Automatic because its browser distribution is GPL-3.0; BiRefNet is an optional WebGPU route. **Genesis MatteNet is a research/architecture specification only: it has no trained custom weights and is not a live engine.**
 
 ## Licences, read before selling anything
 See `LICENSES.md`. In short: BiRefNet is MIT. **MatAnyone 2 is non-commercial** and excluded from the GPU image by default; only opt in with `GENESIS_INCLUDE_REFERENCE=1` for permitted reference evaluation. Never use it in a paid workflow without written permission. **RVM in the browser live tier is GPL-3.0**: fine for testing, replace before you charge anyone (plan in `docs/MODEL_DECISION_v0_82.md`). SAM2Matting is non-commercial and is not used.
 
 ## Tests
-`tools/e2e/unit_*.js` (40 browser-logic suites), `server/studio-export/test_*.py` (50 checks), `gpu/test_export_api.py` (32 checks), `gpu/test_adapter_compat.js` (the app's real render adapter against the API). CI runs them on push.
+CI runs provider/pure-logic unit suites, Playwright synthetic-camera and model-inference gates, motion/matte-edge regression checks, Python export/scene/safety tests, export API tests, and a deployable-site build. The test artifacts include paired segmentation/composite images and numeric mask/temporal metrics. Synthetic fixtures verify integration and regression behavior; they are not independent real-person accuracy labels.
 
 ## Status
-Verified here: the website builds; 40/40 unit suites; 50/50 export checks; 32/32 API checks; the real adapter completes a job against the API. **Not yet run anywhere:** a real GPU export, the Modal image build, the GitHub Actions workflows, GitHub Pages. First real-clip checklist is at the end of `docs/DEPLOY_FROM_PHONE.md`.
+The adaptive implementation has passed earlier browser/model, export/API and site-build CI runs. The latest branch run is linked from the pull request. **Still unverified:** hand-labelled real-person alpha quality, sustained performance/thermal/memory behavior on physical Android/iOS devices, and a production GPU export. The physical-device and real-footage gates remain release blockers; see `docs/BLIND_TEST.md` and the device validation notes.
