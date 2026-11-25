@@ -25,14 +25,11 @@ window.VS.config = {
 
   // OPTIONAL experimental AI re-render of a RECORDED clip (server/render-relay.js, docs/LEVEL3_EXPERIMENT.md).
   // Empty = the button is hidden and nothing is ever uploaded. If set, the clip leaves the device only after the user confirms.
-  // renderRelayToken is visible to every visitor (static site): use it only as a speed bump, rely on the relay's daily cap.
   renderRelayUrl: '',
-  renderRelayToken: '',
   // Optional button text for the relay button (e.g. 'Studio Export: clean cutout on scene' when renderRelayUrl points at the gpu/ Studio Export service).
   renderRelayLabel: '',
 
   // Shared provider secrets must never be added to this public static file.
   // Groq accepts only a personal per-device key in localStorage.
   // Pollinations world generation uses its no-key public route.
-
 };

@@ -57,6 +57,7 @@ const config = read('js/config.js');
 const transcription = read('js/providers/groq-transcription.js');
 assert(!config.includes('groqApiKey:'), 'shared Groq keys must not be bundled in public config');
 assert(!config.includes('pollinationsApiKey:'), 'shared Pollinations keys must not be bundled in public config');
+assert(!config.includes('renderRelayToken:'), 'shared relay tokens must not be bundled in public config');
 assert(!transcription.includes('config.groqApiKey'), 'transcription must not read a shared config secret');
 assert(app.includes('const params = `width=1280&height=720&seed=${seed}`'),
   'Pollinations remains on the no-key public route');
