@@ -125,6 +125,16 @@
 
   function clipTitle(rec) { return rec.meta.title || rec.meta.environment || 'Recording'; }
 
+  function renderClipOptions() {
+    els.clipSelect.textContent = '';
+    recordings.forEach((recording) => {
+      const option = document.createElement('option');
+      option.value = recording.id;
+      option.textContent = clipTitle(recording) + ' — ' + String(recording.meta.createdAt || '');
+      els.clipSelect.appendChild(option);
+    });
+  }
+
   // ============================================================
   // Load library
   // ============================================================
@@ -140,7 +150,7 @@
   }
   els.editorBody.style.display = 'block';
 
-  els.clipSelect.innerHTML = recordings.map(r => `<option value="${r.id}">${clipTitle(r)} — ${r.meta.createdAt || ''}</option>`).join('');
+  renderClipOptions();
 
   if (!els.video.captureStream && !els.video.mozCaptureStream) {
     els.exportTrimBtn.disabled = true;
@@ -230,12 +240,18 @@
     markers.forEach((m, i) => {
       const row = document.createElement('div');
       row.className = 'marker-row';
-      row.innerHTML = `
-        <span>${fmt(m.time)} &middot; ${m.label}</span>
-        <span class="btn-row">
-          <button class="btn ghost xs jump-btn" data-time="${m.time}">Jump</button>
-          <button class="btn danger xs del-btn" data-idx="${i}">Delete</button>
-        </span>`;
+      const label = document.createElement('span');
+      label.textContent = fmt(m.time) + ' · ' + String(m.label || 'Marker');
+      const actions = document.createElement('span');
+      actions.className = 'btn-row';
+      const jump = document.createElement('button');
+      jump.type = 'button'; jump.className = 'btn ghost xs jump-btn';
+      jump.dataset.time = String(m.time); jump.textContent = 'Jump';
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'btn danger xs del-btn';
+      remove.dataset.idx = String(i); remove.textContent = 'Delete';
+      actions.append(jump, remove);
+      row.append(label, actions);
       els.markerList.appendChild(row);
     });
     els.markerList.querySelectorAll('.jump-btn').forEach(b => b.addEventListener('click', () => { els.video.currentTime = parseFloat(b.dataset.time); }));
@@ -272,7 +288,7 @@
     const idA = await window.VS.storage.saveRecording(currentClip.blob, { ...currentClip.meta, title: baseTitle + ' (part 1)', trimIn: trimStart, trimOut: t, createdAt: new Date().toLocaleString(), markers: [] });
     const idB = await window.VS.storage.saveRecording(currentClip.blob, { ...currentClip.meta, title: baseTitle + ' (part 2)', trimIn: t, trimOut: trimEnd, createdAt: new Date().toLocaleString(), markers: [] });
     recordings = await window.VS.storage.listRecordings();
-    els.clipSelect.innerHTML = recordings.map(r => `<option value="${r.id}">${clipTitle(r)} — ${r.meta.createdAt || ''}</option>`).join('');
+    renderClipOptions();
     els.clipSelect.value = idA;
     loadClip(idA);
     alert('Split into two library entries (Projects → Recordings). Each keeps this clip\u2019s trim range; open either to keep editing.');
@@ -338,13 +354,26 @@
     sequence.forEach((item, i) => {
       const row = document.createElement('div');
       row.className = 'seq-row';
-      row.innerHTML = `
-        <span class="seq-title">${i + 1}. ${item.title} (${fmt(item.trimIn)}\u2013${fmt(item.trimOut)})</span>
-        <span class="btn-row">
-          <button class="btn ghost xs up-btn" data-idx="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">&uarr;</button>
-          <button class="btn ghost xs down-btn" data-idx="${i}" ${i === sequence.length - 1 ? 'disabled' : ''} aria-label="Move down">&darr;</button>
-          <button class="btn danger xs rm-btn" data-idx="${i}" aria-label="Remove from sequence">&times;</button>
-        </span>`;
+      const title = document.createElement('span');
+      title.className = 'seq-title';
+      title.textContent = String(i + 1) + '. ' + String(item.title || 'Recording') +
+        ' (' + fmt(item.trimIn) + '–' + fmt(item.trimOut) + ')';
+      const actions = document.createElement('span');
+      actions.className = 'btn-row';
+      const up = document.createElement('button');
+      up.type = 'button'; up.className = 'btn ghost xs up-btn';
+      up.dataset.idx = String(i); up.disabled = i === 0;
+      up.setAttribute('aria-label', 'Move up'); up.textContent = '↑';
+      const down = document.createElement('button');
+      down.type = 'button'; down.className = 'btn ghost xs down-btn';
+      down.dataset.idx = String(i); down.disabled = i === sequence.length - 1;
+      down.setAttribute('aria-label', 'Move down'); down.textContent = '↓';
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'btn danger xs rm-btn';
+      remove.dataset.idx = String(i); remove.setAttribute('aria-label', 'Remove from sequence');
+      remove.textContent = '×';
+      actions.append(up, down, remove);
+      row.append(title, actions);
       els.seqList.appendChild(row);
     });
     els.seqList.querySelectorAll('.up-btn').forEach(b => b.addEventListener('click', () => {
