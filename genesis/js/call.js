@@ -99,12 +99,38 @@
       } catch (_) { /* Ignore malformed signalling frames. */ }
     });
     ws.addEventListener('close', () => {
-      if (!els.room.classList.contains('hidden')) els.status.textContent = 'Disconnected';
+      stopCallMedia();
+      els.room.classList.add('hidden');
+      els.joinScreen.classList.remove('hidden');
+      els.status.textContent = 'Disconnected. Camera and microphone stopped.';
+      if (els.joinBtn) els.joinBtn.disabled = false;
     });
     ws.addEventListener('error', () => {
       els.joinError.textContent = 'Could not reach the signaling server. Check signalingUrl in js/config.js and that the server is running.';
-      els.joinBtn.disabled = false;
+      stopCallMedia();
+      if (els.joinBtn) els.joinBtn.disabled = false;
+      try { ws && ws.close(); } catch (_) {}
     });
+  }
+
+  function stopCallMedia() {
+    for (const id of [...peers.keys()]) removePeer(id);
+    if (localStream) {
+      localStream.getTracks().forEach((track) => {
+        try { track.stop(); } catch (_) {}
+      });
+      localStream = null;
+    }
+    analysers.clear();
+    if (audioCtx) {
+      try { audioCtx.close().catch(() => {}); } catch (_) {}
+      audioCtx = null;
+    }
+    if (els.gallery) els.gallery.textContent = '';
+    micOn = true;
+    camOn = true;
+    if (els.micBtn) els.micBtn.setAttribute('aria-pressed', 'false');
+    if (els.camBtn) els.camBtn.setAttribute('aria-pressed', 'false');
   }
 
   async function handleSignal(msg) {
@@ -112,7 +138,7 @@
       case 'room-full':
         els.joinError.textContent = `This room already has the max of ${msg.max} people.`;
         els.joinBtn.disabled = false;
-        localStream.getTracks().forEach((t) => t.stop());
+        stopCallMedia();
         ws.close();
         return;
 
@@ -277,8 +303,7 @@
   });
 
   els.endBtn?.addEventListener('click', () => {
-    for (const id of [...peers.keys()]) removePeer(id);
-    localStream?.getTracks().forEach((t) => t.stop());
+    stopCallMedia();
     ws?.close();
     window.location.href = 'home.html';
   });
