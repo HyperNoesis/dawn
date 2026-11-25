@@ -3917,42 +3917,95 @@
   // avoid pulling in a ~1MB library for users who never touch this path.
   // Pinned version on both script + worker URLs together — pdf.js requires
   // the worker build to match the main build exactly, or it breaks.
-  const PDFJS_VERSION = '3.11.174';
+  // PDF.js 6.5.438 includes fixes for CVE-2024-4367 and CVE-2026-16633.
+  // Use the maintained ESM build and never enable PDF JavaScript evaluation or XFA.
+  const PDFJS_VERSION = '6.5.438';
+  const PDFJS_BASE = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@' + PDFJS_VERSION;
+  const MAX_PDF_BYTES = 20 * 1024 * 1024;
+  const MAX_PDF_PAGES = 40;
+  const MAX_PDF_TOTAL_PIXELS = 24000000;
+  const MAX_PDF_PAGE_EDGE = 1800;
   let pdfjsLoadPromise = null;
   function ensurePdfJs() {
-    if (window.pdfjsLib) return Promise.resolve();
+    if (window.pdfjsLib && window.pdfjsLib.getDocument) return Promise.resolve(window.pdfjsLib);
     if (pdfjsLoadPromise) return pdfjsLoadPromise;
-    pdfjsLoadPromise = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/legacy/build/pdf.min.js`;
-      s.onload = () => {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/legacy/build/pdf.worker.min.js`;
-        resolve();
-      };
-      s.onerror = () => reject(new Error('Could not load the PDF renderer — check your network connection.'));
-      document.head.appendChild(s);
+    pdfjsLoadPromise = (async () => {
+      const lib = await import(PDFJS_BASE + '/build/pdf.mjs');
+      if (!lib || typeof lib.getDocument !== 'function' || !lib.GlobalWorkerOptions) {
+        throw new Error('The PDF renderer loaded an incompatible build.');
+      }
+      lib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + '/build/pdf.worker.mjs';
+      window.pdfjsLib = lib;
+      return lib;
+    })().catch((error) => {
+      pdfjsLoadPromise = null;
+      throw new Error('Could not load the secure PDF renderer: ' + (error && error.message || error));
     });
     return pdfjsLoadPromise;
   }
 
   async function renderPdfToSlides(file) {
-    await ensurePdfJs();
-    const buf = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-    const slides = [];
-    const thumbs = [];
-    const scratch = document.createElement('canvas');
-    const sctx = scratch.getContext('2d');
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const viewport = page.getViewport({ scale: 2 }); // 2x for a crisp inset, not full-res overkill
-      scratch.width = viewport.width;
-      scratch.height = viewport.height;
-      await page.render({ canvasContext: sctx, viewport }).promise;
-      thumbs.push(bitmapToThumbDataURL(scratch));
-      slides.push(await createImageBitmap(scratch));
+    if (!file || !Number.isFinite(file.size) || file.size <= 0 || file.size > MAX_PDF_BYTES) {
+      throw new Error('PDF must be between 1 byte and 20 MB.');
     }
-    return { slides, thumbs };
+    const buf = await file.arrayBuffer();
+    if (new TextDecoder().decode(buf.slice(0, 5)) !== '%PDF-') throw new Error('That file does not look like a valid PDF.');
+    const pdfjs = await ensurePdfJs();
+    const loading = pdfjs.getDocument({
+      data: buf,
+      isEvalSupported: false,
+      enableXfa: false,
+      useSystemFonts: true,
+      maxImageSize: 12000000,
+      stopAtErrors: true
+    });
+    let pdf = null;
+    try {
+      pdf = await loading.promise;
+      if (!pdf.numPages || pdf.numPages > MAX_PDF_PAGES) {
+        throw new Error('PDF contains too many pages. The limit is 40 pages per overlay.');
+      }
+      const slides = [], thumbs = [];
+      const scratch = document.createElement('canvas');
+      const sctx = scratch.getContext('2d', { alpha: false });
+      if (!sctx) throw new Error('This browser could not allocate a PDF rendering surface.');
+      let usedPixels = 0;
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const base = page.getViewport({ scale: 1 });
+        const pagePixels = Math.max(1, base.width * base.height);
+        const remaining = MAX_PDF_TOTAL_PIXELS - usedPixels;
+        if (remaining < 160000) {
+          page.cleanup();
+          throw new Error('PDF is too large to render safely on this device. Split it into smaller files.');
+        }
+        const scale = Math.min(1.5, MAX_PDF_PAGE_EDGE / Math.max(base.width, base.height), Math.sqrt(remaining / pagePixels));
+        if (!Number.isFinite(scale) || scale <= 0.05) {
+          page.cleanup();
+          throw new Error('A PDF page exceeds the safe rendering size.');
+        }
+        const viewport = page.getViewport({ scale });
+        scratch.width = Math.max(1, Math.ceil(viewport.width));
+        scratch.height = Math.max(1, Math.ceil(viewport.height));
+        const actualPixels = scratch.width * scratch.height;
+        if (usedPixels + actualPixels > MAX_PDF_TOTAL_PIXELS) {
+          page.cleanup();
+          throw new Error('PDF exceeds the total rendering memory budget.');
+        }
+        await page.render({ canvasContext: sctx, viewport, background: '#ffffff' }).promise;
+        thumbs.push(bitmapToThumbDataURL(scratch));
+        slides.push(await createImageBitmap(scratch));
+        usedPixels += actualPixels;
+        page.cleanup();
+      }
+      return { slides, thumbs };
+    } catch (error) {
+      if (pdf) { try { pdf.cleanup(); } catch (_) {} }
+      throw error;
+    } finally {
+      if (pdf) { try { await pdf.destroy(); } catch (_) {} }
+      else if (loading && typeof loading.destroy === 'function') { try { await loading.destroy(); } catch (_) {} }
+    }
   }
 
   function bitmapToThumbDataURL(source, maxW = 88) {
@@ -3981,7 +4034,7 @@
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
           <label class="toggle-row" style="margin:0;">
             <input type="checkbox" class="ov-toggle" checked>
-            <span>${ov.name}</span>
+            <span class="ov-name"></span>
           </label>
           <button type="button" class="btn ghost sm ov-remove" title="Remove overlay">Remove</button>
         </div>
@@ -3992,7 +4045,7 @@
           <button type="button" class="btn ghost sm ov-next" title="Next slide">▶</button>
         </div>
         ${ov.thumbs && ov.thumbs.length ? `
-        <div class="slide-filmstrip" role="listbox" aria-label="${ov.name} slides">
+        <div class="slide-filmstrip" role="listbox" aria-label="Slides">
           ${ov.thumbs.map((src, i) => `
             <button type="button" class="slide-thumb${i === ov.index ? ' active' : ''}" data-idx="${i}" role="option" aria-selected="${i === ov.index}">
               <img src="${src}" alt="Slide ${i + 1}">
@@ -4017,6 +4070,11 @@
     `).join('');
 
     els.overlayList.querySelectorAll('[data-overlay-id]').forEach((row) => {
+      const overlay = overlayList.find((item) => item.id === row.dataset.overlayId);
+      const nameNode = row.querySelector('.ov-name');
+      if (nameNode) nameNode.textContent = overlay ? String(overlay.name || 'Overlay') : 'Overlay';
+      const filmstrip = row.querySelector('.slide-filmstrip');
+      if (filmstrip) filmstrip.setAttribute('aria-label', 'Slides for ' + (overlay ? String(overlay.name || 'overlay') : 'overlay'));
       const id = row.dataset.overlayId;
       row.querySelector('.ov-toggle').addEventListener('change', (e) => {
         rendererSend({ type: 'setOverlayOn', id, on: e.target.checked });
@@ -4282,12 +4340,36 @@
     e.target.value = ''; // allow re-adding the same filename(s) later
     if (!files.length || overlayList.length >= MAX_OVERLAYS) return;
     try {
-      const loaded = await Promise.all(files.map((file) => new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => createImageBitmap(img).then((bmp) => resolve({ bmp, thumb: bitmapToThumbDataURL(img) }), reject);
-        img.onerror = () => reject(new Error('Could not load ' + file.name));
-        img.src = URL.createObjectURL(file);
-      })));
+      const MAX_IMAGE_FILE_BYTES = 20 * 1024 * 1024;
+      const MAX_IMAGE_TOTAL_PIXELS = 24000000;
+      if (files.length > 24) throw new Error('Choose no more than 24 images per deck.');
+      const loaded = [];
+      let totalPixels = 0;
+      for (const file of files) {
+        if (!file.type || !/^image\/(png|jpeg|webp|avif|gif)$/i.test(file.type)) {
+          throw new Error('Only PNG, JPEG, WebP, AVIF and GIF images are supported.');
+        }
+        if (file.size <= 0 || file.size > MAX_IMAGE_FILE_BYTES) throw new Error('Each image must be 20 MB or smaller.');
+        const src = URL.createObjectURL(file);
+        try {
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = () => reject(new Error('Could not decode an uploaded image.'));
+            img.src = src;
+          });
+          const pixels = img.naturalWidth * img.naturalHeight;
+          if (!img.naturalWidth || !img.naturalHeight || img.naturalWidth > 8192 || img.naturalHeight > 8192 ||
+              totalPixels + pixels > MAX_IMAGE_TOTAL_PIXELS) {
+            throw new Error('The selected images exceed the safe decoded-pixel budget (24 megapixels total).');
+          }
+          const bmp = await createImageBitmap(img);
+          totalPixels += pixels;
+          loaded.push({ bmp, thumb: bitmapToThumbDataURL(img) });
+        } finally {
+          URL.revokeObjectURL(src);
+        }
+      }
       const name = files.length > 1 ? `${files.length}-image deck` : files[0].name;
       addOverlayWithSlides(loaded.map((l) => l.bmp), name, loaded.map((l) => l.thumb));
     } catch (err) {
@@ -4424,11 +4506,13 @@
       const row = document.createElement('div');
       row.className = 'mini-row';
       row.innerHTML = `
-        <span>${t.name}</span>
+        <span class="template-name"></span>
         <span class="btn-row">
           <button class="btn ghost xs apply-tpl-btn" data-id="${t.id}">Apply</button>
           <button class="btn danger xs del-tpl-btn" data-id="${t.id}">Delete</button>
         </span>`;
+      const templateName = row.querySelector('.template-name');
+      if (templateName) templateName.textContent = String(t.name || 'Untitled template');
       els.templateList.appendChild(row);
     });
     els.templateList.querySelectorAll('.apply-tpl-btn').forEach(b => b.addEventListener('click', () => {
@@ -4462,7 +4546,7 @@
       // v0.13: the old banner lives inside the hidden Recordings tab, so after a crash nobody saw it. Show a top-of-screen notice too.
       const mins = draft.blob && draft.blob.size ? Math.max(1, Math.round(draft.blob.size / 1048576)) : 0;
       const html = `
-        <strong>Unsaved recording found</strong> from ${(draft.meta && draft.meta.savedAt) || 'a previous session'} (about ${mins} MB). It looks like the tab closed before you pressed Stop.
+        <strong>Unsaved recording found</strong> from <span class="draft-saved-at"></span> (about ${mins} MB). It looks like the tab closed before you pressed Stop.
         <div class="btn-row">
           <button class="btn primary xs recover-draft-btn" type="button" style="min-height:44px;">Recover to Projects</button>
           <button class="btn ghost xs discard-draft-btn" type="button" style="min-height:44px;">Discard</button>
@@ -4471,10 +4555,15 @@
       toast.id = 'draftToast'; toast.setAttribute('role', 'alert'); toast.className = 'recovery-banner';
       toast.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9998;max-width:min(94vw,440px);background:#2a2412;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.5);';
       toast.innerHTML = html;
+      const draftDateText = String((draft.meta && draft.meta.savedAt) || 'a previous session').slice(0, 80);
+      const dateNode = toast.querySelector('.draft-saved-at');
+      if (dateNode) dateNode.textContent = draftDateText;
       document.body.appendChild(toast);
       els.draftRecoveryBanner.style.display = 'block';
       els.draftRecoveryBanner.className = 'recovery-banner';
       els.draftRecoveryBanner.innerHTML = html.replace('class="btn primary xs recover-draft-btn"', 'class="btn primary xs recover-draft-btn" id="recoverDraftBtn"').replace('class="btn ghost xs discard-draft-btn"', 'class="btn ghost xs discard-draft-btn" id="discardDraftBtn"');
+      const bannerDateNode = els.draftRecoveryBanner.querySelector('.draft-saved-at');
+      if (bannerDateNode) bannerDateNode.textContent = draftDateText;
       const hideBoth = () => { toast.remove(); els.draftRecoveryBanner.style.display = 'none'; };
       const recover = async () => {
         await window.VS.storage.saveRecording(draft.blob, { ...draft.meta, title: 'Recovered recording', createdAt: new Date().toLocaleString() });
