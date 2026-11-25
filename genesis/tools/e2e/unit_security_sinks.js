@@ -12,6 +12,9 @@ const environments = read('environments.html');
 const editor = read('js/editor.js');
 
 assert.match(call, /displayName\.textContent = String\(name/);
+assert(call.includes('function stopCallMedia()'), 'Live Call exposes one media cleanup path');
+assert(call.includes("ws.addEventListener('close', () => {\n      stopCallMedia();"),
+  'Live Call disconnect stops all camera and microphone tracks');
 assert.doesNotMatch(call, /<div class="call-tile-label"><span>\$\{name\}<\/span>/);
 assert.match(errors, /text\.textContent = 'Something went wrong:/);
 assert.doesNotMatch(errors, /toast\.innerHTML/);
