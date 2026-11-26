@@ -218,7 +218,7 @@
           if (c.requiresQualification) {
             const gate = V.MatteQualityQualification;
             const identity = cand && typeof cand.getQualificationIdentity === 'function'
-              ? cand.getQualificationIdentity()
+              ? await cand.getQualificationIdentity()
               : (cand && cand.qualificationIdentity);
             const qualification = gate ? gate.evaluate(c.key, identity) : {
               eligible: false,
@@ -2634,7 +2634,7 @@
       if (!a.emergency && a.engine !== previousEngine && a.engine !== 'modnet' && a.engine !== 'mediapipe') {
         const gate = window.VS.MatteQualityQualification;
         const identity = cand && typeof cand.getQualificationIdentity === 'function'
-          ? cand.getQualificationIdentity()
+          ? await cand.getQualificationIdentity()
           : (cand && cand.qualificationIdentity);
         const qualification = gate ? gate.evaluate(a.engine, identity) : {
           eligible: false,
