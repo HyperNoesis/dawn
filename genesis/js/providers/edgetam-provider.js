@@ -60,7 +60,7 @@
     const o = Object.assign({ refreshEvery: 8, dilate: 2, keepDilate: 3, feather: 2, minOverlap: 0.3 }, options || {});
     const own = {
       status: 'idle', gateError: null, gate: null, gateAge: 0, frame: 0, busy: false, enc: null, dec: null, ortRef: null,
-      modelId: null, usingWebGPU: false, precisionFallback: null,
+      modelId: null, usingWebGPU: false, precisionFallback: null, modelSha256: null, registryVersion: null, modelTitle: null, modelIdentityError: null,
       info: null, sourceCanvas: null, sourceCtx: null, frameCanvas: null, frameCtx: null, baseCanvas: null, baseCtx: null, outCanvas: null, outCtx: null, gateCanvas: null, gateCtx: null, gateImg: null
     };
     const C = () => V.EdgeTAMCore;
@@ -117,7 +117,16 @@
         for (const id of candidates) {
           let encoder = null, decoder = null;
           try {
-            const { bytes, entry } = await V.ModelStore.load(id, { onProgress: opts && opts.onProgress });
+            const { bytes, entry, registryVersion } = await V.ModelStore.load(id, { onProgress: opts && opts.onProgress });
+            own.registryVersion = registryVersion;
+            own.modelTitle = entry.title || id;
+            own.modelSha256 = null;
+            try {
+              if (!V.MatteQualificationIdentity) throw new Error('Canonical identity helper unavailable');
+              own.modelSha256 = await V.MatteQualificationIdentity.hashModelFiles(bytes);
+            } catch (identityError) {
+              own.modelIdentityError = String((identityError && identityError.message) || identityError);
+            }
             const external = entry.external || {};
             const ext = Object.keys(external).map((path) => ({ path, data: bytes[external[path]] }));
             const encoderDataName = Object.keys(external).find((path) => /vision_encoder/.test(path));
@@ -231,6 +240,55 @@
         const r = await base.initialize(...args);
         await load({ onProgress: base.onProgress });
         return r;
+      },
+      async getQualificationIdentity() {
+        if (own.status !== 'ready') throw new Error('EdgeTAM runtime is not ready; exact runtime identity is unavailable.');
+        if (!own.modelSha256) throw new Error('EdgeTAM model bytes could not be fingerprinted: ' + (own.modelIdentityError || 'SHA-256 unavailable'));
+        if (!base || typeof base.getQualificationIdentity !== 'function') {
+          throw new Error('The wrapped base provider cannot supply a canonical qualification identity.');
+        }
+        const Q = V.MatteQualificationIdentity;
+        if (!Q) throw new Error('Canonical matte qualification identity helper is unavailable.');
+        const parentIdentity = await base.getQualificationIdentity();
+        return Q.extend(parentIdentity, {
+          modelVersionSuffix: '+edgetam-' + own.modelId + '@registry-' + String(own.registryVersion),
+          modelSha256: own.modelSha256,
+          preprocessResources: ['js/providers/edgetam-provider.js', 'js/providers/edgetam-core.js'],
+          preprocessConfig: {
+            encoderInputSide: 1024,
+            gateGrid: G,
+            preserveAspectRatio: true,
+            padding: 'rgb(124,116,104)',
+            resize: 'half-pixel-bilinear'
+          },
+          postprocessResources: ['js/providers/edgetam-provider.js', 'js/providers/edgetam-core.js'],
+          postprocessConfig: {
+            refreshEvery: o.refreshEvery,
+            dilate: o.dilate,
+            keepDilate: o.keepDilate,
+            feather: o.feather,
+            minOverlap: o.minOverlap,
+            gateGrid: G,
+            trackerHooked: !!own.hooked
+          },
+          runtime: {
+            name: 'onnxruntime-web-edgetam',
+            backend: own.usingWebGPU ? 'encoder-webgpu+decoder-wasm' : 'encoder-wasm+decoder-wasm',
+            resources: [
+              'vendor/ort/ort.min.js',
+              'vendor/ort/ort.webgpu.min.js',
+              'vendor/ort/ort-wasm-simd-threaded.js',
+              'vendor/ort/ort-wasm-simd-threaded.wasm',
+              'vendor/ort/ort-wasm-simd-threaded.asyncify.js',
+              'vendor/ort/ort-wasm-simd-threaded.asyncify.wasm'
+            ],
+            config: {
+              selectedModel: own.modelId,
+              precisionFallback: String(own.precisionFallback || ''),
+              decoderBackend: 'wasm'
+            }
+          }
+        });
       },
       async segment(video) {
         // Hybrid owns its own same-frame snapshot and calls the tracker hook
