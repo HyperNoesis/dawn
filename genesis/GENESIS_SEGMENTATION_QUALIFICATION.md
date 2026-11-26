@@ -42,6 +42,21 @@ A qualification record must include:
 
 A public demo image, synthetic fixture, teacher-model agreement, isolated still comparison, successful model load, quick inference time or software-rendered browser run does not satisfy this gate.
 
+
+## Registered model assets and licence review
+
+The asset hashes below are copied from the current `models/registry.json` at the inspected branch. They identify files, not an approved composite route. The runtime qualification registry deliberately has no composite `modelSha256` yet because the provider has not exposed a canonical pipeline identity that combines the exact assets, preprocess, postprocess and backend.
+
+| Pipeline component | Asset | SHA-256 | Bytes | Declared licence |
+|---|---|---|---:|---|
+| PP-MattingV2 alpha model | `ppmatting_v2.onnx` | `7846bea9cd2ad94a81b44deeddfa1521bbcfd15bb297c181116eecb25c6f0335` | 35,816,468 | Apache-2.0 in registry |
+| EdgeTAM FP16 encoder | `edgetam_vision_encoder_fp16.onnx` | `d8f560849085892866a5c652a600cafbbd301e11c15ff0d89c81e15fe91264ac` | 167,617 | Apache-2.0 in registry |
+| EdgeTAM FP16 encoder data | `edgetam_vision_encoder_fp16.onnx_data` | `6a6741eb00b3049939675569818b207953cb13113a80ca9580c9c714d8646b38` | 9,739,536 | Apache-2.0 in registry |
+| EdgeTAM decoder | `edgetam_mask_decoder.onnx` | `d3668299ec3edf70fbb139ec642b54bf3d4be453fd1b688a6b5938e0856fe546` | 213,114 | Apache-2.0 in registry |
+| EdgeTAM decoder data | `edgetam_mask_decoder.onnx_data` | `dfa2125e30d08d388732f20c18fb63ab0f0f590cd270eb307f0c2b65919d1be8` | 20,958,208 | Apache-2.0 in registry |
+
+The repository's `LICENSES.md` lists Apache-2.0 for PP-MattingV2 and EdgeTAM and asks for upstream/data-term verification before commercial redistribution. This is not a legal clearance: training dataset provenance/terms still require counsel review. RVM GPL-3.0 files remain in the public browser distribution and must be replaced or legally accommodated before a closed-source paid release. BiRefNet's training-data terms are unresolved; MatAnyone 2 and SAM2Matting are non-commercial and must not enter a paid path. No legal sign-off was performed in this execution.
+
 ## Current registry
 
 | Route | Status | Reason |
