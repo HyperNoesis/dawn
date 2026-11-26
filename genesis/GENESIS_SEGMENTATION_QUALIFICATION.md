@@ -33,6 +33,7 @@ A qualification record must include:
 
 - Rights-cleared consent and commercial-use permission for evaluation media.
 - Participant-level and source-video-level held-out splits.
+- For each of the 23 required strata, unique participant count, source-video count, labelled clip count, independent annotator count and its own alpha MAD, edge-band MAD, boundary F1, topology error and temporal delta MAE. A non-empty stratum list is insufficient.
 - Independent human alpha annotation and documented review.
 - Separate human-labelled per-stratum results for straight, wavy, curly and coily hair; flyaways; braids; dark/light hair-background combinations; backlight; low light; similar colours; glasses; headphones; hats/headwraps; hands crossing face; finger gaps; thin straps; lace; transparent fabric; textured clothes; motion blur; partial occlusion; multiple people; and scene cuts. Every stratum must carry its own alpha MAD, edge-band MAD, boundary F1, topology error and temporal delta MAE, not merely appear in a non-empty list.
 - Paired results against the approved baseline, including alpha MAD/MAE, edge-band error, boundary precision/recall/F1, topology/hole retention, temporal error/flicker/ghost duration and failure/reacquisition behaviour.
