@@ -13,7 +13,7 @@ const approved={'genesis-hybrid':{status:'approved',identity:Object.assign({},id
  rightsClearedForCommercialUse:true,heldOut:true,participantAndSourceClipSplits:true,independentHumanAnnotation:true,
  pairedBaselineComparison:true,perStratumResults:true,criticalStrataNoRegression:true,measurableImprovement:true,
  datasetManifestSha256:'d'.repeat(64),benchmarkReportSha256:'e'.repeat(64),participants:12,sourceVideos:24,clips:36,independentAnnotators:2,
- strata:['hair','hands','occlusion'],metrics:{alphaMAD:0.01,edgeBandMAD:0.02,boundaryF1:0.9,topologyErrorRate:0.01,temporalDeltaMAE:0.02,p95LatencyMs:85}
+ strata:Q.REQUIRED_STRATA.map((id)=>({id,metrics:{alphaMAD:0.01,edgeBandMAD:0.02,boundaryF1:0.9,topologyErrorRate:0.01,temporalDeltaMAE:0.02}})),metrics:{alphaMAD:0.01,edgeBandMAD:0.02,boundaryF1:0.9,topologyErrorRate:0.01,temporalDeltaMAE:0.02,p95LatencyMs:85}
 }}};
 assert.strictEqual(Q.registered('genesis-hybrid',approved).eligible,true,'a complete human-video record is registered before the provider is instantiated');
 assert.strictEqual(Q.evaluate('genesis-hybrid',identity,approved).eligible,true,'the initialized provider must also match the exact qualified identity');
@@ -21,5 +21,9 @@ assert.strictEqual(Q.evaluate('genesis-hybrid',null,approved).code,'MISSING_RUNT
 assert.strictEqual(Q.evaluate('genesis-hybrid',Object.assign({},identity,{postprocessHash:'f'.repeat(64)}),approved).code,'QUALIFICATION_IDENTITY_MISMATCH');
 const incomplete=JSON.parse(JSON.stringify(approved));delete incomplete['genesis-hybrid'].evidence.participantAndSourceClipSplits;
 assert.strictEqual(Q.evaluate('genesis-hybrid',identity,incomplete).code,'INCOMPLETE_QUALIFICATION_EVIDENCE');
+const missingHairStratum=JSON.parse(JSON.stringify(approved));
+missingHairStratum['genesis-hybrid'].evidence.strata=missingHairStratum['genesis-hybrid'].evidence.strata.filter((row)=>row.id!=='hair-coily');
+assert.strictEqual(Q.registered('genesis-hybrid',missingHairStratum).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
+  'approval requires separate evidence for every hair and difficult-scene stratum in the execution brief');
 const automatic=Q.automaticStatus();assert.deepStrictEqual(automatic.eligible,[]);assert.strictEqual(automatic.blocked.length,3);
 console.log('matte-quality-qualification: all assertions passed');
