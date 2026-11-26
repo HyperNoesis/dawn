@@ -135,6 +135,7 @@ function withTimeout(promise, ms, label) {
     localStorage.setItem('vs_mask_motion', '0');
     localStorage.setItem('vs_live_engine', 'auto');
     localStorage.setItem('vs_matte_engine', 'auto');
+    localStorage.setItem('vs_auto_experimental', '1');   // integration gate exercises experimental routes explicitly
   });
 
   const page = await context.newPage();

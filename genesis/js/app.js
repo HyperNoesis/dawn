@@ -130,9 +130,17 @@
       // as a candidate only when the live fallback is the lighter MediaPipe
       // route; do not benchmark the same MODNet instance twice on desktops.
       const baseIsModnet = !!(segProvider && /MODNet/.test(segProvider.label || ''));
-      const keys = automatic
+      let keys = automatic
         ? ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2'].concat(baseIsModnet ? [] : ['modnet'])
         : [selected];
+      // Quality gate: timing never proves quality. In Automatic mode only quality-qualified routes (or routes the user
+      // explicitly opted into as experimental) may be promoted; an explicit user selection is always honoured.
+      if (automatic && V.EngineQualification) {
+        let allowExp = false; try { allowExp = localStorage.getItem('vs_auto_experimental') === '1'; } catch (e) {}
+        const gate = V.EngineQualification.filterAuto(keys, { allowExperimental: allowExp });
+        if (gate.skipped.length) segLogPush('qualification-skip', { skipped: gate.skipped.map((x) => x.key), experimentalOptIn: allowExp });
+        keys = gate.allowed;
+      }
       for (const key of keys) {
         if (key !== 'modnet' && !visible.has(key)) continue;
         const name = visible.get(key) || (key === 'modnet' ? 'MODNet' : key);
