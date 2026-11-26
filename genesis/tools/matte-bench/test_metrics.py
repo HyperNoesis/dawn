@@ -86,6 +86,7 @@ with tempfile.TemporaryDirectory() as tmp:
             "split": "test", "strata": [stratum], "annotation_confidence": 0.95,
             "annotation_protocol_sha256": "a" * 64, "inter_annotator_review_sha256": "b" * 64,
             "independent_annotators": 2, "frame_alignment_verified": True,
+            "alpha_encoding": "uint8-0-255",
             "runtime": {"inference_ms": 24.0 + index, "mask_age_ms": 40.0, "preview_fps": 24.0},
         }
         manifest.append(row)
