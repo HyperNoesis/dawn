@@ -58,6 +58,32 @@ The asset hashes below are copied from the current `models/registry.json` at the
 
 The repository's `LICENSES.md` lists Apache-2.0 for PP-MattingV2 and EdgeTAM and asks for upstream/data-term verification before commercial redistribution. This is not a legal clearance: training dataset provenance/terms still require counsel review. RVM GPL-3.0 files remain in the public browser distribution and must be replaced or legally accommodated before a closed-source paid release. BiRefNet's training-data terms are unresolved; MatAnyone 2 and SAM2Matting are non-commercial and must not enter a paid path. No legal sign-off was performed in this execution.
 
+## Synthetic CI integration evidence — run 45847956492
+
+This evidence is reproducible integration output for commit `a46fd4c545418fe6216edba4c565b98d2d50e692`. It is **not** a human-video qualification and does not change the three routes' `UNQUALIFIED` status.
+
+| Gate / metric | Observed | Scope |
+|---|---:|---|
+| UltraMatte provider initialisation | 2,495 ms | Chromium CI, local ONNX Runtime Web 1.25.1 / WASM |
+| UltraMatte segmentation P50 | 464 ms | 10 sequential synthetic frames |
+| UltraMatte segmentation P75 | 602 ms | 10 sequential synthetic frames |
+| UltraMatte segmentation P95 / max | 2,790 ms | 10 sequential synthetic frames |
+| Estimated updates/s at P75 | 1.66 | Reciprocal of 602 ms; not a measured phone FPS |
+| Raw matte alpha MAE | 0.00456 | Generated labelled fixture |
+| Final Studio matte alpha MAE | 0.00433 | Same generated fixture, after render matte stage |
+| Raw matte transition-band MAE | 0.18079 | Ground-truth alpha values strictly between 8 and 247, normalised by 255 |
+| Final Studio transition-band MAE | 0.34012 | Same fixture after render matte stage |
+| Foreground IoU, raw / final | 0.98449 / 0.98340 | Binary threshold 127 on synthetic fixture |
+| Diagnostic soft-edge A/B transition-band MAE | 0.30514 / 0.27887 | Parameters 0.15–0.85 and 0.05–0.95; diagnostic only, not promoted |
+| EdgeTAM state | ready / gate active | Synthetic browser integration |
+| Hybrid tile activity | 16 attempted, 9 refined, 20 deferred, 7 rejected over 10 frames | Tile budget 3/frame; 0 reported errors or snapshot failures |
+
+The fixture is `tools/e2e/fixtures/gt_alpha_640x480.png`; the output comparison depicts a generated cartoon presenter. It does not contain a consented natural human subject, genuine hair, transparent cloth, real hands, backlight or human motion.
+
+The separate baseline camera gate sampled 28 frames in 8.07 seconds (3.47 sample FPS) and passed its configured minimum of 1 FPS. Its captured application diagnostics reported approximately 4 FPS / 375 ms frame latency, while the same artifact's stats string also reports 0 FPS / 1,495.1 ms. This telemetry mismatch should be resolved before using the diagnostics panel for device qualification. Passing that low synthetic gate is not evidence of smooth 24 FPS operation.
+
+**Interpretation:** the integration path executes and its generated-fixture scores are reproducible, but P75/P95 timing is far from a 24 FPS live-video objective. The renderer also increases the transition-band error in this fixture compared with the raw alpha; the diagnostic softer-edge A/B improves that synthetic metric but is not sufficient reason to change production defaults. Automatic promotion therefore remains disabled. Re-run with rights-cleared human video and target hardware before changing this decision.
+
 ## Current registry
 
 | Route | Status | Reason |
