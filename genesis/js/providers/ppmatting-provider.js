@@ -149,7 +149,7 @@
           String((this._qualificationModelEntry && this._qualificationModelEntry.title) || this.title),
         modelSha256: this._qualificationModelSha256,
         preprocessResources: [
-          'js/providers/ppmatting-core.js', 'js/providers/ppmatting-worker.js',
+          'models/registry.json', 'js/providers/ppmatting-core.js', 'js/providers/ppmatting-worker.js',
           'js/providers/modnet-provider.js', 'js/providers/roi-track.js'
         ],
         preprocessConfig: {
@@ -159,9 +159,12 @@
           inputContract: 'RGBA-to-RGB-NCHW-float32;mean=0.5;std=0.5;dimensions-multiple-of-32'
         },
         postprocessResources: [
-          'js/providers/ppmatting-provider.js', 'js/providers/temporal-matte.js',
+          'js/app.js', 'js/providers/ppmatting-provider.js', 'js/providers/temporal-matte.js',
           'js/providers/video-guard.js', 'js/providers/matte-refine.js',
           'js/providers/mask-clean.js', 'js/providers/mask-motion.js',
+          'js/providers/mask-refine.js', 'js/providers/segmentation-flight.js',
+          'js/providers/segmentation-generation.js', 'js/providers/gl-matte.js',
+          'js/providers/composition-engine.js', 'js/providers/render-provider.js',
           'js/providers/modnet-provider.js'
         ],
         postprocessConfig: {
