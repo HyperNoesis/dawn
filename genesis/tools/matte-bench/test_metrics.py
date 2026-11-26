@@ -62,6 +62,7 @@ commercial = {
     "split": "test", "strata": list(REQUIRED_STRATA), "annotation_confidence": 0.9,
     "annotation_protocol_sha256": "a" * 64, "inter_annotator_review_sha256": "b" * 64,
     "independent_annotators": 2, "frame_alignment_verified": True,
+    "alpha_encoding": "uint8-0-255",
 }
 validate_commercial_entry(commercial, 1)
 try:
