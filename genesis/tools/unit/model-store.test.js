@@ -18,6 +18,7 @@ const S = require('../../js/providers/model-store.js');
   const seen = [];
   const r = await S.load('edgetam', { onProgress: (f) => seen.push(f) });
   assert.deepStrictEqual(Object.keys(r.bytes).sort(), ['edgetam_mask_decoder.onnx', 'edgetam_mask_decoder.onnx_data', 'edgetam_vision_encoder_fp16.onnx', 'edgetam_vision_encoder_fp16.onnx_data']);
+  assert.strictEqual(r.registryVersion, 2, 'model loads expose the registry version used for pipeline identity');
   assert.strictEqual(r.bytes['edgetam_vision_encoder_fp16.onnx_data'].length, 9739536);
   console.log('progress samples', seen.length, seen.slice(-2));
   assert.ok(seen.length >= 4 && Math.abs(seen[seen.length - 1] - 1) < 1e-9 && seen.every((v, i) => i === 0 || v >= seen[i - 1]), 'monotonic progress ending at 1');
