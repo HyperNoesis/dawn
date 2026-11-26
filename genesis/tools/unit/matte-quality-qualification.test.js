@@ -50,5 +50,13 @@ const impossibleStratum=JSON.parse(JSON.stringify(approved));
 impossibleStratum['genesis-hybrid'].evidence.strata[0].clips=999;
 assert.strictEqual(Q.registered('genesis-hybrid',impossibleStratum).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
   'per-stratum sample counts cannot exceed the dataset-wide totals');
+const belowQualityBar=JSON.parse(JSON.stringify(approved));
+belowQualityBar['genesis-hybrid'].evidence.strata[0].metrics.alphaMAD=0.2;
+assert.strictEqual(Q.registered('genesis-hybrid',belowQualityBar).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
+  'complete metadata cannot approve a stratum whose alpha error exceeds the quality ceiling');
+const poorBoundary=JSON.parse(JSON.stringify(approved));
+poorBoundary['genesis-hybrid'].evidence.metrics.boundaryF1=0.4;
+assert.strictEqual(Q.registered('genesis-hybrid',poorBoundary).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
+  'aggregate boundary F1 must meet the explicit minimum');
 const automatic=Q.automaticStatus();assert.deepStrictEqual(automatic.eligible,[]);assert.strictEqual(automatic.blocked.length,3);
 console.log('matte-quality-qualification: all assertions passed');
