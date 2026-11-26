@@ -46,8 +46,17 @@ const EXPECTED = 17;
     localStorage.setItem('vs_ux_rail_more', '1');
   });
   const page = await context.newPage();
-  const pageErrors = [], failures = [], tabs = [];
+  const pageErrors = [], consoleErrors = [], localRequestFailures = [], localHttpErrors = [], failures = [], tabs = [];
   page.on('pageerror', (error) => pageErrors.push(String(error && error.message || error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error' && !/ERR_FAILED|net::ERR_/i.test(message.text())) consoleErrors.push(message.text());
+  });
+  page.on('requestfailed', (request) => {
+    if (request.url().startsWith(base)) localRequestFailures.push({ url:request.url(), error:request.failure()?.errorText || 'request failed' });
+  });
+  page.on('response', (response) => {
+    if (response.url().startsWith(base) && response.status() >= 400) localHttpErrors.push({ url:response.url(), status:response.status() });
+  });
   await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
   await page.goto(base + '/studio.html', { waitUntil:'domcontentloaded' });
   await page.waitForSelector('#startBtn', { timeout:30000 });
@@ -140,6 +149,9 @@ const EXPECTED = 17;
     await page.screenshot({ path:path.join(OUT, 'responsive-' + viewport.name + '.png'), fullPage:true });
   }
   if (pageErrors.length) failures.push('Uncaught page errors: ' + pageErrors.join(' | '));
+  if (consoleErrors.length) failures.push('Browser console errors: ' + consoleErrors.join(' | '));
+  if (localRequestFailures.length) failures.push('Local resource requests failed: ' + JSON.stringify(localRequestFailures));
+  if (localHttpErrors.length) failures.push('Local resources returned HTTP errors: ' + JSON.stringify(localHttpErrors));
   const report = {
     schema:'genesis-studio-shell-smoke-v1',
     url:base + '/studio.html',
@@ -148,6 +160,9 @@ const EXPECTED = 17;
     discoveredTabs:declared.length,
     tabs,
     pageErrors,
+    consoleErrors,
+    localRequestFailures,
+    localHttpErrors,
     failures,
     result:failures.length ? 'FAIL' : 'PASS'
   };
