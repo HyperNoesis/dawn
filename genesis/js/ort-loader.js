@@ -42,7 +42,14 @@
           await window.VS.loadScript(t.url);
           if (typeof ort === 'undefined') throw new Error('runtime script loaded but ort is undefined');
           configure(ort, t.local, gpu);
+          const wasmStem = gpu ? 'ort-wasm-simd-threaded.asyncify' : 'ort-wasm-simd-threaded';
           window.VS.ortSource = t.local ? 'local' : 'cdn';
+          window.VS.ortBundle = Object.freeze({
+            source: window.VS.ortSource,
+            script: file,
+            wasmStem,
+            gpuRuntimeBuild: gpu
+          });
           return ort;
         } catch (e) { lastErr = e; }
       }
