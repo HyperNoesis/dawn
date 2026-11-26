@@ -10,15 +10,15 @@ projects' own repos/model cards as found in research on 30 Sep 2026.
 | MediaPipe Hands + Face Mesh (self-hosted in vendor/mediapipe/hands and vendor/mediapipe/face_mesh) | Apache-2.0 (packages @mediapipe/hands 0.4.1675469240, @mediapipe/face_mesh 0.4.1633559619) | Yes, with attribution and the licence text |
 | RNNoise noise suppression (js/worklets/rnnoise-worklet.js, built from jitsi/rnnoise-wasm commit cb529a59, core xiph/rnnoise) | jitsi/rnnoise-wasm Apache-2.0 (vendor/rnnoise/LICENSE-...); rnnoise core BSD-3-Clause (xiph, verify text before redistribution) | Yes, with attribution |
 | Robust Video Matting (RVM) | GPL-3.0 | Explicit opt-in only; excluded from Advanced Adaptive. Its browser code and model remain in the public repository/site, so review GPL obligations before distributing a closed-source paid build; replace/remove it if those terms do not fit. |
-| PP-MattingV2 (live alpha model) | Apache-2.0 per upstream project/registry | Used by Advanced Adaptive; retain upstream notices and verify upstream/data terms before commercial redistribution |
-| EdgeTAM (subject tracker/gate) | Apache-2.0 per upstream project/registry | Used as an optional tracker stage in UltraMatte; retain upstream notices |
+| PP-MattingV2 (live alpha model) | Apache-2.0 per upstream project/registry | Explicit BETA route; retain upstream notices. Training-data provenance/terms still require legal review before commercial claims |
+| EdgeTAM (subject tracker/gate) | Apache-2.0 per upstream project/registry | Explicit BETA tracker stage; retain upstream notices. A tracker licence does not establish matting quality |
 
 | MatAnyone / MatAnyone 2 | S-Lab licence, non-commercial | No, unless you get written permission from the authors. NOT included in the app. v0.82: only reachable in server/studio-export as `--engine matanyone2` (fetch with WITH_MATANYONE2=1), labelled reference/benchmark only. Beeble (beeble.ai) states it runs MatAnyone under a direct licence agreement, so a commercial licence from the authors exists as a route. Do not use its output in a paid service without that |
-| onnxruntime-web | Not checked in this research | Verify before launch |
+| onnxruntime-web 1.25.1 | MIT (vendor/ort/ includes package licence) | Retain MIT notice and check vendor file inventory at release |
 | AI-generated scene images (Pollinations.ai "Create World") | Not checked | Read their terms for commercial use of generated images before you sell scenes |
 
 ## Why this matters
-Advanced Adaptive is the automatic route: it starts with a device-appropriate local matte, then benchmarks UltraMatte (PP-MattingV2 + EdgeTAM + boundary tiles), Hybrid, and PP-MattingV2. MODNet and MediaPipe remain bootstrap/fallback paths. RVM is not an automatic candidate; it is only selected explicitly, and its GPL-3.0 obligations still need review for a closed-source paid distribution. The live route does not include custom Genesis MatteNet weights: the MatteNet document is a specification only.
+As of 26 November 2026, Automatic starts with the established local baseline (MediaPipe on constrained/mobile profiles; MODNet where supported). PP-MattingV2, Genesis Hybrid and Genesis UltraMatte are not automatically promoted: the exact pipeline versions have no registered independent, held-out, rights-cleared human-video qualification. They remain explicit BETA/test routes. Device speed is not evidence of visual quality. RVM is not in Automatic but its GPL-3.0 browser code/model remain in the public website distribution and require replacement or a distribution/licence decision before a closed-source paid release. Genesis MatteNet is a specification only, not a trained/shipped model.
 
 ## Attribution to ship with the app
 - MODNet: Zhanghan Ke et al., "MODNet: Real-Time Trimap-Free Portrait Matting via
@@ -69,3 +69,18 @@ models/modnet.onnx (Apache-2.0) and models/rvm_mobilenetv3_fp32.onnx (GPL-3.0) a
 - **BiRefNet:** code/weight licence labels do not settle every training dataset's terms. Obtain dataset-rights review before training or commercial deployment.
 - **RVM:** GPL-3.0 browser files remain in the public repository and site distribution even though the adaptive default route no longer probes RVM automatically. Review/replace them before a closed-source paid release.
 - **Website models:** `models/rvm_mobilenetv3_fp32.onnx` is RVM (GPL-3.0) and is served publicly with the site. Replace it before commercial use.
+
+
+## Live segmentation asset identity and legal status (26 November 2026)
+
+The following hashes/byte counts are the exact asset entries currently recorded in `models/registry.json`; they are not a qualification result for the composed pipeline.
+
+| Asset | SHA-256 | Bytes | Registry licence / note |
+|---|---|---:|---|
+| PP-MattingV2 `ppmatting_v2.onnx` | `7846bea9cd2ad94a81b44deeddfa1521bbcfd15bb297c181116eecb25c6f0335` | 35,816,468 | Apache-2.0; CPU tensor/preprocess checks recorded; not browser-tested on a phone |
+| EdgeTAM FP16 encoder `edgetam_vision_encoder_fp16.onnx` | `d8f560849085892866a5c652a600cafbbd301e11c15ff0d89c81e15fe91264ac` | 167,617 | Apache-2.0 |
+| EdgeTAM FP16 encoder data | `6a6741eb00b3049939675569818b207953cb13113a80ca9580c9c714d8646b38` | 9,739,536 | Apache-2.0 |
+| EdgeTAM mask decoder | `d3668299ec3edf70fbb139ec642b54bf3d4be453fd1b688a6b5938e0856fe546` | 213,114 | Apache-2.0 |
+| EdgeTAM mask decoder data | `dfa2125e30d08d388732f20c18fb63ab0f0f590cd270eb307f0c2b65919d1be8` | 20,958,208 | Apache-2.0 |
+
+These individual SHA-256 values do not replace a canonical composed-pipeline hash. Automatic qualification additionally binds preprocessing, postprocessing/refinement and runtime backend. The repository's licence labels do not constitute a legal opinion or settle training-data rights. Obtain counsel's review of PP-MattingV2/MODNet training-data provenance and any paid distribution before launch. RVM remains a specific GPL-3.0 distribution blocker for closed-source packaging; MatAnyone 2 and SAM2Matting remain non-commercial and outside the commercial route.
