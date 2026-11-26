@@ -232,6 +232,7 @@ def main():
 
     root = args.manifest.resolve().parent
     entries = []
+    seen_ids = set()
     participant_splits, source_splits = defaultdict(set), defaultdict(set)
     for line_no, line in enumerate(args.manifest.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
@@ -240,6 +241,13 @@ def main():
         for key in ("id", "prediction", "target", "usage_rights", "provenance"):
             if key not in item:
                 raise ValueError(f"manifest line {line_no} missing {key}")
+        if not isinstance(item["id"], str) or not item["id"] or item["id"] in seen_ids:
+            raise ValueError(f"manifest line {line_no} has an empty or duplicate frame id")
+        seen_ids.add(item["id"])
+        if item["usage_rights"] not in ("commercial-cleared", "research-only", "permission-pending"):
+            raise ValueError(f"manifest line {line_no} has an unknown usage_rights value")
+        if not isinstance(item["provenance"], str) or not item["provenance"].strip():
+            raise ValueError(f"manifest line {line_no} has empty provenance")
         if args.require_commercial_clearance:
             if item["usage_rights"] != "commercial-cleared" or not item.get("consent_or_lawful_basis"):
                 raise ValueError(f"manifest line {line_no} lacks clearance declaration or lawful-basis record")
@@ -247,8 +255,12 @@ def main():
             participant_splits[str(item["participant_id"])].add(item["split"])
             source_splits[str(item["source_video_id"])].add(item["split"])
 
-        prediction = cv2.imread(str(root / item["prediction"]), cv2.IMREAD_GRAYSCALE)
-        target = cv2.imread(str(root / item["target"]), cv2.IMREAD_GRAYSCALE)
+        prediction_path = (root / item["prediction"]).resolve()
+        target_path = (root / item["target"]).resolve()
+        if root not in prediction_path.parents or root not in target_path.parents:
+            raise ValueError(f"manifest line {line_no} contains an asset path outside the manifest directory")
+        prediction = cv2.imread(str(prediction_path), cv2.IMREAD_GRAYSCALE)
+        target = cv2.imread(str(target_path), cv2.IMREAD_GRAYSCALE)
         if prediction is None or target is None:
             raise FileNotFoundError(f"cannot read pair on manifest line {line_no}")
         entries.append({
@@ -257,6 +269,7 @@ def main():
             "sequence": item.get("sequence"), "frame": item.get("frame"),
             "split": item.get("split"), "strata": item.get("strata", ["unstratified"]),
             "usage_rights": item["usage_rights"], "annotation_confidence": item.get("annotation_confidence"),
+            "independent_annotators": item.get("independent_annotators"),
             "metrics": alpha_metrics(prediction, target, args.boundary_tolerance),
             "runtime": item.get("runtime", {}),
             "prediction_array": prediction, "target_array": target,
@@ -289,6 +302,8 @@ def main():
         for key in RUNTIME_FIELDS:
             value = entry["runtime"].get(key) if isinstance(entry["runtime"], dict) else None
             if isinstance(value, (int, float)) and np.isfinite(value) and value >= 0:
+                if key == "battery_pct" and value > 100:
+                    raise ValueError("runtime battery_pct must be between 0 and 100")
                 runtime[key].append(float(value))
 
     strata_report = {}
