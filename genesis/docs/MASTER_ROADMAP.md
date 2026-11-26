@@ -17,6 +17,14 @@ Broadcast** (background replacement) plus **OBS** (live production) — Genesis'
 bet is that no single existing tool does all three, free, in a browser, with
 live streaming as a first-class citizen rather than an afterthought.
 
+## Current engineering truth — 26 November 2026
+
+The execution source of truth is the live code plus PR #5 and its follow-up PR #7. Automatic segmentation is baseline-first: PP-MattingV2, Genesis Hybrid and UltraMatte are not auto-promoted until the exact model/preprocess/postprocess/runtime pipeline passes independent, rights-cleared, held-out human-video qualification. The qualification registry currently blocks all three. A successful synthetic browser test proves integration only, not human alpha quality.
+
+Frame/provider generation checks and frame metadata now guard live inference results. The current 1,500 ms matte-age cap is provisional and must be recalibrated with motion clips and actual devices. Device rows, long recordings, real-person quality, and mobile thermal/battery results remain unverified until measured. See the dated acceptance and qualification reports under `genesis/`.
+
+Do not call the product production-ready while real-video/device, legal dataset rights, RVM GPL distribution, and relevant end-to-end user-journey gates remain open. Current live route descriptions in README/DEPLOY and the current qualification report supersede older milestone snapshots below.
+
 ## Working rules (apply to every phase below)
 
 1. Inspect the actual code before proposing anything — never assume.
