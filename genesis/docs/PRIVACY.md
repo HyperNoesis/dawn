@@ -13,13 +13,9 @@ based in **[PLACEHOLDER: jurisdiction, e.g. Nigeria]**. Contact:
 
 ## What stays on your device
 
-- Your camera and microphone feed. All background removal, compositing,
-  and recording happens locally in your browser. Your video is never
-  uploaded anywhere unless you explicitly hit Record → cloud sync (see
-  below) or Go Live.
-- Recordings, templates, and brand-kit settings, by default — stored in
-  your browser's local storage / IndexedDB, on this device only, unless
-  you've set up a real account (see "Cloud accounts" below).
+- Your camera and microphone feed while using local Studio features. Background removal and compositing run in the browser by default; the live feed is sent to a destination only when you start a feature such as Go Live or a direct device-to-device call.
+- In local mode, completed recordings, crash-recovery drafts, templates and brand-kit settings are stored in this browser's IndexedDB/local storage.
+- In configured Supabase mode, completed recordings saved through the active cloud storage provider are uploaded to the configured Supabase Storage bucket and their metadata is stored in Postgres. In-progress crash-recovery drafts remain in local IndexedDB. The checked-in configuration currently leaves Supabase URL/key empty, so a deployment must be configured before cloud accounts/storage are active.
 
 ## What leaves your device, and when
 
@@ -34,17 +30,13 @@ based in **[PLACEHOLDER: jurisdiction, e.g. Nigeria]**. Contact:
   type is sent directly to Pollinations.ai to generate an image. No
   other data about you or your session is sent. Pollinations is a
   third-party, unmoderated API — see the Content Moderation note below.
-- **Cloud accounts (optional, Supabase):** if the app has been configured
-  with a real Supabase backend, creating an account sends your name,
-  email, and (hashed, never plaintext) password to Supabase's servers to
-  enable cross-device sign-in. Recordings and templates you explicitly
-  sync are stored in Supabase Storage/Postgres under your account, with
-  row-level security so only you can read your own data.
+- **Cloud accounts (optional, Supabase):** if the deployment has both a Supabase URL and public anon key configured, account creation/sign-in sends your email, password and supplied profile name to Supabase Auth over HTTPS. The browser does not pre-hash the password; Supabase Auth is responsible for credential hashing and storage. Cloud account and recording security depends on the deployed Auth, Postgres row-level security and Storage policies. The repository configuration is currently empty for Supabase, so this mode is not active in the checked-in configuration.
+  Completed recordings saved while the Supabase storage provider is active are uploaded to Supabase Storage and their metadata is written to Postgres. In-progress crash-recovery drafts remain local.
 
 - **Second phone as a camera, phone remote, live calls:** your phones set up a direct connection through a small relay (signalling) server that sees a random room code and the connection details (including network addresses) for a few seconds. The video itself goes phone to phone, not through the relay. To find a route, the browser asks a public Google STUN server, which sees your network address. If your network blocks direct connections these features will not connect (there is no TURN relay, so nothing is relayed through any server of ours).
 - **Streaming health numbers:** the Go Live health line is calculated on your device from your own connection statistics; nothing is sent to us.
 - **Noise removal, colour grades, LUTs, skin smoothing, trim:** all run on your device. A LUT file you load stays in this browser.
-- **Payments (when offered):** card details are entered on the payment provider's own page and never reach Genesis. We keep only the fact that a payment was made.
+- **Payments:** no payment provider is configured in the checked-in `js/config.js` (`payLinks.pro` is empty). If a hosted payment link is configured in a deployment, payment details are handled on the provider's page; verify the provider integration and what Genesis receives before enabling it.
 
 ## What Genesis itself never collects
 
@@ -55,11 +47,8 @@ based in **[PLACEHOLDER: jurisdiction, e.g. Nigeria]**. Contact:
 
 ## Your controls
 
-- Local-only mode (no account) means nothing about your recordings or
-  templates ever leaves your device.
-- You can delete your account and its cloud data at any time from
-  Settings (calls a database function that only ever deletes your own
-  row).
+- Local account/storage mode keeps saved recordings and drafts on this device by default. Features you explicitly invoke (such as Go Live, transcription, environment generation or direct calling) can still send the data described above to the selected destination/provider.
+- In configured Supabase mode, account deletion first attempts to remove the signed-in user's objects from the `recordings` and `environments` Storage buckets, then calls the `delete_own_account` database function. If Storage cleanup fails, deletion stops and reports the error; if the database deletion fails after Storage cleanup, the app reports that partial state. Local-mode account deletion only removes that browser's local account/session and does not delete unrelated browser site data.
 - You can clear local data any time via your browser's site data
   settings.
 
