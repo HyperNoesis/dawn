@@ -60,7 +60,7 @@
     const o = Object.assign({ refreshEvery: 8, dilate: 2, keepDilate: 3, feather: 2, minOverlap: 0.3 }, options || {});
     const own = {
       status: 'idle', gateError: null, gate: null, gateAge: 0, frame: 0, busy: false, enc: null, dec: null, ortRef: null,
-      modelId: null, usingWebGPU: false, precisionFallback: null, modelSha256: null, registryVersion: null, modelTitle: null, modelIdentityError: null, runtimeSource: null,
+      modelId: null, usingWebGPU: false, precisionFallback: null, modelSha256: null, registryVersion: null, modelTitle: null, modelIdentityError: null, runtimeSource: null, runtimeBundle: null,
       info: null, sourceCanvas: null, sourceCtx: null, frameCanvas: null, frameCtx: null, baseCanvas: null, baseCtx: null, outCanvas: null, outCtx: null, gateCanvas: null, gateCtx: null, gateImg: null
     };
     const C = () => V.EdgeTAMCore;
@@ -149,7 +149,7 @@
               externalData: decoderDataName ? ext.filter((item) => item.path === decoderDataName) : []
             });
             own.enc = encoder; own.dec = decoder; own.ortRef = ort;
-            own.modelId = id; own.usingWebGPU = gpu; own.runtimeSource = V.ortSource || null;
+            own.modelId = id; own.usingWebGPU = gpu; own.runtimeSource = V.ortSource || null; own.runtimeBundle = V.ortBundle || null;
             own.precisionFallback = failures.length ? failures.join(' | ') : null;
             own.gateError = null; own.status = 'ready';
             return;
@@ -244,6 +244,11 @@
       async getQualificationIdentity() {
         if (own.status !== 'ready') throw new Error('EdgeTAM runtime is not ready; exact runtime identity is unavailable.');
         if (own.runtimeSource !== 'local') throw new Error('EdgeTAM is using a non-bundled or unknown ONNX Runtime source; exact runtime identity is unavailable for automatic qualification.');
+        const bundle = own.runtimeBundle;
+        if (!bundle || bundle.source !== 'local' || !['ort.min.js', 'ort.webgpu.min.js'].includes(bundle.script) ||
+            !['ort-wasm-simd-threaded', 'ort-wasm-simd-threaded.asyncify'].includes(bundle.wasmStem)) {
+          throw new Error('EdgeTAM cannot identify the exact bundled ONNX Runtime JavaScript/WASM pair; automatic qualification is blocked.');
+        }
         if (!own.modelSha256) throw new Error('EdgeTAM model bytes could not be fingerprinted: ' + (own.modelIdentityError || 'SHA-256 unavailable'));
         if (!base || typeof base.getQualificationIdentity !== 'function') {
           throw new Error('The wrapped base provider cannot supply a canonical qualification identity.');
@@ -277,13 +282,15 @@
             backend: own.usingWebGPU ? 'encoder-webgpu+decoder-wasm' : 'encoder-wasm+decoder-wasm',
             resources: [
               'js/ort-loader.js',
-              own.usingWebGPU ? 'vendor/ort/ort.webgpu.min.js' : 'vendor/ort/ort.min.js',
-              own.usingWebGPU ? 'vendor/ort/ort-wasm-simd-threaded.asyncify.js' : 'vendor/ort/ort-wasm-simd-threaded.js',
-              own.usingWebGPU ? 'vendor/ort/ort-wasm-simd-threaded.asyncify.wasm' : 'vendor/ort/ort-wasm-simd-threaded.wasm'
+              'vendor/ort/' + bundle.script,
+              'vendor/ort/' + bundle.wasmStem + '.js',
+              'vendor/ort/' + bundle.wasmStem + '.wasm'
             ],
             config: {
               selectedModel: own.modelId,
               runtimeSource: own.runtimeSource,
+              runtimeScript: bundle.script,
+              runtimeWasmStem: bundle.wasmStem,
               precisionFallback: String(own.precisionFallback || ''),
               decoderBackend: 'wasm'
             }
@@ -331,7 +338,7 @@
           status: own.status, error: own.gateError, gateActive: !!own.gate,
           refreshEvery: o.refreshEvery, modelId: own.modelId,
           runtime: own.usingWebGPU ? 'webgpu-encoder+wasm-decoder' : (own.modelId ? 'wasm' : null),
-          precisionFallback: own.precisionFallback, runtimeSource: own.runtimeSource, info: own.info
+          precisionFallback: own.precisionFallback, runtimeSource: own.runtimeSource, runtimeBundle: own.runtimeBundle, info: own.info
         };
       }
     };
