@@ -47,3 +47,11 @@ The live Studio shell exposes 17 tool tabs. The presence of a tab/control is not
 - The UltraMatte browser gate uses a synthetic camera fixture. It is not a real-human or physical-phone qualification.
 
 This matrix is intentionally conservative. Replace statuses only when the corresponding command, environment, commit SHA and test artifact are available.
+
+## Visual system and CSS audit
+
+- The shared `css/genesis-system.css` is currently approximately 263 KB and declares a Genesis token system with purple brand/action accents, cyan intelligence accents, amber warning/warm accents, success and danger roles, dark layered surfaces, motion and focus tokens. The multi-colour system already exists; a new parallel palette was not added.
+- The stylesheet comments describe a compatibility foundation and retained feature selectors; `studio.html` includes one 308-character style block and 214 inline `style=` attributes. These require a selector/inline-style dependency map before retirement.
+- No desktop/tablet/narrow-phone screenshots or visual-diff artifacts were produced in this environment. CSS was not mass-deleted or rewritten without those visual regression artifacts; this is NOT RUN / BLOCKED, not a visual sign-off.
+- `studio-ux.js` groups the existing 17 tabs into Set / Perform / On screen / Output / Advanced, leaves unknown future tabs reachable, adds progressive disclosure and derives the first-run guide/readiness chips from state. That code is present, but its complete keyboard, screen-reader, reduced-motion and touch journeys were not re-executed here.
+
