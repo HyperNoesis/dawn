@@ -16,6 +16,8 @@ global.localStorage = {
 };
 
 require('../../js/providers/matte-engine-policy.js');
+VS.MatteQualificationIdentity = {};
+VS.MatteCritic = {};
 const EdgeTAMGate = { create(provider) { return { wrapped: provider }; } };
 VS.ModelStore = {};
 VS.TemporalMatte = {};
