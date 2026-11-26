@@ -44,15 +44,16 @@
       // A stratum name without its own labelled sample counts and scores
       // is not evidence. Counts are unique participants/source clips, not frames.
       if (![row.participants,row.sourceVideos,row.clips,row.independentAnnotators].every(positiveCount)) return false;
+      if (row.participants>e.participants || row.sourceVideos>e.sourceVideos ||
+          row.clips>e.clips || row.independentAnnotators>e.independentAnnotators) return false;
       const values = row.metrics;
-      if (!values || !STRATUM_METRIC_FIELDS.every((key)=>Number.isFinite(values[key]) && values[key]>=0)) return false;
-      if (values.boundaryF1>1 || values.topologyErrorRate>1) return false;
+      if (!values || !STRATUM_METRIC_FIELDS.every((key)=>Number.isFinite(values[key]) && values[key]>=0 && values[key]<=1)) return false;
       byId.set(row.id,row);
     }
     if (!REQUIRED_STRATA.every((id)=>byId.has(id))) return false;
     const m=e.metrics;
     if (!m || !METRIC_FIELDS.every((key)=>Number.isFinite(m[key]) && m[key]>=0)) return false;
-    if (m.boundaryF1>1 || m.topologyErrorRate>1) return false;
+    if (['alphaMAD','edgeBandMAD','boundaryF1','topologyErrorRate','temporalDeltaMAE'].some((key)=>m[key]>1)) return false;
     return true;
   }
   function registered(engine, manifest) {
