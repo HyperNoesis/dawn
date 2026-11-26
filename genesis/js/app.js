@@ -125,14 +125,31 @@
     const automatic = !!(matte && typeof matte.isAutomaticDefault === 'function' && matte.isAutomaticDefault());
     if ((livePref === 'auto' || automatic) && matte && (automatic || selected !== 'modnet')) {
       const visible = new Map((matte.visibleEngines() || []).map((item) => [item[0], item[1]]));
-      // Automatic mode first serves the safe live fallback, then benchmarks
-      // UltraMatte -> Hybrid -> PP-MattingV2 in the background. MODNet is added
-      // as a candidate only when the live fallback is the lighter MediaPipe
-      // route; do not benchmark the same MODNet instance twice on desktops.
+      // Automatic promotion is limited to routes with a registered qualification
+      // for the exact model/preprocessing/postprocessing/runtime identity. The
+      // experimental routes currently have no human-video qualification record.
+      // Explicit user selection remains available for deliberate BETA testing.
       const baseIsModnet = !!(segProvider && /MODNet/.test(segProvider.label || ''));
-      const keys = automatic
+      let keys = automatic
         ? ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2'].concat(baseIsModnet ? [] : ['modnet'])
         : [selected];
+      if (automatic) {
+        const gate = V.MatteQualityQualification;
+        const blocked = [];
+        keys = keys.filter((key) => {
+          if (key === 'modnet') return true; // established local baseline, not a new experimental promotion
+          const decision = gate
+            ? gate.evaluate(key, null)
+            : { eligible: false, reason: 'The quality qualification module is unavailable; automatic promotion is disabled.' };
+          if (!decision.eligible) blocked.push({ engine: key, code: decision.code, reason: decision.reason });
+          return !!decision.eligible;
+        });
+        V.matteAutomaticQualityStatus = {
+          eligible: keys.filter((key) => key !== 'modnet'),
+          blocked,
+          message: gate ? gate.automaticStatus().message : 'Automatic promotion is disabled because the quality qualification module is unavailable.'
+        };
+      }
       for (const key of keys) {
         if (key !== 'modnet' && !visible.has(key)) continue;
         const name = visible.get(key) || (key === 'modnet' ? 'MODNet' : key);
@@ -773,11 +790,14 @@
   let prevRender = null; // v0.46: promise of the render currently in flight
   let asyncSegBusy = false, asyncSegPromise = null, asyncSegLastAt = 0, asyncSegDone = 0, asyncSegMinGap = 150;
   let cachedMaskBitmap = null;     // last full-size mask, reused while async inference is in flight
+  let cachedMaskFramePacket = null, lastSegmentationFramePacket = null;
   const maskMotion = window.VS.MaskMotion ? new window.VS.MaskMotion.MaskMotion() : null;
   // Tracks timed-out inference jobs so snapshots remain valid until the underlying provider truly settles.
   const segmentationFlight = window.VS.SegmentationFlight.create();
   let segMsEma = 0;                // smoothed wall-clock cost of one segmentation call, ms
   let loopToken = 0;               // bumped on every start/stop: a superseded processLoop iteration exits instead of racing the new loop
+  let segProviderGeneration = 0;   // invalidates pending results whenever the active provider/cache is replaced
+  let segmentationFrameSequence = 0; // monotonic identity for immutable camera snapshots
   let perfBannerShown = false;     // true only while the degrade banner is showing a PERFORMANCE message (not camera-lost / crash)
   let perfBannerKey = '';
   let perfBannerHoldUntil = 0;
@@ -1312,6 +1332,10 @@
     upgradeRetried = false; ladderRetries = 0;
     let tryModnet = true; try { tryModnet = localStorage.getItem('vs_try_modnet') !== '0'; } catch (e) {}   // Prompt 1: default ON; the bench (<=70 ms/mask) and the ladder keep weak phones on the light model
     const upCands = upgradeCandidates();
+    const qualityStatus = window.VS && window.VS.matteAutomaticQualityStatus;
+    if (tryModnet && pref === 'auto' && qualityStatus && qualityStatus.blocked && qualityStatus.blocked.length) {
+      showBenchNote(qualityStatus.message);
+    }
     if (tryModnet && pref === 'auto' && upCands.length && canProbeAdaptiveUpgrade(segProvider) &&
         !benchSaysSlow(knownBench, upCands)) {
       backgroundUpgrade(quality, loopToken);
@@ -1379,11 +1403,31 @@
   });
 
   function resetSegCache() {
+    // Results started against a previous cache/provider generation are obsolete,
+    // even when the camera session itself has not changed.
+    segProviderGeneration++;
     if (cachedMaskBitmap) { cachedMaskBitmap.close(); cachedMaskBitmap = null; }
+    cachedMaskFramePacket = null;
+    lastSegmentationFramePacket = null;
+    // Detach an old async job; its own finally block may not clear a newer job.
+    asyncSegBusy = false;
+    asyncSegPromise = null;
     if (maskMotion) maskMotion.reset();
     strideTick = 0;
     segMsEma = 0;
   }
+
+  window.VS.getSegmentationFrameStatus = function () {
+    const packet = cachedMaskFramePacket || lastSegmentationFramePacket;
+    if (!packet) return null;
+    const motion = maskMotion ? maskMotion.getMetrics() : null;
+    return Object.assign({}, packet, {
+      frameAgeMs: Math.max(0, Math.round(performance.now() - packet.capturedAtMs)),
+      maskAgeMs: motion ? motion.ageMs : null,
+      maskStatus: motion ? motion.status : 'direct',
+      currentProviderGeneration: segProviderGeneration
+    });
+  };
 
   let pipeFailCount = 0;
 
@@ -1805,14 +1849,33 @@
     const ctx = frame.getContext('2d');
     if (!ctx) throw new Error('Could not create a camera-frame snapshot');
     ctx.drawImage(video, 0, 0, width, height);
-    // MediaPipe accepts canvas ImageSources. Expose the video dimensions for
-    // the existing ONNX provider contract without changing the underlying frame.
+
+    const capturedAtMs = performance.now();
+    const frameId = ++segmentationFrameSequence;
+    let sourceVideoId = '', sourceStreamId = '';
+    try {
+      const tracks = stream && typeof stream.getVideoTracks === 'function' ? stream.getVideoTracks() : [];
+      sourceVideoId = tracks[0] && tracks[0].id ? String(tracks[0].id) : '';
+      sourceStreamId = stream && stream.id ? String(stream.id) : '';
+    } catch (e) { /* metadata is diagnostic; the immutable pixels remain usable */ }
+    let orientationDegrees = null;
+    try {
+      if (typeof screen !== 'undefined' && screen.orientation && Number.isFinite(screen.orientation.angle)) {
+        orientationDegrees = screen.orientation.angle;
+      } else if (typeof window.orientation === 'number') orientationDegrees = window.orientation;
+    } catch (e) { /* orientation is optional on older browsers */ }
+    const packet = Object.freeze({
+      frameId, sourceTimestampMs: capturedAtMs, capturedAtMs, width, height,
+      orientationDegrees, sourceVideoId, sourceStreamId,
+      providerGeneration: segProviderGeneration
+    });
+
+    // Model input, tracker and refiners can read the same immutable frame packet.
     Object.defineProperties(frame, {
       videoWidth: { configurable: true, value: width },
       videoHeight: { configurable: true, value: height },
-      // Providers may safely reuse this per-inference immutable source instead
-      // of copying the entire camera frame into another scratch canvas.
-      __vsSegmentationFrame: { configurable: true, value: true }
+      __vsSegmentationFrame: { configurable: true, value: true },
+      __vsSegmentationFramePacket: { configurable: false, enumerable: false, writable: false, value: packet }
     });
     return frame;
   }
@@ -1913,30 +1976,43 @@
   }
 
   function startAsyncSeg(token) {
-    // A timed-out provider remains quarantined until its underlying promise
-    // settles or the governor swaps it out; do not enqueue work on it.
-    if (segmentationFlight.isBusy(segProvider)) return;
+    // Bind each job to the provider instance and generation that received it.
+    // A camera token alone does not detect a provider swap during inference.
+    const provider = segProvider;
+    const generation = segProviderGeneration;
+    if (!provider || segmentationFlight.isBusy(provider)) return;
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
+    const stale = () => token !== loopToken || provider !== segProvider || generation !== segProviderGeneration;
     let sourceFrame = null;
     try { sourceFrame = captureSegmentationFrame(els.video); }
     catch (e) { if (maskMotion) maskMotion.reset(); }
-    asyncSegPromise = Promise.resolve().then(() => segWithWatchdog(segProvider, sourceFrame || els.video)).then(async (r) => {
-      if (token !== loopToken || !r || !r.segmentationMask) return;
+    const packet = sourceFrame && sourceFrame.__vsSegmentationFramePacket || null;
+    let job;
+    job = Promise.resolve().then(() => segWithWatchdog(provider, sourceFrame || els.video)).then(async (r) => {
+      if (stale() || !r || !r.segmentationMask) return;
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
       try { publishSegmentationPreview(sourceFrame || els.video, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       const fresh = await createImageBitmap(r.segmentationMask);
-      if (token !== loopToken) { fresh.close(); return; }
+      if (stale()) { fresh.close(); return; }
       seedMaskMotion(fresh, sourceFrame, t0);
-      const old = cachedMaskBitmap; cachedMaskBitmap = fresh; asyncSegDone++;
+      const old = cachedMaskBitmap;
+      cachedMaskBitmap = fresh;
+      cachedMaskFramePacket = packet;
+      lastSegmentationFramePacket = packet;
+      asyncSegDone++;
       if (old) setTimeout(() => { try { old.close(); } catch (e) {} }, 400);
       maskWatchdog();
     }).catch(() => {}).finally(() => {
       releaseSegmentationFrame(sourceFrame);
-      asyncSegBusy = false;
+      if (asyncSegPromise === job) {
+        asyncSegBusy = false;
+        asyncSegPromise = null;
+      }
     });
+    asyncSegPromise = job;
   }
 
   async function processLoop() {
@@ -1991,31 +2067,41 @@
     if (benchBusy && cachedMaskBitmap) runInference = false;
     if (runInference && asyncSegBusy && asyncSegPromise) { try { await asyncSegPromise; } catch (e) {} }   // first mask / after a cache reset: never run two inferences at once
 
-    let results = null, maskFrame = null;
+    let results = null, maskFrame = null, resultFramePacket = null;
+    let inferenceProvider = null, inferenceGeneration = null;
     if (runInference) {
-      if (segmentationFlight.isBusy(segProvider)) {
-        // The previous call exceeded its watchdog. Keep the last rendered
-        // frame rather than corrupting a still-in-use snapshot or overlapping
-        // stateful temporal/tile inference on the same provider.
+      inferenceProvider = segProvider;
+      inferenceGeneration = segProviderGeneration;
+      if (segmentationFlight.isBusy(inferenceProvider)) {
         dropPerson();
         scheduleNext();
         return;
       }
+      const inferenceFrame = inferenceSnapshot || els.video;
+      resultFramePacket = inferenceFrame && inferenceFrame.__vsSegmentationFramePacket || null;
       const segStart = performance.now(); maskFrame = camFrames();
       try {
-        results = await segWithWatchdog(segProvider, inferenceSnapshot || els.video);
+        results = await segWithWatchdog(inferenceProvider, inferenceFrame);
       } catch (err) {
         dropPerson();
-        if (myLoop !== loopToken) return; // stopped/restarted while waiting — whoever restarted owns the loop now
+        if (myLoop !== loopToken || inferenceProvider !== segProvider || inferenceGeneration !== segProviderGeneration) {
+          scheduleNext();
+          return;
+        }
         els.statsEl.textContent = 'Segmentation error: ' + err.message;
         scheduleNext();
         return;
       }
-      if (myLoop !== loopToken) { dropPerson(); return; }
+      if (myLoop !== loopToken || inferenceProvider !== segProvider || inferenceGeneration !== segProviderGeneration) {
+        dropPerson();
+        scheduleNext();
+        return;
+      }
+      lastSegmentationFramePacket = resultFramePacket;
       const segMs = performance.now() - segStart;
       if (results && results.segmentationMask) {
         lastMaskSize = (results.segmentationMask.width || '?') + 'x' + (results.segmentationMask.height || '?');
-        try { publishSegmentationPreview(inferenceSnapshot || els.video, results.segmentationMask); } catch (previewError) { /* diagnostics only */ }
+        try { publishSegmentationPreview(inferenceFrame, results.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       }
       segMsEma = segMsEma ? segMsEma * 0.8 + segMs * 0.2 : segMs;
       maskWatchdog();
@@ -2031,9 +2117,13 @@
       if (results) {
         try {
           const fresh = await createImageBitmap(results.segmentationMask);
-          if (myLoop !== loopToken) { fresh.close(); dropPerson(); return; }
+          if (myLoop !== loopToken || inferenceProvider !== segProvider || inferenceGeneration !== segProviderGeneration) {
+            fresh.close(); dropPerson(); scheduleNext(); return;
+          }
           if (cachedMaskBitmap) cachedMaskBitmap.close();
           cachedMaskBitmap = fresh;
+          cachedMaskFramePacket = resultFramePacket;
+          lastSegmentationFramePacket = resultFramePacket;
           seedMaskMotion(fresh, inferenceSnapshot, initialSegAt);
           releaseSegmentationFrame(inferenceSnapshot);
           inferenceSnapshot = initialSegFrame = null;
