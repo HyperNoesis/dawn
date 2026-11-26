@@ -33,17 +33,19 @@
   function sameIdentity(actual, expected) { return IDENTITY_FIELDS.every((field) => actual[field] === expected[field]); }
   function validEvidence(e) {
     if (!e || typeof e !== 'object') return false;
-    const flags=['rightsClearedForCommercialUse','heldOut','participantAndSourceClipSplits','independentHumanAnnotation','pairedBaselineComparison','perStratumResults','criticalStrataNoRegression','measurableImprovement'];
+    const flags=['rightsClearedForCommercialUse','heldOut','participantAndSourceClipSplits','independentHumanAnnotation','annotationProtocolDocumented','interAnnotatorReviewCompleted','frameSynchronizationVerified','dimensionsAndAlphaEncodingVerified','annotationConfidenceRecorded','pairedBaselineComparison','perStratumResults','criticalStrataNoRegression','measurableImprovement'];
     if (!flags.every((key)=>e[key]===true)) return false;
-    if (!SHA256.test(e.datasetManifestSha256||'') || !SHA256.test(e.benchmarkReportSha256||'')) return false;
-    if (![e.participants,e.sourceVideos,e.clips,e.independentAnnotators].every(positiveCount)) return false;
+    const evidenceHashes=['datasetManifestSha256','benchmarkReportSha256','annotationProtocolSha256','interAnnotatorReviewSha256','frameAlignmentManifestSha256','labelConfidenceManifestSha256'];
+    if (!evidenceHashes.every((key)=>SHA256.test(e[key]||''))) return false;
+    if (![e.participants,e.sourceVideos,e.clips,e.independentAnnotators].every(positiveCount) || e.independentAnnotators<2) return false;
     if (!Array.isArray(e.strata) || !e.strata.length) return false;
     const byId = new Map();
     for (const row of e.strata) {
       if (!row || typeof row.id !== 'string' || !row.id.trim() || byId.has(row.id)) return false;
       // A stratum name without its own labelled sample counts and scores
       // is not evidence. Counts are unique participants/source clips, not frames.
-      if (![row.participants,row.sourceVideos,row.clips,row.independentAnnotators].every(positiveCount)) return false;
+      if (![row.participants,row.sourceVideos,row.clips,row.independentAnnotators].every(positiveCount) ||
+          row.independentAnnotators<2) return false;
       if (row.participants>e.participants || row.sourceVideos>e.sourceVideos ||
           row.clips>e.clips || row.independentAnnotators>e.independentAnnotators) return false;
       const values = row.metrics;
