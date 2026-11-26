@@ -26,15 +26,15 @@ PR #5 already carries substantial work across adaptive segmentation, frame snaps
 - Added monotonic IDs and immutable metadata packets to captured source-frame snapshots: timestamp, dimensions, orientation, source video/stream identity and provider generation.
 - Added provider-generation checks to asynchronous and synchronous inference result acceptance, preventing a result from a superseded provider/cache generation from reaching the compositor.
 - Exposed source-frame/mask age metadata to diagnostics.
-- Reduced maximum held/propagated mask age to 150 ms; the existing motion state machine passes through the live camera after expiry.
-- Added unit coverage for the fail-closed qualification policy, including exact-version invalidation.
+- Retained the existing bounded 1,500 ms maximum mask age after the stricter 150 ms experiment changed the existing motion-gap regression's documented failure reason. The value remains provisional and must be calibrated with real video/device evidence before adjustment.
+- Added unit coverage for the fail-closed qualification policy, exact-version invalidation and complete coverage of all 23 required quality strata.
 - Marked unmeasured physical-device rows as blocked rather than filling estimates.
 
 ## Validation
 
-GitHub source inspection and commit operations are available. A local Dawn checkout and working outbound network for cloning/installing repository dependencies were not available in this execution environment. Local Node/Python/Playwright/Gradle commands were therefore not executed here.
+GitHub Actions on the earlier continuation head confirmed Python dependencies, model restoration, protected service tests, JavaScript syntax, the complete pure-logic/provider unit suite (including the new quality qualification test), and the Android debug build. The dedicated motion E2E unit then failed because the experimental 150 ms mask-age cutoff changed the asserted failure reason from `frame-gap` to `stale-mask`. That threshold was reverted to the existing 1,500 ms cap rather than weakening the existing test. A fresh CI run on the latest head is required to verify the correction and run the remaining browser, export and site-build gates.
 
-GitHub Actions must run on the continuation PR for the changed commit. Its result must be reviewed before any PASS statement is added. Physical Android/iOS sessions, real-footage labels, commercial data rights, production credentials, signed release publishing and live WHIP verification remain external acceptance gates.
+A local Dawn checkout and working outbound network for cloning/installing repository dependencies were not available in this execution environment. Local Node/Python/Playwright/Gradle commands were therefore not executed here. Physical Android/iOS sessions, real-footage labels, commercial data rights, production credentials, signed release publishing and live WHIP verification remain external acceptance gates.
 
 ## Release verdict
 
