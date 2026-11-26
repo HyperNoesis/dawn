@@ -194,7 +194,13 @@
     upgrading = true;
     let cand = null;
     const results = {};
-    const stale = () => !running || sessionToken !== loopToken;
+    // Do not let a slow background benchmark overwrite a provider the user or
+    // governor selected while model loading / speed measurement was awaiting.
+    // The camera token alone is unchanged during an in-session provider swap.
+    const startingProvider = segProvider;
+    const startingGeneration = segProviderGeneration;
+    const stale = () => !running || sessionToken !== loopToken ||
+      segProvider !== startingProvider || segProviderGeneration !== startingGeneration;
     try {
       const cands = upgradeCandidates();
       for (let ci = 0; ci < cands.length; ci++) {
