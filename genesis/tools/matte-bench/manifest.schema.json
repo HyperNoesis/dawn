@@ -22,6 +22,7 @@
     "inter_annotator_review_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
     "independent_annotators": {"type": "integer", "minimum": 2},
     "frame_alignment_verified": {"type": "boolean"},
+    "alpha_encoding": {"enum": ["uint8-0-255", "uint16-0-65535", "float32-0-1"]},
     "runtime": {
       "type": "object",
       "properties": {
