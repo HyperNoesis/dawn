@@ -21,8 +21,7 @@ to use — see the Privacy Policy for exactly what and when.
 - You own what you record and stream through Genesis.
 - You're responsible for having the rights to any content you overlay,
   stream, or generate (including AI-generated environments).
-- Genesis does not review, moderate, or store your live stream or
-  recordings unless you explicitly enable cloud sync.
+- Genesis does not operate the destination you choose for Go Live. In local storage mode, recordings are stored in your browser. If a deployment is configured with Supabase storage, completed recordings saved through that active provider are uploaded to the configured Supabase Storage bucket and metadata is stored in Postgres; in-progress recovery drafts remain on-device. See the Privacy Policy and the deployment's visible account/storage mode before recording.
 
 ## Acceptable use
 
