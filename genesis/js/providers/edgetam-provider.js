@@ -60,7 +60,7 @@
     const o = Object.assign({ refreshEvery: 8, dilate: 2, keepDilate: 3, feather: 2, minOverlap: 0.3 }, options || {});
     const own = {
       status: 'idle', gateError: null, gate: null, gateAge: 0, frame: 0, busy: false, enc: null, dec: null, ortRef: null,
-      modelId: null, usingWebGPU: false, precisionFallback: null, modelSha256: null, registryVersion: null, modelTitle: null, modelIdentityError: null,
+      modelId: null, usingWebGPU: false, precisionFallback: null, modelSha256: null, registryVersion: null, modelTitle: null, modelIdentityError: null, runtimeSource: null,
       info: null, sourceCanvas: null, sourceCtx: null, frameCanvas: null, frameCtx: null, baseCanvas: null, baseCtx: null, outCanvas: null, outCtx: null, gateCanvas: null, gateCtx: null, gateImg: null
     };
     const C = () => V.EdgeTAMCore;
@@ -149,7 +149,7 @@
               externalData: decoderDataName ? ext.filter((item) => item.path === decoderDataName) : []
             });
             own.enc = encoder; own.dec = decoder; own.ortRef = ort;
-            own.modelId = id; own.usingWebGPU = gpu;
+            own.modelId = id; own.usingWebGPU = gpu; own.runtimeSource = V.ortSource || null;
             own.precisionFallback = failures.length ? failures.join(' | ') : null;
             own.gateError = null; own.status = 'ready';
             return;
@@ -243,6 +243,7 @@
       },
       async getQualificationIdentity() {
         if (own.status !== 'ready') throw new Error('EdgeTAM runtime is not ready; exact runtime identity is unavailable.');
+        if (own.runtimeSource !== 'local') throw new Error('EdgeTAM is using a non-bundled or unknown ONNX Runtime source; exact runtime identity is unavailable for automatic qualification.');
         if (!own.modelSha256) throw new Error('EdgeTAM model bytes could not be fingerprinted: ' + (own.modelIdentityError || 'SHA-256 unavailable'));
         if (!base || typeof base.getQualificationIdentity !== 'function') {
           throw new Error('The wrapped base provider cannot supply a canonical qualification identity.');
@@ -275,6 +276,7 @@
             name: 'onnxruntime-web-edgetam',
             backend: own.usingWebGPU ? 'encoder-webgpu+decoder-wasm' : 'encoder-wasm+decoder-wasm',
             resources: [
+              'js/ort-loader.js',
               'vendor/ort/ort.min.js',
               'vendor/ort/ort.webgpu.min.js',
               'vendor/ort/ort-wasm-simd-threaded.js',
@@ -284,6 +286,7 @@
             ],
             config: {
               selectedModel: own.modelId,
+              runtimeSource: own.runtimeSource,
               precisionFallback: String(own.precisionFallback || ''),
               decoderBackend: 'wasm'
             }
