@@ -9,7 +9,7 @@ One JSON object per line. Prediction/target paths are relative to the manifest. 
 - `participant_id`, `source_video_id`, `clip_id`, and `split: "test"` (or `"benchmark"`); participants and source videos may not cross splits.
 - One or more `strata` labels from the 23 required difficult-scene/hair categories.
 - `usage_rights: "commercial-cleared"`, provenance, and a documented consent/lawful-basis record.
-- Annotation confidence in [0, 1], hashes for the annotation protocol and inter-annotator review, at least two independent annotators, and `frame_alignment_verified: true`.
+- Annotation confidence in [0, 1], hashes for the annotation protocol and inter-annotator review, at least two independent annotators, `frame_alignment_verified: true`, and an explicit alpha encoding (`uint8-0-255`, `uint16-0-65535` or `float32-0-1`).
 - Optional per-frame runtime observations: inference time, displayed-mask age, camera/render/preview FPS, dropped frames, memory and battery.
 
 See `manifest.schema.json` for the field contract. The evaluator rejects shape mismatches; it never silently resizes. The commercial-clearance flag verifies that declarations and required evidence fields are present. It is an audit guard, not legal advice or proof that permissions are valid. Keep identity-bearing footage private and access-controlled.
