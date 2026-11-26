@@ -186,3 +186,11 @@ The real-video dataset must be rights-cleared and commercially permitted for the
 The experimental segmentation routes remain BETA and are not automatically promoted. Their measured synthetic CI speed is far below a 24 FPS live intent, and their quality remains unqualified for natural human footage. The Studio's full 17-tab workflows, physical target-device matrix, legal review, security scan and current-head Android packaging remain open.
 
 No merge, production deploy, payment/paid-service activation, signing or release action was performed. Keep PR #7 in draft until its latest CI is green and the external evidence/legal/device gates are completed.
+
+## Additional correctness hardening — 26 November 2026
+
+- Added executable quality thresholds for both aggregate metrics and each of the 23 strata: alpha MAD ≤ 0.05, edge-band MAD ≤ 0.08, boundary F1 ≥ 0.90, topology error ≤ 0.05 and temporal delta MAE ≤ 0.05. These are explicit v1 engineering acceptance limits, not claimed measurements; P95 latency remains device-specific.
+- Added regression cases proving complete evidence metadata cannot approve poor alpha or boundary scores, and pinned the threshold values in tests.
+- Found and fixed an additional asynchronous race in `backgroundUpgrade`: a long model download/benchmark could otherwise overwrite a provider selected by the user or governor during the same camera session. The stale check now binds the candidate to the original provider instance and provider generation as well as the camera session token.
+- Latest source commit: `35e371ba18b2283c684526d174b214afcc656906`. CI for the preceding quality-gate/test commit was still running when this report was updated; the provider-race fix requires a fresh latest-head regression run.
+
