@@ -2040,6 +2040,14 @@
     if (checkPaused) { scheduleNext(); return; }   // Studio Check owns the CPU/GPU; a background model benchmark must never freeze the camera/render loop
     if (!renderHealthy) return; // worker crashed fatally — stop hammering a dead worker; see 'fatal' handler above for why this can't self-recover
     const myLoop = loopToken;
+    // Bind the entire render tick—not only inference—to the provider generation
+    // that owned its source snapshot. A provider swap during any later await
+    // must discard this frame instead of compositing a copied old-generation mask.
+    const frameGenerationGuard = window.VS.SegmentationGeneration;
+    const frameStamp = frameGenerationGuard.stamp(segProvider, myLoop, segProviderGeneration);
+    const frameIsCurrent = () => frameGenerationGuard.matches(frameStamp, {
+      provider: segProvider, sessionToken: loopToken, providerGeneration: segProviderGeneration
+    });
     const frameStart = performance.now();
     // v0.13 Battery saver: cap the loop rate. Skipped ticks cost almost nothing.
     if (saverOn && lastLoopAt && frameStart - lastLoopAt < window.VS.PerfProfile.SAVER_FRAME_MS - 4) { requestAnimationFrame(processLoop); return; }
@@ -2086,6 +2094,13 @@
     // passes through the live camera instead of freezing an old preview.
     if (benchBusy && cachedMaskBitmap) runInference = false;
     if (runInference && asyncSegBusy && asyncSegPromise) { try { await asyncSegPromise; } catch (e) {} }   // first mask / after a cache reset: never run two inferences at once
+    // The source snapshot may have been captured before the await above. If a
+    // provider/cache reset occurred meanwhile, its frame packet is obsolete.
+    if (!frameIsCurrent()) {
+      dropPerson();
+      scheduleNext();
+      return;
+    }
 
     let results = null, maskFrame = null, resultFramePacket = null;
     let inferenceProvider = null, inferenceGeneration = null;
@@ -2219,6 +2234,13 @@
           ? createImageBitmap(passCanvas, { resizeWidth: 64, resizeHeight: 36 })   // fully opaque mask = show the camera as is
           : createImageBitmap(maskSource, mcrop.sx, mcrop.sy, mcrop.sw, mcrop.sh, { resizeWidth: Math.min(w, 640), resizeHeight: Math.max(1, Math.round(h * Math.min(w, 640) / w)), resizeQuality: 'medium' }),
       ]);
+      if (!frameIsCurrent()) {
+        personBitmap.close();
+        maskBitmap.close();
+        dropPerson();
+        scheduleNext();
+        return;
+      }
       pipeFailCount = 0;
       stg.bmp = ema(stg.bmp, performance.now() - tB0);
     } catch (err) {
@@ -2228,7 +2250,12 @@
       scheduleNext();
       return;
     }
-    if (myLoop !== loopToken) { personBitmap.close(); maskBitmap.close(); return; }
+    if (myLoop !== loopToken || !frameIsCurrent()) {
+      personBitmap.close();
+      maskBitmap.close();
+      dropPerson();
+      return;
+    }
 
     // Arm the frame-done listener BEFORE dispatching: in localCore mode,
     // dispatch() resolves this synchronously, in the same call — if the
