@@ -68,7 +68,15 @@ globalThis.fetch = async (path) => {
     }
   };
   let runtimeSource = 'local';
-  globalThis.VS.loadOrt = async () => { globalThis.VS.ortSource = runtimeSource; };
+  globalThis.VS.loadOrt = async () => {
+    globalThis.VS.ortSource = runtimeSource;
+    globalThis.VS.ortBundle = {
+      source: runtimeSource,
+      script: 'ort.min.js',
+      wasmStem: 'ort-wasm-simd-threaded',
+      gpuRuntimeBuild: false
+    };
+  };
   globalThis.VS.ModelStore = {
     load: async (id) => ({
       bytes: {
@@ -104,6 +112,8 @@ globalThis.fetch = async (path) => {
   const ultraIdentity = await ultra.getQualificationIdentity();
   assert.match(ultraIdentity.modelVersion, /edgetam-fp32/);
   assert.match(ultraIdentity.runtimeBackend, /encoder-wasm\+decoder-wasm/);
+  assert.strictEqual(ultra.edgetam.runtimeBundle.script, 'ort.min.js');
+  assert.strictEqual(ultra.edgetam.runtimeBundle.wasmStem, 'ort-wasm-simd-threaded');
   assert.notStrictEqual(ultraIdentity.modelSha256, hybridIdentity.modelSha256);
   assert.notStrictEqual(ultraIdentity.preprocessHash, hybridIdentity.preprocessHash);
   assert.notStrictEqual(ultraIdentity.postprocessHash, hybridIdentity.postprocessHash);
