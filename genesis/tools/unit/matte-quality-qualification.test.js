@@ -33,5 +33,13 @@ const impossibleCount=JSON.parse(JSON.stringify(approved));
 impossibleCount['genesis-hybrid'].evidence.strata[0].participants=Infinity;
 assert.strictEqual(Q.registered('genesis-hybrid',impossibleCount).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
   'sample counts must be finite positive integers, never Infinity or fractional estimates');
+const impossibleMetric=JSON.parse(JSON.stringify(approved));
+impossibleMetric['genesis-hybrid'].evidence.strata[0].metrics.alphaMAD=1.4;
+assert.strictEqual(Q.registered('genesis-hybrid',impossibleMetric).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
+  'normalized alpha/edge/topology/temporal metrics must remain within their defined 0–1 range');
+const impossibleStratum=JSON.parse(JSON.stringify(approved));
+impossibleStratum['genesis-hybrid'].evidence.strata[0].clips=999;
+assert.strictEqual(Q.registered('genesis-hybrid',impossibleStratum).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
+  'per-stratum sample counts cannot exceed the dataset-wide totals');
 const automatic=Q.automaticStatus();assert.deepStrictEqual(automatic.eligible,[]);assert.strictEqual(automatic.blocked.length,3);
 console.log('matte-quality-qualification: all assertions passed');
