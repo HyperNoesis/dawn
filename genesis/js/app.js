@@ -25,9 +25,10 @@
   // ---- Model choice + one-time device speed test ----
   const MODNET_LOAD_TIMEOUT_MS = 45000;   // the model is bundled now; this only matters for the web version's first load
   const MODNET_MAX_MS = 100;              // baseline per-mask budget; runtime measurements decide promotion.
-  const MAX_ASYNC_MASK_MS = 150;          // cap async mask age to reduce stale edges during motion.
-  // v0.98 QUALITY FIRST (default on): the good model never gives way to the weak one. MODNet is the live engine at a 256 px floor; when a phone is slow the
-  // mask is refreshed less often (stride) instead. The weak MediaPipe engine is only used if MODNet cannot load at all. localStorage vs_quality_first = 0 restores the old ladder.
+  const MAX_ASYNC_MASK_MS = 150;          // per-mask latency budget used by adaptive route decisions; displayed-mask age is governed separately by MaskMotion.
+  // Automatic is device-profile-aware: constrained/mobile profiles start with the lightweight MediaPipe baseline and may probe MODNet when eligible;
+  // capable desktop profiles can start with MODNet. Experimental PP-MattingV2/Hybrid/UltraMatte routes remain manual BETA choices until exact-version
+  // held-out human-video qualification passes. The governor must not trade a qualified route for an unqualified one merely to improve timing.
   function qualityFirst() {   // v0.98: phones no longer start on MODNet (1.2 s/frame on a Mali-G52 = 2 FPS). Explicit '1'/'0' still wins; otherwise only desktops default to quality-first.
     try { const v = localStorage.getItem('vs_quality_first'); if (v === '1') return true; if (v === '0') return false; } catch (e) {}
     const ua = navigator.userAgent || '';
@@ -1216,9 +1217,9 @@
     // Phones (like a Redmi 14C) report WebGPU but are too slow for RVM in real time;
     // there the fast MediaPipe mask + the GPU sharp-edge stage gives better results.
     const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
-    // Model choice. AUTO = MODNet (Apache-2.0, real matting) if this device is fast
-    // enough (one-time speed test, remembered), otherwise MediaPipe (Apache-2.0, lightest).
-    // RVM is GPL-3.0, so it only runs if someone explicitly picks it (personal use).
+    // Model choice. Automatic uses the established device-profile baseline: MediaPipe on constrained/mobile devices and MODNet on
+    // capable desktop profiles. This is a safe bootstrap, not a human-quality certification; experimental matte routes require qualification.
+    // RVM is GPL-3.0 and is never an Automatic candidate.
     const VSNS = window.VS;
     // Wait for the optional engine router and its selected model dependencies.
     // A rapid Start tap must not race the dynamic loader and start on the base model.
@@ -1242,8 +1243,8 @@
     const pref = (els.modelSelect && els.modelSelect.value) || 'auto';
     const knownBench = readBench();
     let warmPromise = null;
-    // INSTANT START: Auto always starts on the light MediaPipe model (small, cached after first load)
-    // and upgrades to MODNet in the background. Only an explicit "MODNet" choice waits for it.
+    // INSTANT START: constrained/mobile Automatic profiles begin with MediaPipe; capable desktop profiles begin with MODNet.
+    // A lightweight baseline remains available while the optional model/router initializes; explicit engine choices are never silently rewritten.
     if (pref === 'rvm' && VSNS.RVMSegmentationProvider) {
       segProvider = new VSNS.RVMSegmentationProvider();
     } else if ((pref === 'modnet' || (pref === 'auto' && qualityFirst())) && VSNS.MODNetSegmentationProvider) {
