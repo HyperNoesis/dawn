@@ -93,7 +93,7 @@ Frame metadata is attached to the app's owned snapshot canvases. This does not m
 | P1 | Runtime providers do not yet expose canonical qualification identity for all model/pre/postprocess/backend components | BLOCKED — no experimental route can be automatically approved yet |
 | P1 | RVM GPL-3.0 code/model assets remain in the publicly served browser repository | LEGAL REVIEW / packaging decision required before a closed-source paid distribution |
 | P2 | Synthetic camera gate's minimum FPS threshold is too weak to demonstrate smooth creator experience | EVIDENCE GAP — test passes while measured synthetic sample rate is only 3.47 FPS |
-| P2 | Camera diagnostics summary strings disagree (0 FPS/1,495 ms versus app stats 4 FPS/375 ms) | OPEN — correct telemetry source/aggregation before using diagnostics for device sign-off |
+| P2 | Camera startup and post-settle measurements differ substantially | DOCUMENTED — the gate captures the first stats string immediately after Start, then captures app stats after a 3-second scene settle and the sample window; these are different times, not contradictory simultaneous readings |
 | P2 | Final Studio render matte has higher transition-band error than raw alpha in the synthetic fixture | OPEN RESEARCH/FIX — inspect renderer edge/decontamination path with real labels before changing defaults |
 | P2 | Full 17-tab Studio journey, keyboard, screen-reader and responsive audit not executed | NOT RUN / BLOCKED by lack of full browser/device session |
 | P2 | Legacy shared CSS / inline-style migration lacks selector map and screenshot diffs | NOT RUN — no blind CSS deletion performed |
@@ -149,7 +149,7 @@ The transition-band MAE is computed on fixture pixels whose reference alpha is b
 
 The UltraMatte test uses `tools/e2e/fixtures/gt_alpha_640x480.png`, explicitly described by the test as synthetic labelled fixture only. Its output shows a generated cartoon presenter. It cannot establish natural hair, transparent cloth, fingers, occlusion, backlight or multi-person quality.
 
-The generic camera gate sampled 28 frames in 8.07 seconds, about 3.47 FPS. Its saved diagnostics contain inconsistent frame-rate/latency strings (0 FPS / 1,495 ms in one string; 4 FPS / 375 ms in another). These results are evidence of test execution, not acceptable phone performance.
+The generic camera gate sampled 28 frames in 8.07 seconds, about 3.47 FPS. Its script captures the first stats string immediately after camera Start (0 FPS / 1,495 ms during startup), then changes the scene, waits 3 seconds, samples the preview, and captures the later app stats (about 4 FPS / 375 ms). Those are different sampling moments, not contradictory simultaneous readings. The 8.07-second sampled preview rate is still far below the brief's 24 FPS target intent; these are synthetic Chromium results, not phone performance.
 
 ## 6. Studio functional and visual status
 
