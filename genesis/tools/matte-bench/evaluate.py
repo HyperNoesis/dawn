@@ -26,10 +26,18 @@ RUNTIME_FIELDS = (
 
 
 def unit(image):
-    a = np.asarray(image, dtype=np.float32)
-    if a.ndim != 2 or a.size == 0 or not np.isfinite(a).all():
+    raw = np.asarray(image)
+    if raw.ndim != 2 or raw.size == 0 or not np.isfinite(raw).all():
         raise ValueError("alpha must be non-empty, single-channel and finite")
-    return np.clip(a / (255.0 if a.max() > 1 else 1.0), 0, 1)
+    if np.issubdtype(raw.dtype, np.integer):
+        if np.issubdtype(raw.dtype, np.signedinteger):
+            raise ValueError("signed integer alpha encodings are not supported")
+        scale = float(np.iinfo(raw.dtype).max)
+        return np.clip(raw.astype(np.float32) / scale, 0, 1)
+    a = raw.astype(np.float32)
+    if a.min() < 0 or a.max() > 1:
+        raise ValueError("floating-point alpha must already be normalized to [0, 1]")
+    return a
 
 
 def boundary(mask):
@@ -221,6 +229,8 @@ def validate_commercial_entry(item, line_no):
     for key in ("annotation_protocol_sha256", "inter_annotator_review_sha256"):
         if not SHA256.match(str(item[key])):
             raise ValueError(f"manifest line {line_no} has invalid {key}")
+    if item["alpha_encoding"] not in ("uint8-0-255", "uint16-0-65535", "float32-0-1"):
+        raise ValueError(f"manifest line {line_no} has an unsupported or undocumented alpha encoding")
     if item["frame_alignment_verified"] is not True:
         raise ValueError(f"manifest line {line_no} frame alignment is not verified")
 
@@ -262,10 +272,17 @@ def main():
         target_path = (root / item["target"]).resolve()
         if root not in prediction_path.parents or root not in target_path.parents:
             raise ValueError(f"manifest line {line_no} contains an asset path outside the manifest directory")
-        prediction = cv2.imread(str(prediction_path), cv2.IMREAD_GRAYSCALE)
-        target = cv2.imread(str(target_path), cv2.IMREAD_GRAYSCALE)
+        prediction = cv2.imread(str(prediction_path), cv2.IMREAD_UNCHANGED)
+        target = cv2.imread(str(target_path), cv2.IMREAD_UNCHANGED)
         if prediction is None or target is None:
             raise FileNotFoundError(f"cannot read pair on manifest line {line_no}")
+        if prediction.ndim != 2 or target.ndim != 2:
+            raise ValueError(f"manifest line {line_no} alpha assets must be single-channel images")
+        expected_dtype = {"uint8-0-255": np.uint8, "uint16-0-65535": np.uint16}.get(item.get("alpha_encoding"))
+        if expected_dtype is not None and (prediction.dtype != expected_dtype or target.dtype != expected_dtype):
+            raise ValueError(f"manifest line {line_no} alpha dtype does not match declared {item['alpha_encoding']}")
+        if item.get("alpha_encoding") == "float32-0-1" and (not np.issubdtype(prediction.dtype, np.floating) or not np.issubdtype(target.dtype, np.floating)):
+            raise ValueError(f"manifest line {line_no} alpha dtype does not match declared float32-0-1")
         entries.append({
             "id": item["id"], "clip_id": str(item.get("clip_id", item["id"])),
             "participant_id": item.get("participant_id"), "source_video_id": item.get("source_video_id"),
