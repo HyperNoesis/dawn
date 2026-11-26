@@ -58,6 +58,14 @@ const belowQualityBar=JSON.parse(JSON.stringify(approved));
 belowQualityBar['genesis-hybrid'].evidence.strata[0].metrics.alphaMAD=0.2;
 assert.strictEqual(Q.registered('genesis-hybrid',belowQualityBar).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
   'complete metadata cannot approve a stratum whose alpha error exceeds the quality ceiling');
+const edgeBandTooHigh=JSON.parse(JSON.stringify(approved));
+edgeBandTooHigh['genesis-hybrid'].evidence.strata[0].metrics.edgeBandMAD=0.081;
+assert.strictEqual(Q.registered('genesis-hybrid',edgeBandTooHigh).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
+  'per-stratum edge-band error must meet the numeric ceiling');
+const temporalTooHigh=JSON.parse(JSON.stringify(approved));
+temporalTooHigh['genesis-hybrid'].evidence.strata[0].metrics.temporalDeltaMAE=0.051;
+assert.strictEqual(Q.registered('genesis-hybrid',temporalTooHigh).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
+  'per-stratum temporal instability must meet the numeric ceiling');
 const poorBoundary=JSON.parse(JSON.stringify(approved));
 poorBoundary['genesis-hybrid'].evidence.metrics.boundaryF1=0.4;
 assert.strictEqual(Q.registered('genesis-hybrid',poorBoundary).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
