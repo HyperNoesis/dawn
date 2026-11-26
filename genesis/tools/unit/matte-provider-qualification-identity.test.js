@@ -67,7 +67,7 @@ globalThis.fetch = async (path) => {
       create: async () => ({ release() {} })
     }
   };
-  globalThis.VS.loadOrt = async () => {};
+  globalThis.VS.loadOrt = async () => { globalThis.VS.ortSource = 'local'; };
   globalThis.VS.ModelStore = {
     load: async (id) => ({
       bytes: {
@@ -106,6 +106,9 @@ globalThis.fetch = async (path) => {
   assert.notStrictEqual(ultraIdentity.modelSha256, hybridIdentity.modelSha256);
   assert.notStrictEqual(ultraIdentity.preprocessHash, hybridIdentity.preprocessHash);
   assert.notStrictEqual(ultraIdentity.postprocessHash, hybridIdentity.postprocessHash);
+  globalThis.VS.ortSource = 'cdn';
+  await assert.rejects(ultra.getQualificationIdentity(), /non-bundled or unknown ONNX Runtime source/,
+    'CDN fallback must not be fingerprinted as the bundled runtime');
 
   console.log('matte-provider-qualification-identity: PP-Matting, Hybrid and EdgeTAM assertions passed');
 })().catch((error) => {
