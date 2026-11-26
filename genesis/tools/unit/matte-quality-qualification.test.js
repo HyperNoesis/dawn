@@ -1,6 +1,10 @@
 'use strict';
 const assert=require('assert');
 const Q=require('../../js/providers/matte-quality-qualification.js');
+assert.deepStrictEqual(Q.QUALITY_LIMITS,{
+ alphaMADMax:0.05,edgeBandMADMax:0.08,boundaryF1Min:0.90,
+ topologyErrorRateMax:0.05,temporalDeltaMAEMax:0.05
+},'the v1 numeric quality policy must remain explicit and regression-tested');
 for(const engine of ['ppmatting-v2','genesis-hybrid','genesis-hybrid-tam']){
  const d=Q.evaluate(engine,null);
  assert.strictEqual(d.eligible,false,engine+' must stay out of Automatic without independent qualification');
