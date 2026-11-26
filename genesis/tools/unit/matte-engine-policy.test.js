@@ -2,6 +2,7 @@ const assert = require('assert');
 const P = require('../../js/providers/matte-engine-policy.js');
 
 const ppmattingReady = {
+  MatteQualificationIdentity: true,
   ModelStore: true,
   PPMattingCore: true,
   TemporalMatte: true,
@@ -15,6 +16,7 @@ assert.strictEqual(P.resolve('ppmatting-v2', Object.assign({}, ppmattingReady, {
 
 // Hybrid requires only the PP-Matting and boundary-refinement stack.
 const hybridReady = Object.assign({}, ppmattingReady, {
+  MatteCritic: true,
   BandRefineCore: true,
   GenesisHybridProvider: true
 });
