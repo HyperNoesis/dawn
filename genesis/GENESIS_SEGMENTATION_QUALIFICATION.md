@@ -94,3 +94,18 @@ The separate baseline camera gate sampled 28 frames in 8.07 seconds (3.47 sample
 | Genesis UltraMatte | UNQUALIFIED | No exact-version held-out human-video report is registered |
 
 No scores or model hashes are invented here. Update the machine-readable gate and its regression tests only after the evidence above is independently available.
+
+## Numeric quality policy v1
+
+A route cannot be approved merely because its evidence metadata is complete. The executable gate enforces these provisional normalized limits on the aggregate result **and independently on every required stratum**:
+
+| Metric | Acceptance |
+|---|---:|
+| Alpha MAD | ≤ 0.05 |
+| Edge-band MAD | ≤ 0.08 |
+| Boundary F1 | ≥ 0.90 |
+| Topology error rate | ≤ 0.05 |
+| Temporal delta MAE | ≤ 0.05 |
+
+The executable constants are exported as `QUALITY_LIMITS` by `js/providers/matte-quality-qualification.js`. P95 latency is recorded but is not a universal image-quality threshold: performance qualification remains device/profile-specific and is applied only after quality qualification. These thresholds are an explicit v1 engineering acceptance policy, not measured results or a claim that any engine currently meets them. They must be validated against the agreed annotation protocol and baseline set before production sign-off.
+
