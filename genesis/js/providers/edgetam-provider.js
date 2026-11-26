@@ -277,12 +277,9 @@
             backend: own.usingWebGPU ? 'encoder-webgpu+decoder-wasm' : 'encoder-wasm+decoder-wasm',
             resources: [
               'js/ort-loader.js',
-              'vendor/ort/ort.min.js',
-              'vendor/ort/ort.webgpu.min.js',
-              'vendor/ort/ort-wasm-simd-threaded.js',
-              'vendor/ort/ort-wasm-simd-threaded.wasm',
-              'vendor/ort/ort-wasm-simd-threaded.asyncify.js',
-              'vendor/ort/ort-wasm-simd-threaded.asyncify.wasm'
+              own.usingWebGPU ? 'vendor/ort/ort.webgpu.min.js' : 'vendor/ort/ort.min.js',
+              own.usingWebGPU ? 'vendor/ort/ort-wasm-simd-threaded.asyncify.js' : 'vendor/ort/ort-wasm-simd-threaded.js',
+              own.usingWebGPU ? 'vendor/ort/ort-wasm-simd-threaded.asyncify.wasm' : 'vendor/ort/ort-wasm-simd-threaded.wasm'
             ],
             config: {
               selectedModel: own.modelId,
