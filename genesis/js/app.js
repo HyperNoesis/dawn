@@ -746,6 +746,7 @@
   // localStorage-persisted data) and sent over once per id.
   const sentCustomEnvIds = new Set();
   async function pushEnvironment(id) {
+    if (id) { try { localStorage.setItem('vs_last_env', id); } catch (e) { /* private mode: scene simply is not remembered */ } }   // returning users get their scene back
     if (!(renderWorker || localCore) || !id) return;
     if (envProvider.customImages.has(id) && !sentCustomEnvIds.has(id)) {
       try {
@@ -4657,6 +4658,10 @@
     } else if (requestedEnv) {
       els.envSelect.value = requestedEnv;
       renderEnvMiniGrid();
+    } else {
+      let last = null; try { last = localStorage.getItem('vs_last_env'); } catch (e) {}
+      // restore only an environment that still exists (custom ones are rehydrated above); never an unknown id
+      if (last && [...els.envSelect.options].some((o) => o.value === last)) { els.envSelect.value = last; renderEnvMiniGrid(); }
     }
     pushEnvironment(els.envSelect.value); // covers the plain-default case; redundant (harmless) if a branch above already pushed one
     if (requestedAction === 'start') setTimeout(() => startCamera(), 250);
