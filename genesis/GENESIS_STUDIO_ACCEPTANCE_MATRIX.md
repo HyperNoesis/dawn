@@ -55,3 +55,16 @@ This matrix is intentionally conservative. Replace statuses only when the corres
 - No desktop/tablet/narrow-phone screenshots or visual-diff artifacts were produced in this environment. CSS was not mass-deleted or rewritten without those visual regression artifacts; this is NOT RUN / BLOCKED, not a visual sign-off.
 - `studio-ux.js` groups the existing 17 tabs into Set / Perform / On screen / Output / Advanced, leaves unknown future tabs reachable, adds progressive disclosure and derives the first-run guide/readiness chips from state. That code is present, but its complete keyboard, screen-reader, reduced-motion and touch journeys were not re-executed here.
 
+
+## CI evidence — synthetic integration only
+
+On commit `a46fd4c545418fe6216edba4c565b98d2d50e692`, segmentation workflow run [45847956492](https://github.com/HyperNoesis/dawn/actions/runs/45847956492) completed successfully:
+- protected service tests, JavaScript syntax and provider/pure-logic tests: PASS;
+- synthetic camera/model/motion/matte-edge browser gates: PASS;
+- export safety/API regression suite: PASS;
+- deployable PWA site build: PASS.
+
+The artifact records 3.47 sample FPS in the generic camera gate (28 frames / 8.07 sec) and the UltraMatte 10-frame synthetic gate records P50 464 ms, P75 602 ms, P95/max 2,790 ms (estimated 1.66 mask updates/sec at P75). The cartoon presenter/ground-truth fixture is synthetic only. It is a code-path integration check, not proof of hair/finger alpha quality or a mobile performance score.
+
+The camera gate's artifact has inconsistent status telemetry: one stats string says 0 FPS / 1,495.1 ms, while its application stats string says 4 FPS / 375 ms. Resolve the reporting mismatch before relying on these displayed diagnostics for target-device acceptance. Full Studio surface journeys remain NOT RUN.
+
