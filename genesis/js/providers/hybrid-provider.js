@@ -92,7 +92,7 @@
           rejectedTileBackoff: lsNum('vs_hy_reject_backoff', 4, 1, 12),
           criticTextureWeight: 1.25,
           criticTextureThreshold: 14,
-          historyCap: V.BandRefineCore && V.BandRefineCore.HIST_CAP
+          historyCap: Number(V.BandRefineCore && V.BandRefineCore.HIST_CAP) || 0
         }
       });
     }
