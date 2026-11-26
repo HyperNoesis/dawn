@@ -139,7 +139,7 @@
         keys = keys.filter((key) => {
           if (key === 'modnet') return true; // established local baseline, not a new experimental promotion
           const decision = gate
-            ? gate.evaluate(key, null)
+            ? gate.registered(key)
             : { eligible: false, reason: 'The quality qualification module is unavailable; automatic promotion is disabled.' };
           if (!decision.eligible) blocked.push({ engine: key, code: decision.code, reason: decision.reason });
           return !!decision.eligible;
@@ -157,7 +157,8 @@
           name,
           key,
           prepare: () => matte.ensureEngine(key),
-          make: () => matte.createProvider(key)
+          make: () => matte.createProvider(key),
+          requiresQualification: automatic && key !== 'modnet'
         });
       }
       return list;
@@ -207,6 +208,19 @@
           cand.lowLightBoost = lowLightBoostEnabled;
           cand.onProgress = (p) => showBenchNote('Loading high-quality model: ' + Math.round(p * 100) + '%');
           await withTimeout(cand.initialize(quality), 45000, c.name + ' model initialization timed out after 45 seconds');
+          if (c.requiresQualification) {
+            const gate = V.MatteQualityQualification;
+            const identity = cand && typeof cand.getQualificationIdentity === 'function'
+              ? cand.getQualificationIdentity()
+              : (cand && cand.qualificationIdentity);
+            const qualification = gate ? gate.evaluate(c.key, identity) : {
+              eligible: false,
+              reason: 'The quality qualification module is unavailable.'
+            };
+            if (!qualification.eligible) {
+              throw new Error('Automatic quality qualification blocked ' + c.name + ': ' + qualification.reason);
+            }
+          }
           if (V.MatteEngines && typeof V.MatteEngines.validateProvider === 'function') {
             V.MatteEngines.validateProvider(c.key, cand);
           }
@@ -1748,6 +1762,8 @@
       coveragePct: cov == null ? null : Math.round(cov * 1000) / 10,
       maskSize: lastMaskSize,
       maskMotion: maskMotion ? (maskMotionEnabled() ? maskMotion.getMetrics() : { status: 'disabled' }) : null,
+      frameIdentity: window.VS.getSegmentationFrameStatus ? window.VS.getSegmentationFrameStatus() : null,
+      automaticQualityStatus: window.VS.matteAutomaticQualityStatus || null,
       segMs: segMsEma ? Math.round(segMsEma * 10) / 10 : null,
       renderMs: lastRenderMs,
       fps: running ? recentFps : null,
@@ -2442,22 +2458,22 @@
   }
   function govChainFor(engine) {
     const sizes = [512, 448, 384, 320, 256, 224], ppSizes = [512, 448, 384, 320], ch = [];
-    // Adaptive degradation order preserves the best remaining segmentation
-    // route at each measured step. UltraMatte sheds EdgeTAM first, then sparse
-    // tile refinement, then the PP model itself, and only then moves to MODNet.
-    // Simpler candidates enter at 320 px: this is the smallest normal PP-trained
-    // inference tier and avoids jumping to an unnecessarily expensive 512 px
-    // model merely because the engine boundary was crossed.
+    const gate = window.VS && window.VS.MatteQualityQualification;
+    const registered = (id) => !!(gate && typeof gate.registered === 'function' && gate.registered(id).eligible);
+    // The active manually-selected BETA route may adapt its own resolution.
+    // Cross-engine degradation is allowed only to a route with a registered
+    // human-video quality decision; the established MODNet baseline remains
+    // the explicit safe fallback. Runtime identity is checked again on swap.
     if (engine === 'genesis-hybrid-tam') {
       ch.push({ engine: 'genesis-hybrid-tam', edges: ppSizes });
-      ch.push({ engine: 'genesis-hybrid', edges: [320] });
-      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      if (registered('genesis-hybrid')) ch.push({ engine: 'genesis-hybrid', edges: [320] });
+      if (registered('ppmatting-v2')) ch.push({ engine: 'ppmatting-v2', edges: [320] });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'genesis-hybrid') {
       ch.push({ engine: 'genesis-hybrid', edges: ppSizes });
-      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      if (registered('ppmatting-v2')) ch.push({ engine: 'ppmatting-v2', edges: [320] });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
@@ -2557,7 +2573,9 @@
   async function govSwap(a, gv) {
     if (ladderSwapping) return;
     ladderSwapping = true;
-    const token = loopToken; let cand = null;
+    const token = loopToken;
+    const previousEngine = govEngineId(segProvider);
+    let cand = null;
     try {
       if (a.emergency) {
         showBenchNote('Still slow even at the smallest matting size. Using the light model until this device has room again.');
@@ -2569,6 +2587,19 @@
       }
       // Prewarm OFF the frame path: the old engine keeps drawing while the new one loads, then the swap is one frame.
       let to; await Promise.race([cand.initialize(runningQuality), new Promise((_, rej) => { to = setTimeout(() => rej(new Error('timed out loading ' + a.engine)), 45000); })]).finally(() => clearTimeout(to));
+      if (!a.emergency && a.engine !== previousEngine && a.engine !== 'modnet' && a.engine !== 'mediapipe') {
+        const gate = window.VS.MatteQualityQualification;
+        const identity = cand && typeof cand.getQualificationIdentity === 'function'
+          ? cand.getQualificationIdentity()
+          : (cand && cand.qualificationIdentity);
+        const qualification = gate ? gate.evaluate(a.engine, identity) : {
+          eligible: false,
+          reason: 'The quality qualification module is unavailable.'
+        };
+        if (!qualification.eligible) {
+          throw new Error('Governor engine switch blocked by quality qualification: ' + qualification.reason);
+        }
+      }
       if (!a.emergency && window.VS.MatteEngines && typeof window.VS.MatteEngines.validateProvider === 'function') {
         window.VS.MatteEngines.validateProvider(a.engine, cand);
       }
