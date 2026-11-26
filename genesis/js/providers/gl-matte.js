@@ -28,6 +28,29 @@
  * `ok` is false and render-core keeps using the legacy canvas path.
  */
 (function () {
+  // High-resolution models carry denser fractional alpha than the legacy
+  // 160/256 px routes. Preserve more of that transition instead of applying
+  // the same aggressive smoothstep used to clean up coarse masks. The crisp
+  // slider remains authoritative: its legacy 0..1 value maps into the
+  // high-resolution 0.05..0.30 / 0.70..0.95 threshold range.
+  function clamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
+  function resolveEdgeThresholds(maskWidth, maskHeight, edgeLo, edgeHi, profile) {
+    const lo = Number.isFinite(Number(edgeLo)) ? Number(edgeLo) : 0.30;
+    const hi = Number.isFinite(Number(edgeHi)) ? Number(edgeHi) : 0.70;
+    if (profile !== 'auto' || Math.max(Number(maskWidth) || 0, Number(maskHeight) || 0) < 448) {
+      return { edgeLo: lo, edgeHi: hi, profile: 'legacy-fixed' };
+    }
+    const crispFromLo = (lo - 0.15) / 0.30;
+    const crispFromHi = (0.85 - hi) / 0.30;
+    const crisp = clamp01((crispFromLo + crispFromHi) * 0.5);
+    return {
+      edgeLo: 0.05 + 0.25 * crisp,
+      edgeHi: 0.95 - 0.25 * crisp,
+      profile: 'high-resolution-alpha-preserving',
+      crisp
+    };
+  }
+
   function scratchCanvas(w, h) {
     if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w || 1, h || 1);
     const c = document.createElement('canvas');
@@ -204,6 +227,7 @@ void main() {
       this.colourSnap = 0.8;    // 0 = off; see FRAG_UP
       this.edgeLo = 0.30;
       this.edgeHi = 0.70;
+      this.edgeProfile = 'auto';
       this.despill = 0.6;
       this.smoothBase = 0.45;   // weight on the new frame when nothing moves
       this.smoothAdapt = 2.0;   // motion passes through faster
@@ -384,8 +408,9 @@ void main() {
       gl.uniform1i(this._uU.uRadius, this.radius >= 2 ? 2 : 1);
       gl.uniform1f(this._uU.uSigmaR, this.sigmaR);
       gl.uniform1f(this._uU.uSnap, this.colourSnap);
-      gl.uniform1f(this._uU.uLo, this.edgeLo);
-      gl.uniform1f(this._uU.uHi, this.edgeHi);
+      const edgeThresholds = resolveEdgeThresholds(mw, mh, this.edgeLo, this.edgeHi, this.edgeProfile);
+      gl.uniform1f(this._uU.uLo, edgeThresholds.edgeLo);
+      gl.uniform1f(this._uU.uHi, edgeThresholds.edgeHi);
       gl.uniform1f(this._uU.uDespill, this.despill);
       gl.uniform1f(this._uU.uPlateStrength, this.plateStrength);
       gl.uniform1f(this._uU.uHavePlate, this._havePlate ? 1.0 : 0.0);
@@ -398,5 +423,6 @@ void main() {
   }
 
   globalThis.VS = globalThis.VS || {};
+  GLMatte.resolveEdgeThresholds = resolveEdgeThresholds;
   globalThis.VS.GLMatte = GLMatte;
 })();

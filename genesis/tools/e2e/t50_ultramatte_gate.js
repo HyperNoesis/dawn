@@ -228,12 +228,14 @@ function withTimeout(promise, ms, label) {
       // labelled-reference scores and the existing edge suite agree.
       const softEdgeMatte = new V.GLMatte();
       if (!softEdgeMatte.ok) throw new Error('Soft-edge A/B GLMatte failed to initialize: ' + (softEdgeMatte.error || 'unknown'));
+      softEdgeMatte.edgeProfile = 'fixed';
       softEdgeMatte.edgeLo = 0.15;
       softEdgeMatte.edgeHi = 0.85;
       // A second, deliberately conservative transition tests whether the
       // current 0.30/0.70 tightening is erasing useful hair/antialias alpha.
       const featherEdgeMatte = new V.GLMatte();
       if (!featherEdgeMatte.ok) throw new Error('Feather-edge A/B GLMatte failed to initialize: ' + (featherEdgeMatte.error || 'unknown'));
+      featherEdgeMatte.edgeProfile = 'fixed';
       featherEdgeMatte.edgeLo = 0.05;
       featherEdgeMatte.edgeHi = 0.95;
       const tInit = performance.now();
@@ -480,6 +482,7 @@ function withTimeout(promise, ms, label) {
         renderMatte: {
           active: !!edgeMatte.ok,
           error: edgeMatte.error || null,
+          effectiveEdgeThresholds: V.GLMatte.resolveEdgeThresholds(512, 384, edgeMatte.edgeLo, edgeMatte.edgeHi, edgeMatte.edgeProfile),
           edgeThresholdExperiment: {
             active: !!softEdgeMatte.ok,
             parameters: { edgeLo: 0.15, edgeHi: 0.85 },
