@@ -66,5 +66,5 @@ On commit `a46fd4c545418fe6216edba4c565b98d2d50e692`, segmentation workflow run 
 
 The artifact records 3.47 sample FPS in the generic camera gate (28 frames / 8.07 sec) and the UltraMatte 10-frame synthetic gate records P50 464 ms, P75 602 ms, P95/max 2,790 ms (estimated 1.66 mask updates/sec at P75). The cartoon presenter/ground-truth fixture is synthetic only. It is a code-path integration check, not proof of hair/finger alpha quality or a mobile performance score.
 
-The camera gate's artifact has inconsistent status telemetry: one stats string says 0 FPS / 1,495.1 ms, while its application stats string says 4 FPS / 375 ms. Resolve the reporting mismatch before relying on these displayed diagnostics for target-device acceptance. Full Studio surface journeys remain NOT RUN.
+The camera gate captures the first stats string immediately after camera Start (0 FPS / 1,495 ms), then switches scene, waits 3 seconds and records later app stats (about 4 FPS / 375 ms). These readings are from different warm-up stages, not simultaneous contradictory telemetry. The separately measured 8.07-second preview sample averaged 3.47 FPS, well below the 24 FPS objective; the test is synthetic Chromium, not a target-device performance result. Full Studio surface journeys remain NOT RUN.
 
