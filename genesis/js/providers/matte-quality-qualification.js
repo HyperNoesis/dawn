@@ -17,6 +17,22 @@
     'partial-occlusion','multiple-people','scene-cuts'
   ];
   const STRATUM_METRIC_FIELDS = ['alphaMAD','edgeBandMAD','boundaryF1','topologyErrorRate','temporalDeltaMAE'];
+  // Qualification policy v1. These are explicit acceptance ceilings/floors,
+  // not claimed measurements. Device latency remains a separate per-device gate.
+  const QUALITY_LIMITS = Object.freeze({
+    alphaMADMax: 0.05,
+    edgeBandMADMax: 0.08,
+    boundaryF1Min: 0.90,
+    topologyErrorRateMax: 0.05,
+    temporalDeltaMAEMax: 0.05
+  });
+  function metricsPass(values) {
+    return values.alphaMAD <= QUALITY_LIMITS.alphaMADMax &&
+      values.edgeBandMAD <= QUALITY_LIMITS.edgeBandMADMax &&
+      values.boundaryF1 >= QUALITY_LIMITS.boundaryF1Min &&
+      values.topologyErrorRate <= QUALITY_LIMITS.topologyErrorRateMax &&
+      values.temporalDeltaMAE <= QUALITY_LIMITS.temporalDeltaMAEMax;
+  }
   const SHA256 = /^[a-f0-9]{64}$/i;
   const ROUTES = {
     'ppmatting-v2': { status:'unqualified', identity:null, evidence:null, reason:'No independently annotated, rights-cleared held-out human-video qualification report is registered for this exact model/runtime pipeline.' },
@@ -50,12 +66,14 @@
           row.clips>e.clips || row.independentAnnotators>e.independentAnnotators) return false;
       const values = row.metrics;
       if (!values || !STRATUM_METRIC_FIELDS.every((key)=>Number.isFinite(values[key]) && values[key]>=0 && values[key]<=1)) return false;
+      if (!metricsPass(values)) return false;
       byId.set(row.id,row);
     }
     if (!REQUIRED_STRATA.every((id)=>byId.has(id))) return false;
     const m=e.metrics;
     if (!m || !METRIC_FIELDS.every((key)=>Number.isFinite(m[key]) && m[key]>=0)) return false;
     if (['alphaMAD','edgeBandMAD','boundaryF1','topologyErrorRate','temporalDeltaMAE'].some((key)=>m[key]>1)) return false;
+    if (!metricsPass(m)) return false;
     return true;
   }
   function registered(engine, manifest) {
@@ -83,7 +101,7 @@
         : 'Automatic mode is retaining the established local baseline. Experimental PP-MattingV2, Hybrid and UltraMatte routes remain available for explicit testing, but are not automatically promoted until their exact pipelines pass independent held-out human-video qualification.'
     };
   }
-  const api={IDENTITY_FIELDS:IDENTITY_FIELDS.slice(),METRIC_FIELDS:METRIC_FIELDS.slice(),REQUIRED_STRATA:REQUIRED_STRATA.slice(),STRATUM_METRIC_FIELDS:STRATUM_METRIC_FIELDS.slice(),ROUTES,validIdentity,validEvidence,registered,evaluate,
+  const api={IDENTITY_FIELDS:IDENTITY_FIELDS.slice(),METRIC_FIELDS:METRIC_FIELDS.slice(),REQUIRED_STRATA:REQUIRED_STRATA.slice(),STRATUM_METRIC_FIELDS:STRATUM_METRIC_FIELDS.slice(),QUALITY_LIMITS,ROUTES,validIdentity,validEvidence,registered,evaluate,
     canAutoPromote(engine,identity,manifest){return evaluate(engine,identity,manifest).eligible;},automaticStatus};
   root.VS=root.VS||{}; root.VS.MatteQualityQualification=api;
   if(typeof module!=='undefined'&&module.exports) module.exports=api;
