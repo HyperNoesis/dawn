@@ -53,9 +53,39 @@ const EXPECTED = 17;
   await page.waitForSelector('#startBtn', { timeout:30000 });
   await page.waitForSelector('.tool-tab[data-target]', { timeout:15000 });
   const declared = await page.locator('.tool-tab[data-target]').evaluateAll((items) =>
-    items.map((el) => ({ target:el.dataset.target, label:(el.querySelector('.tab-label') || el).textContent.trim() }))
+    items.map((el) => {
+      const panel = document.getElementById(el.dataset.target);
+      return {
+        target:el.dataset.target,
+        label:(el.querySelector('.tab-label') || el).textContent.trim(),
+        id:el.id,
+        role:el.getAttribute('role'),
+        controls:el.getAttribute('aria-controls'),
+        panelRole:panel && panel.getAttribute('role'),
+        panelLabelledBy:panel && panel.getAttribute('aria-labelledby')
+      };
+    })
   );
   if (declared.length !== EXPECTED) failures.push('Expected ' + EXPECTED + ' Studio tabs, found ' + declared.length);
+  for (const item of declared) {
+    if (item.role !== 'tab' || !item.id || item.controls !== item.target ||
+        item.panelRole !== 'tabpanel' || item.panelLabelledBy !== item.id) {
+      failures.push('Broken accessible tab relationship: ' + JSON.stringify(item));
+    }
+  }
+  // Verify keyboard-only movement in the vertical tablist, including Home/End.
+  if (declared.length > 1) {
+    const first = page.locator('.tool-tab[data-target="' + declared[0].target + '"]');
+    await first.focus();
+    await page.keyboard.press('ArrowDown');
+    await page.waitForFunction((id) => document.querySelector('.tool-tab.active')?.dataset.target === id, declared[1].target, { timeout:3000 });
+    await page.keyboard.press('Home');
+    await page.waitForFunction((id) => document.querySelector('.tool-tab.active')?.dataset.target === id, declared[0].target, { timeout:3000 });
+    await page.keyboard.press('End');
+    await page.waitForFunction((id) => document.querySelector('.tool-tab.active')?.dataset.target === id, declared[declared.length - 1].target, { timeout:3000 });
+    await page.keyboard.press('Home');
+    await page.waitForFunction((id) => document.querySelector('.tool-tab.active')?.dataset.target === id, declared[0].target, { timeout:3000 });
+  }
   for (let i = 0; i < declared.length; i++) {
     const item = declared[i];
     try {
@@ -64,13 +94,15 @@ const EXPECTED = 17;
       await page.waitForFunction((id) => {
         const panel = document.getElementById(id);
         const tab = document.querySelector('.tool-tab[data-target="' + id + '"]');
-        return !!panel && panel.classList.contains('active') && !!tab && tab.classList.contains('active');
+        return !!panel && panel.classList.contains('active') && panel.getAttribute('role') === 'tabpanel' &&
+          !!tab && tab.classList.contains('active') && tab.getAttribute('aria-selected') === 'true';
       }, item.target, { timeout:5000 });
       const geometry = await page.evaluate((id) => {
         const panel = document.getElementById(id), r = panel.getBoundingClientRect();
-        return { width:Math.round(r.width), height:Math.round(r.height), display:getComputedStyle(panel).display };
+        return { width:Math.round(r.width), height:Math.round(r.height), display:getComputedStyle(panel).display,
+          selectedCount:document.querySelectorAll('.tool-tab[aria-selected="true"]').length };
       }, item.target);
-      const passed = geometry.width > 0 && geometry.height > 0 && geometry.display !== 'none';
+      const passed = geometry.width > 0 && geometry.height > 0 && geometry.display !== 'none' && geometry.selectedCount === 1;
       if (!passed) failures.push('Panel is not visibly laid out: ' + item.target + ' ' + JSON.stringify(geometry));
       const slug = item.target.replace(/[^a-z0-9_-]+/gi, '-');
       await page.screenshot({ path:path.join(OUT, 'tab-' + String(i+1).padStart(2,'0') + '-' + slug + '.png') });
