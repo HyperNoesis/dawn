@@ -29,5 +29,9 @@ const noCounts=JSON.parse(JSON.stringify(approved));
 delete noCounts['genesis-hybrid'].evidence.strata[0].clips;
 assert.strictEqual(Q.registered('genesis-hybrid',noCounts).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
   'each stratum needs labelled participant, source-video, clip and annotator counts');
+const impossibleCount=JSON.parse(JSON.stringify(approved));
+impossibleCount['genesis-hybrid'].evidence.strata[0].participants=Infinity;
+assert.strictEqual(Q.registered('genesis-hybrid',impossibleCount).code,'INCOMPLETE_QUALIFICATION_EVIDENCE',
+  'sample counts must be finite positive integers, never Infinity or fractional estimates');
 const automatic=Q.automaticStatus();assert.deepStrictEqual(automatic.eligible,[]);assert.strictEqual(automatic.blocked.length,3);
 console.log('matte-quality-qualification: all assertions passed');
