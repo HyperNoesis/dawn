@@ -40,6 +40,10 @@
     const byId = new Map();
     for (const row of e.strata) {
       if (!row || typeof row.id !== 'string' || !row.id.trim() || byId.has(row.id)) return false;
+      // A stratum name without its own labelled sample counts and scores
+      // is not evidence. Counts are unique participants/source clips, not frames.
+      if (!(row.participants>0) || !(row.sourceVideos>0) || !(row.clips>0) ||
+          !(row.independentAnnotators>0)) return false;
       const values = row.metrics;
       if (!values || !STRATUM_METRIC_FIELDS.every((key)=>Number.isFinite(values[key]) && values[key]>=0)) return false;
       if (values.boundaryF1>1 || values.topologyErrorRate>1) return false;
