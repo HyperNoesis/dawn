@@ -129,6 +129,18 @@ function createWorkerProvider(cfg) {
   };
 }
 
+function hasVideoSignature(buffer, mime) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
+  if (mime === 'video/webm') {
+    return buffer.length >= 4 && buffer[0] === 0x1a && buffer[1] === 0x45 &&
+      buffer[2] === 0xdf && buffer[3] === 0xa3;
+  }
+  if (mime === 'video/mp4' || mime === 'video/quicktime') {
+    return buffer.toString('ascii', 4, 8) === 'ftyp';
+  }
+  return false;
+}
+
 function createRelay(cfg) {
   cfg = cfg || {};
   const provider = cfg.provider || null;
@@ -257,6 +269,9 @@ function createRelay(cfg) {
         }
         const buffer = await readBody(req);
         if (!buffer.length) return send(res, 400, { error: 'empty clip' }, req);
+        if (!hasVideoSignature(buffer, type)) {
+          return send(res, 415, { error: 'video container signature does not match the declared media type' }, req);
+        }
         const id = 'j_' + crypto.randomBytes(16).toString('hex');
         const record = { owner: user.id, status: 'starting', createdAt: Date.now() };
         jobs.set(id, record);
