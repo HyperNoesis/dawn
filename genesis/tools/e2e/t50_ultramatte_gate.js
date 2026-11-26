@@ -246,6 +246,24 @@ function withTimeout(promise, ms, label) {
         throw new Error('EdgeTAM did not become ready: ' + JSON.stringify(provider.edgetam || {}));
       }
 
+      // Verify the exact live provider identity against the real loaded model
+      // bytes, pre/post-processing sources, and ONNX runtime assets. This is
+      // identity integrity, not a human-footage quality approval.
+      if (typeof provider.getQualificationIdentity !== 'function') {
+        throw new Error('UltraMatte provider did not expose its runtime qualification identity');
+      }
+      const qualificationIdentity = await provider.getQualificationIdentity();
+      const identityApi = V.MatteQualificationIdentity;
+      if (!identityApi || !identityApi.validHash(qualificationIdentity.modelSha256) ||
+          !identityApi.validHash(qualificationIdentity.preprocessHash) ||
+          !identityApi.validHash(qualificationIdentity.postprocessHash) ||
+          !/^.+;backend=.+;sha256=[a-f0-9]{64}$/i.test(qualificationIdentity.runtimeBackend || '')) {
+        throw new Error('UltraMatte returned an incomplete canonical pipeline identity: ' + JSON.stringify(qualificationIdentity));
+      }
+      if (V.ortSource !== 'local') {
+        throw new Error('UltraMatte identity test requires the bundled local ONNX Runtime; observed ' + String(V.ortSource));
+      }
+
       const samples = [], hybridFrames = [];
       let preview = null;
       const waitForNextVideoFrame = () => new Promise((resolve, reject) => {
@@ -437,6 +455,13 @@ function withTimeout(promise, ms, label) {
         label: provider.label,
         ortSource: V.ortSource || 'unknown',
         ortVersion: ort.env && ort.env.versions ? ort.env.versions.web : 'unknown',
+        qualificationIdentity: {
+          modelVersion: qualificationIdentity.modelVersion,
+          modelSha256: qualificationIdentity.modelSha256,
+          preprocessHash: qualificationIdentity.preprocessHash,
+          postprocessHash: qualificationIdentity.postprocessHash,
+          runtimeBackend: qualificationIdentity.runtimeBackend
+        },
         initMs: Math.round(initMs),
         performance: performanceMetrics,
         syntheticGroundTruth: {
