@@ -24,6 +24,7 @@
     'genesis-hybrid-tam': { status:'unqualified', identity:null, evidence:null, reason:'UltraMatte (PP-MattingV2 + EdgeTAM + tile refinement) has no independently annotated, rights-cleared held-out human-video qualification report for this exact pipeline.' }
   };
   function blocked(code, reason) { return { eligible:false, code, reason }; }
+  function positiveCount(value) { return Number.isSafeInteger(value) && value > 0; }
   function validIdentity(value) {
     if (!value || typeof value !== 'object') return false;
     for (const field of IDENTITY_FIELDS) if (typeof value[field] !== 'string' || !value[field].trim()) return false;
@@ -35,15 +36,14 @@
     const flags=['rightsClearedForCommercialUse','heldOut','participantAndSourceClipSplits','independentHumanAnnotation','pairedBaselineComparison','perStratumResults','criticalStrataNoRegression','measurableImprovement'];
     if (!flags.every((key)=>e[key]===true)) return false;
     if (!SHA256.test(e.datasetManifestSha256||'') || !SHA256.test(e.benchmarkReportSha256||'')) return false;
-    if (!(e.participants>0) || !(e.sourceVideos>0) || !(e.clips>0) || !(e.independentAnnotators>0)) return false;
+    if (![e.participants,e.sourceVideos,e.clips,e.independentAnnotators].every(positiveCount)) return false;
     if (!Array.isArray(e.strata) || !e.strata.length) return false;
     const byId = new Map();
     for (const row of e.strata) {
       if (!row || typeof row.id !== 'string' || !row.id.trim() || byId.has(row.id)) return false;
       // A stratum name without its own labelled sample counts and scores
       // is not evidence. Counts are unique participants/source clips, not frames.
-      if (!(row.participants>0) || !(row.sourceVideos>0) || !(row.clips>0) ||
-          !(row.independentAnnotators>0)) return false;
+      if (![row.participants,row.sourceVideos,row.clips,row.independentAnnotators].every(positiveCount)) return false;
       const values = row.metrics;
       if (!values || !STRATUM_METRIC_FIELDS.every((key)=>Number.isFinite(values[key]) && values[key]>=0)) return false;
       if (values.boundaryF1>1 || values.topologyErrorRate>1) return false;
