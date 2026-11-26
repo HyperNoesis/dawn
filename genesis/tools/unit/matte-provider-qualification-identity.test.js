@@ -67,7 +67,8 @@ globalThis.fetch = async (path) => {
       create: async () => ({ release() {} })
     }
   };
-  globalThis.VS.loadOrt = async () => { globalThis.VS.ortSource = 'local'; };
+  let runtimeSource = 'local';
+  globalThis.VS.loadOrt = async () => { globalThis.VS.ortSource = runtimeSource; };
   globalThis.VS.ModelStore = {
     load: async (id) => ({
       bytes: {
@@ -106,8 +107,14 @@ globalThis.fetch = async (path) => {
   assert.notStrictEqual(ultraIdentity.modelSha256, hybridIdentity.modelSha256);
   assert.notStrictEqual(ultraIdentity.preprocessHash, hybridIdentity.preprocessHash);
   assert.notStrictEqual(ultraIdentity.postprocessHash, hybridIdentity.postprocessHash);
-  globalThis.VS.ortSource = 'cdn';
-  await assert.rejects(ultra.getQualificationIdentity(), /non-bundled or unknown ONNX Runtime source/,
+  // A separate instance must capture CDN fallback during initialization;
+  // changing the global after an instance is ready must not rewrite its history.
+  runtimeSource = 'cdn';
+  const ultraCdn = EdgeTAMGate.create(base);
+  await ultraCdn.initialize();
+  assert.strictEqual(ultraCdn.edgetam.status, 'ready');
+  assert.strictEqual(ultraCdn.edgetam.runtimeSource, 'cdn');
+  await assert.rejects(ultraCdn.getQualificationIdentity(), /non-bundled or unknown ONNX Runtime source/,
     'CDN fallback must not be fingerprinted as the bundled runtime');
 
   console.log('matte-provider-qualification-identity: PP-Matting, Hybrid and EdgeTAM assertions passed');
