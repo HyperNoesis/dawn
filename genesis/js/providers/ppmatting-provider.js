@@ -165,6 +165,7 @@
           'js/providers/mask-refine.js', 'js/providers/segmentation-flight.js',
           'js/providers/segmentation-generation.js', 'js/providers/gl-matte.js',
           'js/providers/composition-engine.js', 'js/providers/render-provider.js',
+          'js/providers/gl-matte.js', 'js/render-core.js', 'js/render-worker.js',
           'js/providers/modnet-provider.js'
         ],
         postprocessConfig: {
@@ -173,7 +174,8 @@
           guardPreference: guardOn(),
           mainSubjectFilter: mainOn(),
           roiEnabled: !!this.useRoi,
-          outputLongEdge: this.longEdge
+          outputLongEdge: this.longEdge,
+          studioMatte: V.currentMatteConfig || null
         },
         runtime: {
           name: 'onnxruntime-web-ppmatting',

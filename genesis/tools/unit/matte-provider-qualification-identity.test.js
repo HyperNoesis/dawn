@@ -5,6 +5,11 @@ if (!globalThis.crypto || !globalThis.crypto.subtle) {
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto });
 }
 globalThis.VS = globalThis.VS || {};
+globalThis.VS.currentMatteConfig = Object.freeze({
+  profile: 'studio-gl-matte-v1', edgeProfile: 'auto', mode: 'gl',
+  radius: 1, edgeLo: 0.30, edgeHi: 0.70, despill: 0.6, colourSnap: 0.8,
+  smoothBase: 0.45, smoothAdapt: 2.0, plateAssist: false
+});
 globalThis.fetch = async (path) => {
   const bytes = new TextEncoder().encode('test-resource:' + String(path));
   return {

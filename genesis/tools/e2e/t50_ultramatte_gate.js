@@ -238,6 +238,11 @@ function withTimeout(promise, ms, label) {
       featherEdgeMatte.edgeProfile = 'fixed';
       featherEdgeMatte.edgeLo = 0.05;
       featherEdgeMatte.edgeHi = 0.95;
+      // Diagnostic ablation: remove colour-line alpha snap while keeping the
+      // same high-resolution threshold profile and temporal filtering.
+      const noSnapMatte = new V.GLMatte();
+      if (!noSnapMatte.ok) throw new Error('No-snap A/B GLMatte failed to initialize: ' + (noSnapMatte.error || 'unknown'));
+      noSnapMatte.colourSnap = 0;
       const tInit = performance.now();
       await Promise.race([
         provider.initialize('fast', { threads: 1 }),
@@ -338,6 +343,16 @@ function withTimeout(promise, ms, label) {
         featherReadbackCtx.drawImage(featherForeground, 0, 0);
         const featherPixels = featherReadbackCtx.getImageData(0, 0, featherReadback.width, featherReadback.height).data;
         const featherQuality = scoreAlpha(featherPixels, 3, gtFullRgba, 0, featherReadback.width, featherReadback.height);
+        const noSnapForeground = noSnapMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
+        if (!noSnapForeground) throw new Error('No-snap A/B GLMatte returned no foreground on frame ' + frame);
+        const noSnapReadback = document.createElement('canvas');
+        noSnapReadback.width = noSnapForeground.width;
+        noSnapReadback.height = noSnapForeground.height;
+        const noSnapReadbackCtx = noSnapReadback.getContext('2d', { willReadFrequently: true });
+        if (!noSnapReadbackCtx) throw new Error('Could not create no-snap A/B readback canvas');
+        noSnapReadbackCtx.drawImage(noSnapForeground, 0, 0);
+        const noSnapPixels = noSnapReadbackCtx.getImageData(0, 0, noSnapReadback.width, noSnapReadback.height).data;
+        const noSnapQuality = scoreAlpha(noSnapPixels, 3, gtFullRgba, 0, noSnapReadback.width, noSnapReadback.height);
         let renderedForegroundCount = 0, renderedSoftCount = 0;
         for (let i = 0; i < renderedPixels.length; i += 4) {
           const alpha = renderedPixels[i + 3];
@@ -425,6 +440,10 @@ function withTimeout(promise, ms, label) {
             featherEdgeExperiment: {
               parameters: { edgeLo: 0.05, edgeHi: 0.95 },
               studioMatte: featherQuality
+            },
+            colourSnapExperiment: {
+              parameters: { colourSnap: 0, edgeProfile: 'auto', effectiveThresholds: V.GLMatte.resolveEdgeThresholds(mask.width, mask.height, edgeMatte.edgeLo, edgeMatte.edgeHi, edgeMatte.edgeProfile) },
+              studioMatte: noSnapQuality
             }
           }
         });
@@ -486,7 +505,8 @@ function withTimeout(promise, ms, label) {
           edgeThresholdExperiment: {
             active: !!softEdgeMatte.ok,
             parameters: { edgeLo: 0.15, edgeHi: 0.85 },
-            featherExperiment: { active: !!featherEdgeMatte.ok, parameters: { edgeLo: 0.05, edgeHi: 0.95 } }
+            featherExperiment: { active: !!featherEdgeMatte.ok, parameters: { edgeLo: 0.05, edgeHi: 0.95 } },
+            colourSnapExperiment: { active: !!noSnapMatte.ok, parameters: { colourSnap: 0, edgeProfile: 'auto' } }
           }
         },
         edgeTam: {

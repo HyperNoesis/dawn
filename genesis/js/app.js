@@ -743,14 +743,18 @@
   function pushMatte() {
     if (!(renderWorker || localCore)) return;
     const c = matteState.crisp;
-    rendererSend({ type: 'setMatte', state: {
+    const state = {
       mode: matteState.mode,
       radius: matteState.radius,
       edgeLo: 0.15 + 0.30 * c,
       edgeHi: 0.85 - 0.30 * c,
       despill: matteState.despill,
       colourSnap: (function () { try { if (localStorage.getItem('vs_snap') === '0') return 0; } catch (e) {} const F = window.VS.Flags; return F ? F.get('colourSnap') : 0.8; })(),   // v0.89 colour-line edge correction; kill switches: localStorage vs_snap=0 (this device) or flags.json colourSnap (everyone, v0.90)
-    } });
+    };
+    // Keep the exact live compositor settings beside the model-provider state
+    // so a qualification fingerprint covers the final alpha treatment too.
+    V.currentMatteConfig = Object.freeze(Object.assign({ profile: 'studio-gl-matte-v1', edgeProfile: 'auto', smoothBase: 0.45, smoothAdapt: 2.0, plateAssist: false }, state));
+    rendererSend({ type: 'setMatte', state });
   }
   pushMatte();
   if (window.VS.Flags) window.VS.Flags.ready.then(pushMatte);   // v0.90: re-send once flags.json has been read
@@ -3463,13 +3467,18 @@
   // Tool rail tab switching
   // ============================================================
   const studioToolTabs = Array.from(els.toolRail.querySelectorAll('.tool-tab'));
+  // ARIA tabs use a roving tab stop: only the selected tab participates in the
+  // page Tab sequence; arrow keys move within the tablist.
+  const initialStudioTab = studioToolTabs.find(t => t.getAttribute('aria-selected') === 'true') || studioToolTabs[0];
+  studioToolTabs.forEach(t => { t.tabIndex = t === initialStudioTab ? 0 : -1; });
   studioToolTabs.forEach(tab => {
     tab.addEventListener('click', () => {
       const panel = document.getElementById(tab.dataset.target);
       if (!panel) return;
-      studioToolTabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+      studioToolTabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); t.tabIndex = -1; });
       tab.classList.add('active');
       tab.setAttribute('aria-selected', 'true');
+      tab.tabIndex = 0;
       document.querySelectorAll('.control-section').forEach(sec => sec.classList.remove('active'));
       panel.classList.add('active');
     });
