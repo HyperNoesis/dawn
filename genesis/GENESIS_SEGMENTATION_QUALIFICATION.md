@@ -25,7 +25,7 @@ An approval is scoped to all of the following fields. Any change invalidates the
 - Postprocessing/refinement hash.
 - Runtime backend identity.
 
-The provider must expose this identity at runtime. A route without that identity is ineligible even if a historical report exists.
+The provider must expose this identity at runtime. PP-MattingV2, Genesis Hybrid and the EdgeTAM-wrapped UltraMatte route now compute it from the actual loaded model files, registry version, hashed preprocessing/postprocessing resources and configuration, and actual ONNX runtime bundle/backend. The model-browser integration test asserts that these live hashes are complete. A route without a complete identity is ineligible even if a historical report exists; a complete identity alone is not a quality approval.
 
 ## Evidence required before approval
 
@@ -47,7 +47,7 @@ A public demo image, synthetic fixture, teacher-model agreement, isolated still 
 
 ## Registered model assets and licence review
 
-The asset hashes below are copied from the current `models/registry.json` at the inspected branch. They identify files, not an approved composite route. The runtime qualification registry deliberately has no composite `modelSha256` yet because the provider has not exposed a canonical pipeline identity that combines the exact assets, preprocess, postprocess and backend.
+The asset hashes below are copied from the current `models/registry.json` at the inspected branch. They identify files, not an approved composite route. The runtime qualification registry deliberately has no approved experimental-route record yet because independent, rights-cleared human-video evidence is still absent. Runtime identity is now computed live and includes the exact loaded model assets, registry version, preprocessing and postprocessing resources/configuration, and actual runtime backend/bundle. The identity is reported by the synthetic browser gate; it is not itself an approval.
 
 | Pipeline component | Asset | SHA-256 | Bytes | Declared licence |
 |---|---|---|---:|---|
@@ -109,3 +109,17 @@ A route cannot be approved merely because its evidence metadata is complete. The
 
 The executable constants are exported as `QUALITY_LIMITS` by `js/providers/matte-quality-qualification.js`. P95 latency is recorded but is not a universal image-quality threshold: performance qualification remains device/profile-specific and is applied only after quality qualification. These thresholds are an explicit v1 engineering acceptance policy, not measured results or a claim that any engine currently meets them. They must be validated against the agreed annotation protocol and baseline set before production sign-off.
 
+
+
+## Current-head integration evidence — 26 November 2026
+
+Executable-code commit: `8bfffcb3585bdad8c63eb5d5a13674c28423a7c8`. Segmentation workflow [45908860131](https://github.com/HyperNoesis/dawn/actions/runs/45908860131) completed successfully, including provider/unit tests, Studio shell smoke, camera/model/motion/matte-edge browser gates, export/API regression and the deployable site build. The run artifact is `genesis-segmentation-gate-report` (artifact ID `15159048796`).
+
+- Runtime identity was exercised against the actually loaded PP-MattingV2 and EdgeTAM model assets using bundled ONNX Runtime Web 1.25.1 / WASM. The route returned model SHA-256 `24c7dacf613b8db1ac01949194c107ad4896b2c74cbe6fb2d69fac9149f2f87b`, preprocessing SHA-256 `809667cb5562161b69c5ed3022a41f07b69277720fdaaa91c0238725cbc469a2`, postprocessing SHA-256 `ee95b568836114cf96d7dedbe11fdd3c3849cbf3fd3bd2fbdef81510d9cec64d`, plus separate PP-Matting and EdgeTAM runtime/backend hashes. CDN or unidentified runtime sources fail closed for automatic qualification.
+- The Studio shell smoke test passed 17/17 tabs. It checked panel reachability, ARIA tab/panel relationships, Arrow/Home/End keyboard navigation, exactly one selected tab, no horizontal overflow at 360×800, 768×1024 and 1440×900, and zero uncaught page errors, console errors, failed local requests or local HTTP errors. Screenshots and the JSON report are in the workflow artifact. This is a shell/navigation check, not the full workflow of every tool.
+- Synthetic UltraMatte model run: initialization 2,513 ms; 10 measured frames; segmentation P50 475 ms, P75 611 ms, P95/max 2,629 ms (about 1.64 mask updates/s at P75). The Hybrid refinement scheduler attempted 16 tiles, refined 9, deferred 20, cached 33 and rejected 7 across the sample, with zero reported errors. These numbers come from a synthetic generated presenter, not a target phone.
+- Across the same synthetic fixture frames, mean raw-alpha MAE was 0.00542 and mean final Studio alpha MAE was 0.00523, while mean transition-band error worsened from 0.18545 at raw alpha to 0.33888 after the Studio compositor. Two experimental edge settings reduced that synthetic transition-band error to 0.30356 and 0.27792, but remain diagnostic-only and were not promoted.
+- The generic synthetic camera gate sampled 36 frames over 8.01 seconds (4.49 FPS); its later in-app stats sample reported 5 FPS and 186 ms frame latency after warm-up. This is software-browser evidence and does not describe phone performance.
+- Android debug job [45908860172](https://github.com/HyperNoesis/dawn/actions/runs/45908860172) passed and uploaded a test-only debug APK (artifact ID `15159082802`). Signed release was skipped. No physical installation or device measurement was performed.
+
+**Interpretation:** the runtime-identity integration is fixed and exercised; Studio shell navigation/responsive overflow checks now have current-head evidence; the code builds and the synthetic integration path runs. The 611 ms P75 segmentation time is far from a 24 FPS objective, and the final compositor materially worsens transition-band error on the synthetic fixture. Do not promote the route or call the segmentation quality solved on this evidence.

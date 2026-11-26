@@ -17,7 +17,7 @@ The live Studio shell exposes 17 tool tabs. The presence of a tab/control is not
 | Camera | Permission denial, device switch, front/back, stop/restart and track end | NOT RUN — physical-device lifecycle not executed |
 | Framing | Aspect, zoom/pan, guides and restore | NOT RUN |
 | Realism | Light/shadow/depth/blur controls affect actual output | NOT RUN |
-| Mask | Engine selection, Automatic, inspector, correction and fallback truth | PARTIAL — qualification gate and provider-generation guard added; full user journey NOT RUN |
+| Mask | Engine selection, Automatic, inspector, correction and fallback truth | PARTIAL — runtime identity, qualification gate, model-backed UltraMatte smoke and provider-generation guard passed; inspector/correction and full user journey NOT RUN |
 | Graphics | Lower-thirds, banners, tickers, QR and overlays in preview/export | NOT RUN |
 | Prompter | Script, pace, controls and supported voice-follow behaviour | NOT RUN |
 | Captions | Permission/model limits, caption rendering and recording consistency | NOT RUN |
@@ -38,7 +38,7 @@ The live Studio shell exposes 17 tool tabs. The presence of a tab/control is not
 | Long recording with movement and audio/video sync | BLOCKED | Requires sustained capture session and output playback inspection |
 | Edit/export, cancel/retry and cleanup | NOT RUN | Export pipeline E2E not run in this execution |
 | Go Live and connection teardown | BLOCKED | Requires configured WHIP endpoint and credentials |
-| Responsive phone/tablet/desktop, keyboard and reduced motion | NOT RUN | Full responsive/accessibility sweep not run |
+| Responsive phone/tablet/desktop, keyboard and reduced motion | PARTIAL — current-head shell test passed at 360/768/1440 px with keyboard tab navigation and no horizontal overflow; screen-reader, reduced-motion and full touch/feature workflows NOT RUN |
 
 ## CI evidence at execution start
 
@@ -68,3 +68,16 @@ The artifact records 3.47 sample FPS in the generic camera gate (28 frames / 8.0
 
 The camera gate captures the first stats string immediately after camera Start (0 FPS / 1,495 ms), then switches scene, waits 3 seconds and records later app stats (about 4 FPS / 375 ms). These readings are from different warm-up stages, not simultaneous contradictory telemetry. The separately measured 8.07-second preview sample averaged 3.47 FPS, well below the 24 FPS objective; the test is synthetic Chromium, not a target-device performance result. Full Studio surface journeys remain NOT RUN.
 
+
+
+## Current-head Studio shell check — 26 November 2026
+
+The added Playwright gate `tools/e2e/t51_studio_shell_responsive.js` ran in segmentation workflow [45908860131](https://github.com/HyperNoesis/dawn/actions/runs/45908860131) on executable-code commit `8bfffcb3585bdad8c63eb5d5a13674c28423a7c8` and passed.
+
+- Discovered and activated all 17/17 panels; checked visible geometry and exactly one selected tab.
+- Verified tab/panel ARIA relationships and keyboard ArrowUp/ArrowDown/ArrowLeft/ArrowRight, Home and End navigation.
+- Verified no document/body horizontal overflow at 360×800, 768×1024 and 1440×900.
+- Recorded no uncaught page errors, console errors, failed local-resource requests or local HTTP errors.
+- Uploaded one screenshot per panel and responsive screenshots for all three widths, plus `studio-shell-smoke.json`.
+
+Scope limit: this verifies the Studio shell, panel activation and basic responsive overflow. It does not run the workflows inside every panel, test screen readers/reduced motion, request camera/microphone permissions or prove touch ergonomics on a phone. Those rows remain PARTIAL or NOT RUN as marked above.

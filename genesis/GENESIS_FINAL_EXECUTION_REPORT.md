@@ -53,7 +53,7 @@ Key source areas inspected include `studio.html`, `js/app.js`, `js/providers/mat
 
 - Added `js/providers/matte-quality-qualification.js`, a fail-closed registry for PP-MattingV2, Genesis Hybrid and Genesis UltraMatte.
 - No experimental route is currently marked approved. Automatic mode retains the established local baseline; explicit BETA/test selection remains available.
-- Eligibility requires exact model/version, model hash, preprocessing hash, postprocessing hash and runtime backend identity. A provider must expose a runtime identity that matches its registered qualification. The current providers do not yet expose a complete canonical identity, so they cannot pass the gate even if someone were to add an incomplete entry.
+- Eligibility requires exact model/version, model hash, preprocessing hash, postprocessing hash and runtime backend identity. PP-MattingV2, Genesis Hybrid and the EdgeTAM-wrapped UltraMatte route now expose canonical runtime identities based on actual loaded weights, source/configuration hashes and the actual ONNX runtime bundle/backend. The model-backed browser gate checks these fields. No experimental route is approved because the independent human-video evidence gate remains unmet.
 - Evidence validation requires rights-cleared held-out participant/source-video splits, independent human alpha annotation, paired baseline comparison, no critical-stratum regressions, measurable improvement, benchmark/data manifest hashes, overall sample counts, and all 23 named difficult-scene/hair strata. Each stratum requires its own participant, source-video, clip and annotator counts plus alpha, edge-band, boundary, topology and temporal metrics.
 - Automatic candidate selection and the adaptive governor both consult the qualification gate. A timing win cannot independently qualify a route; governor cross-engine switches to unqualified experimental routes are rejected. The active explicitly selected BETA route may still adjust its resolution or fall back to the local baseline.
 - UI wording in the engine picker and repository documentation was corrected so Automatic no longer promises timing-only UltraMatte/Hybrid promotion.
@@ -90,12 +90,12 @@ Frame metadata is attached to the app's owned snapshot canvases. This does not m
 | P1 | Adaptive governor could cross-switch between experimental routes without a route-quality check | FIXED with registered-qualification and runtime identity checks |
 | P1 | No complete rights-cleared, independent human-labelled video benchmark exists in the checked repository evidence | BLOCKED — data/consent/annotation required |
 | P1 | No filled physical-device matrix for target Android/iOS/desktop profiles | BLOCKED — actual device sessions required |
-| P1 | Runtime providers do not yet expose canonical qualification identity for all model/pre/postprocess/backend components | BLOCKED — no experimental route can be automatically approved yet |
+| P1 | Runtime providers did not expose canonical qualification identity for all model/pre/postprocess/backend components | FIXED — identity helper and all three provider routes integrated; unit and model-backed browser assertions PASS on 8bfffcb |
 | P1 | RVM GPL-3.0 code/model assets remain in the publicly served browser repository | LEGAL REVIEW / packaging decision required before a closed-source paid distribution |
 | P2 | Synthetic camera gate's minimum FPS threshold is too weak to demonstrate smooth creator experience | EVIDENCE GAP — test passes while measured synthetic sample rate is only 3.47 FPS |
 | P2 | Camera startup and post-settle measurements differ substantially | DOCUMENTED — the gate captures the first stats string immediately after Start, then captures app stats after a 3-second scene settle and the sample window; these are different times, not contradictory simultaneous readings |
 | P2 | Final Studio render matte has higher transition-band error than raw alpha in the synthetic fixture | OPEN RESEARCH/FIX — inspect renderer edge/decontamination path with real labels before changing defaults |
-| P2 | Full 17-tab Studio journey, keyboard, screen-reader and responsive audit not executed | NOT RUN / BLOCKED by lack of full browser/device session |
+| P2 | Full 17-tab Studio feature journeys, screen-reader, reduced-motion and physical-touch audit not executed | PARTIAL — 17/17 shell panels, ARIA/keyboard navigation and 360/768/1440 px overflow smoke PASS; internal workflows and assistive-tech/device checks NOT RUN |
 | P2 | Legacy shared CSS / inline-style migration lacks selector map and screenshot diffs | NOT RUN — no blind CSS deletion performed |
 | P2 | Full current repository secret/dependency/security scan not re-run in this execution | NOT RUN — do not infer a clean security audit from prior documentation |
 
@@ -119,7 +119,7 @@ GitHub Actions run [45847956492](https://github.com/HyperNoesis/dawn/actions/run
 | Deployable PWA site build | PASS |
 | Gate artifact upload | PASS |
 
-The same complete test run predates the final extraction of the provider-generation predicate into a shared helper and its dedicated unit test. That helper/test change is present on the latest branch and a fresh full CI run is queued/in progress; it must complete successfully before treating the latest head as fully validated.
+That earlier run was superseded by current-head segmentation workflow [45908860131](https://github.com/HyperNoesis/dawn/actions/runs/45908860131) on commit `8bfffcb3585bdad8c63eb5d5a13674c28423a7c8`; all its required steps, including the provider/pure-logic unit suites, Studio shell test, model-backed browser gates, export/API suite and site build, completed successfully.
 
 ### Android
 
@@ -169,7 +169,7 @@ The repository already has a multicolour Genesis design-token system (purple bra
 - Registry/licence documentation identifies PP-MattingV2 and EdgeTAM as Apache-2.0, but training data provenance/terms still require legal review before commercial claims.
 - RVM's GPL-3.0 code/model files remain in the browser distribution. Excluding RVM from Automatic does not remove those files from a paid/closed-source distribution; resolve the licence/distribution plan first.
 - BiRefNet training-data rights remain unresolved. MatAnyone 2 and SAM2Matting are non-commercial and must not be placed in a paid route.
-- The PWA site build passed on run 45847956492. Current-head Android packaging remains to be repeated; no signed production release or deployment occurred.
+- The PWA site build passed on current-head run 45908860131. Android debug packaging passed on current-head run 45908860172; signed release was skipped. No physical installation, signed release or deployment occurred.
 
 ## 8. Physical-device and real-footage acceptance
 
@@ -181,9 +181,9 @@ The real-video dataset must be rights-cleared and commercially permitted for the
 
 ## 9. Release verdict
 
-**Status: NOT PRODUCTION-READY.** The repository has a successfully tested PWA build and a full green synthetic/integration CI run on the earlier code head, and the continuation implements important policy/frame-lifecycle safeguards. The latest helper changes require the queued current-head CI to finish.
+**Status: NOT PRODUCTION-READY.** The executable-code head `8bfffcb3585bdad8c63eb5d5a13674c28423a7c8` has a green full segmentation CI run, green Android debug packaging, a passing Studio shell smoke test and a passing model-backed synthetic integration gate. The independent real-human video evidence, physical-device matrix, end-to-end Studio feature journeys, legal review and complete security review are still outstanding.
 
-The experimental segmentation routes remain BETA and are not automatically promoted. Their measured synthetic CI speed is far below a 24 FPS live intent, and their quality remains unqualified for natural human footage. The Studio's full 17-tab workflows, physical target-device matrix, legal review, security scan and current-head Android packaging remain open.
+The experimental segmentation routes remain BETA and are not automatically promoted. The current synthetic UltraMatte run measured P75 611 ms per segment (~1.64 mask updates/s) and P95/max 2,629 ms. Mean synthetic transition-band error increased from 0.18545 on raw alpha to 0.33888 after the final Studio compositor; diagnostic edge settings improve that synthetic metric but have not been promoted. The Studio shell smoke passes, but full tool workflows, screen-reader/reduced-motion/touch checks, physical target-device matrix, legal review and comprehensive security scan remain open. Current-head Android debug packaging passed; no signed release or device install occurred.
 
 No merge, production deploy, payment/paid-service activation, signing or release action was performed. Keep PR #7 in draft until its latest CI is green and the external evidence/legal/device gates are completed.
 
@@ -194,3 +194,50 @@ No merge, production deploy, payment/paid-service activation, signing or release
 - Found and fixed an additional asynchronous race in `backgroundUpgrade`: a long model download/benchmark could otherwise overwrite a provider selected by the user or governor during the same camera session. The stale check now binds the candidate to the original provider instance and provider generation as well as the camera session token.
 - Latest source commit: `35e371ba18b2283c684526d174b214afcc656906`. CI for the preceding quality-gate/test commit was still running when this report was updated; the provider-race fix requires a fresh latest-head regression run.
 
+
+
+## Current-head verification and artifact review — 26 November 2026
+
+**Executable-code commit tested:** `8bfffcb3585bdad8c63eb5d5a13674c28423a7c8`.
+
+- Segmentation workflow [45908860131](https://github.com/HyperNoesis/dawn/actions/runs/45908860131): **SUCCESS**. Passed dependency/model restoration, protected service tests, JS syntax, provider and pure-logic units, Studio shell navigation/responsive smoke, camera/model/motion/matte-edge browser gates (including real loaded PP-MattingV2 + EdgeTAM identity), export/API regressions and deployable PWA site build.
+- Android workflow [45908860172](https://github.com/HyperNoesis/dawn/actions/runs/45908860172): **SUCCESS** for debug APK packaging. Test-only APK artifact uploaded; signed-release check **SKIPPED**. No APK was installed on a physical phone.
+- Segmentation report artifact `genesis-segmentation-gate-report`, artifact ID `15159048796`, inspected locally. Studio output includes 17 panel screenshots, 3 responsive screenshots, `studio-shell-smoke.json`, camera gate report and UltraMatte gate report.
+
+### New executable identity path
+
+Added `js/providers/matte-qualification-identity.js`. PP-MattingV2 now fingerprints actual loaded model bytes, registry version, processing code/configuration and ONNX runtime resources. Genesis Hybrid composes its own tile/refinement source and settings into that identity. The EdgeTAM wrapper includes its exact loaded encoder/decoder assets and tracker/refinement code. Runtime backend and actual ONNX JavaScript/WASM bundle are captured; CDN or unidentifiable runtime fallback cannot be used for automatic qualification. The app awaits the identity before the qualification gate. Unit coverage checks hash changes, provider composition, EdgeTAM runtime source and policy dependencies. The t50 browser test validates the fully initialized route and writes the observed identity into its artifact.
+
+### Artifact observations — synthetic fixtures only
+
+| Measurement | Current artifact observation |
+|---|---:|
+| Generic synthetic camera sample | 36 frames / 8.01 s = 4.49 FPS |
+| Generic later in-app stats | 5 FPS; 186 ms frame latency |
+| UltraMatte initialisation | 2,513 ms |
+| UltraMatte segment P50 / P75 | 475 ms / 611 ms |
+| UltraMatte segment P95 / max | 2,629 ms / 2,629 ms |
+| Estimated updates/s at P75 | 1.64 |
+| Mean raw synthetic alpha MAE | 0.00542 |
+| Mean final Studio synthetic alpha MAE | 0.00523 |
+| Mean raw transition-band error | 0.18545 |
+| Mean final Studio transition-band error | 0.33888 |
+| Mean diagnostic edge A/B transition-band error | 0.30356 / 0.27792 |
+
+Across ten synthetic frames the Hybrid scheduler reported 16 tile attempts, 9 refined, 20 deferred, 33 cached, 7 rejected and zero errors. These counts are scheduler diagnostics, not a quality score. Final Studio compositing reduced overall synthetic alpha MAE slightly but increased transition-band error substantially; the edge A/B settings reduce that synthetic boundary error but are not production defaults. The fixture is a generated/cartoon presenter, not a consented human video.
+
+### Studio shell artifact
+
+The new Playwright test verified all 17 tabs, visible panel activation, ARIA relationships, keyboard Arrow/Home/End navigation and no horizontal overflow at 360×800, 768×1024 and 1440×900. It recorded zero page errors, console errors, failed local requests or local HTTP errors. Its screenshots and report are in the CI artifact. This does not validate the complete feature journeys within every panel, screen readers, reduced motion or real phone touch behaviour.
+
+### Remaining release blockers
+
+1. A rights-cleared, consented, independently alpha-annotated held-out human-video evaluation with results for all 23 required strata and paired baseline comparisons is still absent.
+2. The synthetic UltraMatte speed is far below the 24 FPS live objective, and final-compositor transition-band error needs further investigation with human-labelled edges.
+3. No physical-device performance/stability reports exist for the Redmi 14C, other Android tiers, iOS Safari, Windows GPU or Mac.
+4. Full end-to-end Studio workflows, camera lifecycle failure cases, long recording and media playback, screen-reader/reduced-motion and touch usability remain unverified.
+5. RVM GPL-3.0 distribution, model/training-data terms and BiRefNet data rights require legal review; MatAnyone 2/SAM2Matting remain excluded from paid paths.
+6. No comprehensive secret scan, dependency vulnerability review or complete repository security assessment was executed. Protected signalling/render tests and a limited GitHub code search are not a substitute.
+7. PR #7 remains a draft, open and unmerged. No deployment, paid service activation, signing or production release was performed.
+
+**Release decision remains unchanged: NOT PRODUCTION-READY.** The runtime identity integration is fixed and tested; the evidence-based quality decision is still BLOCKED.
