@@ -258,7 +258,7 @@
               ? 'The explicitly selected ' + selectedEngine + ' route did not meet this device’s measured live budget. Genesis selected ' + c.key + ' at ' + usedEdge + ' px as the measured fallback.'
               : null;
             if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, fallbackReason);
-            resetSegCache();
+            resetSegCache("engine-switch");
             rendererSend({ type: 'setMatte', state: {} });
             updateStudioChrome();
             updateCostInfo();
@@ -771,6 +771,7 @@
   let segStride = 1;               // mask refresh rate: 1 = every frame; 2 = every other frame (FAST-only fallback)
   let strideTick = 0;
   let prevRender = null; // v0.46: promise of the render currently in flight
+  const frameGate = window.VS.FrameEpoch ? window.VS.FrameEpoch.create() : null;   // rejects late/foreign async mattes (frame identity)
   let asyncSegBusy = false, asyncSegPromise = null, asyncSegLastAt = 0, asyncSegDone = 0, asyncSegMinGap = 150;
   let cachedMaskBitmap = null;     // last full-size mask, reused while async inference is in flight
   const maskMotion = window.VS.MaskMotion ? new window.VS.MaskMotion.MaskMotion() : null;
@@ -1378,12 +1379,19 @@
     }
   });
 
-  function resetSegCache() {
+  function resetSegCache(reason) {
+    if (frameGate) frameGate.bump(reason || 'cache-reset');   // any inference still in flight belongs to a previous state
     if (cachedMaskBitmap) { cachedMaskBitmap.close(); cachedMaskBitmap = null; }
     if (maskMotion) maskMotion.reset();
     strideTick = 0;
     segMsEma = 0;
   }
+
+  // Tab hidden/shown: frames captured before a background gap are not the frames shown after it. Invalidate any
+  // in-flight inference and the cached matte so the first visible frame after resume uses a fresh, paired mask.
+  document.addEventListener('visibilitychange', () => {
+    try { if (document.visibilityState === 'visible' && running) resetSegCache('tab-resume'); } catch (e) { /* never break the page for a hygiene step */ }
+  });
 
   let pipeFailCount = 0;
 
@@ -1921,14 +1929,18 @@
     let sourceFrame = null;
     try { sourceFrame = captureSegmentationFrame(els.video); }
     catch (e) { if (maskMotion) maskMotion.reset(); }
+    const geomNow = () => ({ width: videoNativeW || 0, height: videoNativeH || 0, orientation: (screen.orientation && screen.orientation.angle) || 0 });
+    const ticket = frameGate ? frameGate.begin({ loopToken: token, provider: segProvider, geometry: geomNow(), now: t0 }) : null;
+    const stillCurrent = () => !frameGate || frameGate.accept(ticket, { loopToken: loopToken, provider: segProvider, geometry: geomNow() }).ok;
     asyncSegPromise = Promise.resolve().then(() => segWithWatchdog(segProvider, sourceFrame || els.video)).then(async (r) => {
       if (token !== loopToken || !r || !r.segmentationMask) return;
+      if (!stillCurrent()) return;        // provider/orientation/epoch changed while the worker was busy: drop, never display
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
       try { publishSegmentationPreview(sourceFrame || els.video, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       const fresh = await createImageBitmap(r.segmentationMask);
-      if (token !== loopToken) { fresh.close(); return; }
+      if (token !== loopToken || (frameGate && ticket && ticket.epoch !== frameGate.stats().epoch)) { fresh.close(); return; }   // reset during the bitmap copy
       seedMaskMotion(fresh, sourceFrame, t0);
       const old = cachedMaskBitmap; cachedMaskBitmap = fresh; asyncSegDone++;
       if (old) setTimeout(() => { try { old.close(); } catch (e) {} }, 400);
@@ -2002,8 +2014,11 @@
         return;
       }
       const segStart = performance.now(); maskFrame = camFrames();
+      const syncProvider = segProvider, syncEpoch = frameGate ? frameGate.stats().epoch : 0;
       try {
         results = await segWithWatchdog(segProvider, inferenceSnapshot || els.video);
+        // The engine was swapped / cache reset while this call was pending: its mask belongs to a previous state.
+        if (syncProvider !== segProvider || (frameGate && frameGate.stats().epoch !== syncEpoch)) results = null;
       } catch (err) {
         dropPerson();
         if (myLoop !== loopToken) return; // stopped/restarted while waiting — whoever restarted owns the loop now
@@ -2066,6 +2081,7 @@
       }
       if (!maskSource) { dropPerson(); scheduleNext(); return; }
     } else {
+      if (!results || !results.segmentationMask) { dropPerson(); scheduleNext(); return; }   // result discarded (stale provider/epoch) or empty: render the next frame instead of throwing
       maskSource = results.segmentationMask;
     }
 

@@ -34,7 +34,7 @@ class FakeCtx { constructor(c) { this.canvas = c; this.globalCompositeOperation 
 }
 const made = [];
 global.document = { createElement: () => { const c = { width: 0, height: 0 }; c.getContext = () => (c._ctx = c._ctx || new FakeCtx(c)); made.push(c); return c; } };
-global.window = global; global.navigator = { gpu: {} };
+global.window = global; Object.defineProperty(global, 'navigator', { value: { gpu: {} }, configurable: true, writable: true }); // Node >=21 ships a read-only global navigator getter
 global.ort = { Tensor: class { constructor(t, d, dims) { this.type = t; this.data = d; this.dims = dims; } }, InferenceSession: { create: async () => ({ release() {} }) } };
 const V = (global.VS = {}); require('../../js/providers/edgetam-core.js');
 let loadFail = false, failWebGPU = false;
