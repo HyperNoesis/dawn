@@ -208,6 +208,9 @@ def validate_commercial_entry(item, line_no):
         raise ValueError(f"manifest line {line_no} missing commercial benchmark fields: {', '.join(missing)}")
     if item["split"] not in ("test", "benchmark"):
         raise ValueError(f"manifest line {line_no} is not a held-out test/benchmark split")
+    for key in ("participant_id", "source_video_id", "clip_id"):
+        if not isinstance(item[key], str) or not item[key].strip():
+            raise ValueError(f"manifest line {line_no} has an empty {key}")
     if not isinstance(item["strata"], list) or not item["strata"] or not all(isinstance(x, str) and x for x in item["strata"]):
         raise ValueError(f"manifest line {line_no} needs one or more named strata")
     confidence = item["annotation_confidence"]
