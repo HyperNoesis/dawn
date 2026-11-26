@@ -3462,13 +3462,34 @@
   // ============================================================
   // Tool rail tab switching
   // ============================================================
-  els.toolRail.querySelectorAll('.tool-tab').forEach(tab => {
+  const studioToolTabs = Array.from(els.toolRail.querySelectorAll('.tool-tab'));
+  studioToolTabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      els.toolRail.querySelectorAll('.tool-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+      const panel = document.getElementById(tab.dataset.target);
+      if (!panel) return;
+      studioToolTabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
       tab.classList.add('active');
       tab.setAttribute('aria-selected', 'true');
       document.querySelectorAll('.control-section').forEach(sec => sec.classList.remove('active'));
-      document.getElementById(tab.dataset.target).classList.add('active');
+      panel.classList.add('active');
+    });
+    // The rail is a vertical ARIA tablist. Arrow keys move between visible
+    // tabs; Home/End jump to the first/last visible tab. Native Tab still
+    // leaves the tablist and enters the active tabpanel.
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+      const visible = studioToolTabs.filter(t => !t.hidden && t.getClientRects().length > 0);
+      const current = visible.indexOf(tab);
+      if (current < 0 || !visible.length) return;
+      let next = current;
+      if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = visible.length - 1;
+      else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (current + 1) % visible.length;
+      else next = (current - 1 + visible.length) % visible.length;
+      event.preventDefault();
+      const target = visible[next];
+      target.focus();
+      target.click();
     });
   });
 
