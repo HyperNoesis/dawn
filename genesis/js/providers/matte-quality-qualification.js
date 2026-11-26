@@ -32,19 +32,24 @@
     if (m.boundaryF1>1 || m.topologyErrorRate>1) return false;
     return true;
   }
-  function evaluate(engine, identity, manifest) {
+  function registered(engine, manifest) {
     const registry=manifest||ROUTES, entry=registry&&registry[engine];
     if (!entry) return blocked('UNKNOWN_ENGINE','No quality qualification record exists for this engine.');
     if (entry.status!=='approved') return blocked('QUALITY_NOT_QUALIFIED',entry.reason||'This engine has not passed the human-video quality qualification gate.');
-    if (!validIdentity(identity)) return blocked('MISSING_RUNTIME_IDENTITY','The active provider has not supplied a complete model, preprocessing, postprocessing and runtime identity.');
     if (!validIdentity(entry.identity)) return blocked('INVALID_QUALIFICATION_IDENTITY','The registered qualification is missing a complete versioned pipeline identity.');
-    if (!sameIdentity(identity,entry.identity)) return blocked('QUALIFICATION_IDENTITY_MISMATCH','The installed model or processing/runtime version differs from the version that was evaluated.');
     if (!validEvidence(entry.evidence)) return blocked('INCOMPLETE_QUALIFICATION_EVIDENCE','The qualification record is missing rights, held-out split, independent annotation, per-stratum or metric evidence.');
+    return {eligible:true,code:'REGISTERED_QUALIFICATION',identity:entry.identity,reason:'The exact pipeline has a complete registered qualification; the provider identity must still match at runtime.'};
+  }
+  function evaluate(engine, identity, manifest) {
+    const registration=registered(engine,manifest);
+    if (!registration.eligible) return registration;
+    if (!validIdentity(identity)) return blocked('MISSING_RUNTIME_IDENTITY','The active provider has not supplied a complete model, preprocessing, postprocessing and runtime identity.');
+    if (!sameIdentity(identity,registration.identity)) return blocked('QUALIFICATION_IDENTITY_MISMATCH','The installed model or processing/runtime version differs from the version that was evaluated.');
     return {eligible:true,code:'QUALIFIED',reason:'This exact model and processing/runtime version has a complete registered held-out quality qualification.',engine};
   }
   function automaticStatus(manifest) {
     const registry=manifest||ROUTES, eligible=[], blockedRoutes=[];
-    Object.keys(registry).forEach((engine)=>{const d=evaluate(engine,null,registry);if(d.eligible)eligible.push(engine);else blockedRoutes.push({engine,code:d.code,reason:d.reason});});
+    Object.keys(registry).forEach((engine)=>{const d=registered(engine,registry);if(d.eligible)eligible.push(engine);else blockedRoutes.push({engine,code:d.code,reason:d.reason});});
     return {
       eligible, blocked:blockedRoutes,
       message:eligible.length
@@ -52,7 +57,7 @@
         : 'Automatic mode is retaining the established local baseline. Experimental PP-MattingV2, Hybrid and UltraMatte routes remain available for explicit testing, but are not automatically promoted until their exact pipelines pass independent held-out human-video qualification.'
     };
   }
-  const api={IDENTITY_FIELDS:IDENTITY_FIELDS.slice(),METRIC_FIELDS:METRIC_FIELDS.slice(),ROUTES,validIdentity,validEvidence,evaluate,
+  const api={IDENTITY_FIELDS:IDENTITY_FIELDS.slice(),METRIC_FIELDS:METRIC_FIELDS.slice(),ROUTES,validIdentity,validEvidence,registered,evaluate,
     canAutoPromote(engine,identity,manifest){return evaluate(engine,identity,manifest).eligible;},automaticStatus};
   root.VS=root.VS||{}; root.VS.MatteQualityQualification=api;
   if(typeof module!=='undefined'&&module.exports) module.exports=api;
