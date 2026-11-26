@@ -1997,9 +1997,13 @@
     const provider = segProvider;
     const generation = segProviderGeneration;
     if (!provider || segmentationFlight.isBusy(provider)) return;
+    const generationGuard = window.VS.SegmentationGeneration;
+    const jobStamp = generationGuard.stamp(provider, token, generation);
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
-    const stale = () => token !== loopToken || provider !== segProvider || generation !== segProviderGeneration;
+    const stale = () => !generationGuard.matches(jobStamp, {
+      provider: segProvider, sessionToken: loopToken, providerGeneration: segProviderGeneration
+    });
     let sourceFrame = null;
     try { sourceFrame = captureSegmentationFrame(els.video); }
     catch (e) { if (maskMotion) maskMotion.reset(); }
@@ -2085,9 +2089,15 @@
 
     let results = null, maskFrame = null, resultFramePacket = null;
     let inferenceProvider = null, inferenceGeneration = null;
+    let inferenceIsCurrent = () => true;
     if (runInference) {
       inferenceProvider = segProvider;
       inferenceGeneration = segProviderGeneration;
+      const generationGuard = window.VS.SegmentationGeneration;
+      const inferenceStamp = generationGuard.stamp(inferenceProvider, myLoop, inferenceGeneration);
+      inferenceIsCurrent = () => generationGuard.matches(inferenceStamp, {
+        provider: segProvider, sessionToken: loopToken, providerGeneration: segProviderGeneration
+      });
       if (segmentationFlight.isBusy(inferenceProvider)) {
         dropPerson();
         scheduleNext();
@@ -2100,7 +2110,7 @@
         results = await segWithWatchdog(inferenceProvider, inferenceFrame);
       } catch (err) {
         dropPerson();
-        if (myLoop !== loopToken || inferenceProvider !== segProvider || inferenceGeneration !== segProviderGeneration) {
+        if (!inferenceIsCurrent()) {
           scheduleNext();
           return;
         }
@@ -2108,7 +2118,7 @@
         scheduleNext();
         return;
       }
-      if (myLoop !== loopToken || inferenceProvider !== segProvider || inferenceGeneration !== segProviderGeneration) {
+      if (!inferenceIsCurrent()) {
         dropPerson();
         scheduleNext();
         return;
@@ -2133,7 +2143,7 @@
       if (results) {
         try {
           const fresh = await createImageBitmap(results.segmentationMask);
-          if (myLoop !== loopToken || inferenceProvider !== segProvider || inferenceGeneration !== segProviderGeneration) {
+          if (!inferenceIsCurrent()) {
             fresh.close(); dropPerson(); scheduleNext(); return;
           }
           if (cachedMaskBitmap) cachedMaskBitmap.close();
