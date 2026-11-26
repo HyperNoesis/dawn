@@ -34,7 +34,7 @@ A qualification record must include:
 - Rights-cleared consent and commercial-use permission for evaluation media.
 - Participant-level and source-video-level held-out splits.
 - Independent human alpha annotation and documented review.
-- Per-stratum results for hair types/flyaways, dark/light hair-background pairs, backlight, low light, glasses, hands/finger gaps, thin straps, lace/translucency, occlusion, motion blur, multiple people and scene cuts.
+- Separate human-labelled per-stratum results for straight, wavy, curly and coily hair; flyaways; braids; dark/light hair-background combinations; backlight; low light; similar colours; glasses; headphones; hats/headwraps; hands crossing face; finger gaps; thin straps; lace; transparent fabric; textured clothes; motion blur; partial occlusion; multiple people; and scene cuts. Every stratum must carry its own alpha MAD, edge-band MAD, boundary F1, topology error and temporal delta MAE, not merely appear in a non-empty list.
 - Paired results against the approved baseline, including alpha MAD/MAE, edge-band error, boundary precision/recall/F1, topology/hole retention, temporal error/flicker/ghost duration and failure/reacquisition behaviour.
 - Model-only, post-processing and final-composite results separated so one stage cannot hide another stage's regression.
 - P50/P75/P95/max stage timing, displayed mask age, preview FPS, memory and sustained thermal/battery evidence on each claimed device tier.
