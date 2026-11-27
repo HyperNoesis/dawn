@@ -378,6 +378,21 @@ class MODNetWorkerProvider extends MODNetSegmentationProvider {
     this._outCtx.putImageData(this._outImageData, 0, 0);
     return { segmentationMask: this._emit() };
   }
-  dispose() { try { this._worker && this._worker.postMessage({ type: 'dispose' }); this._worker && this._worker.terminate(); } catch (e) { /* ignore */ } this._worker = null; this._ready = false; this.session = null; }
+  dispose() {
+    // terminate() does not reliably dispatch an error event to the main thread.
+    // Reject every outstanding _send() promise first so segmentation-flight
+    // leases and watchdog-owned work can settle instead of remaining busy forever.
+    const error = new Error('MODNet worker provider disposed before pending operations completed');
+    error.code = 'PROVIDER_DISPOSED';
+    for (const pending of this._pending.values()) {
+      try { pending.reject(error); } catch (e) { /* continue rejecting remaining work */ }
+    }
+    this._pending.clear();
+    const worker = this._worker;
+    this._worker = null;
+    this._ready = false;
+    this.session = null;
+    try { if (worker) worker.terminate(); } catch (e) { /* worker is already gone */ }
+  }
 }
 window.VS.MODNetWorkerProvider = MODNetWorkerProvider;
