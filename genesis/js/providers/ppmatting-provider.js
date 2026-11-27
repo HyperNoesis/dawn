@@ -175,7 +175,10 @@
           mainSubjectFilter: mainOn(),
           roiEnabled: !!this.useRoi,
           outputLongEdge: this.longEdge,
-          studioMatte: V.currentMatteConfig || null
+          // This provider emits a fractional alpha matte regardless of the
+          // previously active engine. Fingerprint the compositor mode it
+          // requires, not a stale semantic-mask setting from the old provider.
+          studioMatte: Object.assign({}, V.currentMatteConfig || {}, { preserveAlpha: true })
         },
         runtime: {
           name: 'onnxruntime-web-ppmatting',
