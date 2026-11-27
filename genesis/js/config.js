@@ -15,8 +15,8 @@ window.VS.config = {
   business: { name: '', email: '', jurisdiction: 'Nigeria', effectiveDate: '', whatsapp: '' },
   // Optional hosted payment links (e.g. a Paystack payment page). Empty = the pricing buttons say "Join the pilot" instead.
   payLinks: { pro: '' },
-  supabaseUrl: '',      // e.g. 'https://xxxxx.supabase.co'
-  supabaseAnonKey: '',  // the "anon public" key from Project Settings > API
+  supabaseUrl: 'https://fjeutowxlscqgjcobqmd.supabase.co',      // e.g. 'https://xxxxx.supabase.co'
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqZXV0b3d4bHNjcWdqY29icW1kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU4MDU3NTgsImV4cCI6MjExMTM4MTc1OH0.DMHSmhIhoVpkZcDio43ZTsrjbsRAX4fjWZeEsNJPIGE',  // the "anon public" key from Project Settings > API
 
   // Live calling (call.html) needs a signaling server — see server/README.md
   // to deploy one (free options included). Leave empty and Live calling
