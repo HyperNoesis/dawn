@@ -13,6 +13,7 @@ require('../../js/providers/birefnet-provider.js');
     constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; }
     dispose() { disposed++; }
   }
+  global.ort = { Tensor: FakeTensor };
   const output = new FakeTensor('float32', new Float32Array(1024 * 1024).fill(0.5), [1, 1, 1024, 1024]);
   const provider = Object.create(global.VS.BiRefNetSegmentationProvider.prototype);
   Object.assign(provider, {
