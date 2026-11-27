@@ -227,6 +227,7 @@ function withTimeout(promise, ms, label) {
       // retain its fractional coverage instead of applying semantic-mask
       // threshold tightening a second time.
       edgeMatte.preserveAlpha = true;
+      edgeMatte.colourSnap = 0; // match the app's alpha-matting default
       // Diagnostic-only A/B: widen the alpha transition while keeping every
       // other renderer parameter identical. Do not change Studio defaults until
       // labelled-reference scores and the existing edge suite agree.
@@ -244,10 +245,10 @@ function withTimeout(promise, ms, label) {
       featherEdgeMatte.edgeHi = 0.95;
       // Diagnostic ablation: remove colour-line alpha snap while keeping the
       // same high-resolution threshold profile and temporal filtering.
-      const noSnapMatte = new V.GLMatte();
-      if (!noSnapMatte.ok) throw new Error('No-snap A/B GLMatte failed to initialize: ' + (noSnapMatte.error || 'unknown'));
-      noSnapMatte.preserveAlpha = true;
-      noSnapMatte.colourSnap = 0;
+      const snapMatte = new V.GLMatte();
+      if (!snapMatte.ok) throw new Error('Colour-snap A/B GLMatte failed to initialize: ' + (snapMatte.error || 'unknown'));
+      snapMatte.preserveAlpha = true;
+      snapMatte.colourSnap = 0.8;
       const tInit = performance.now();
       await Promise.race([
         provider.initialize('fast', { threads: 1 }),
@@ -348,8 +349,8 @@ function withTimeout(promise, ms, label) {
         featherReadbackCtx.drawImage(featherForeground, 0, 0);
         const featherPixels = featherReadbackCtx.getImageData(0, 0, featherReadback.width, featherReadback.height).data;
         const featherQuality = scoreAlpha(featherPixels, 3, gtFullRgba, 0, featherReadback.width, featherReadback.height);
-        const noSnapForeground = noSnapMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
-        if (!noSnapForeground) throw new Error('No-snap A/B GLMatte returned no foreground on frame ' + frame);
+        const noSnapForeground = snapMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
+        if (!noSnapForeground) throw new Error('Colour-snap A/B GLMatte returned no foreground on frame ' + frame);
         const noSnapReadback = document.createElement('canvas');
         noSnapReadback.width = noSnapForeground.width;
         noSnapReadback.height = noSnapForeground.height;
@@ -506,13 +507,14 @@ function withTimeout(promise, ms, label) {
         renderMatte: {
           active: !!edgeMatte.ok,
           preserveAlpha: !!edgeMatte.preserveAlpha,
+          colourSnap: edgeMatte.colourSnap,
           error: edgeMatte.error || null,
           effectiveEdgeThresholds: V.GLMatte.resolveEdgeThresholds(512, 384, edgeMatte.edgeLo, edgeMatte.edgeHi, edgeMatte.edgeProfile),
           edgeThresholdExperiment: {
             active: !!softEdgeMatte.ok,
             parameters: { edgeLo: 0.15, edgeHi: 0.85 },
             featherExperiment: { active: !!featherEdgeMatte.ok, parameters: { edgeLo: 0.05, edgeHi: 0.95 } },
-            colourSnapExperiment: { active: !!noSnapMatte.ok, parameters: { colourSnap: 0, edgeProfile: 'auto' } }
+            colourSnapExperiment: { active: !!snapMatte.ok, parameters: { colourSnap: 0, edgeProfile: 'auto' } }
           }
         },
         edgeTam: {
