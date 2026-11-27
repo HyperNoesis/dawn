@@ -126,13 +126,20 @@ const EXPECTED = 17;
       }, item.target, { timeout:5000 });
       const geometry = await page.evaluate((id) => {
         const panel = document.getElementById(id), r = panel.getBoundingClientRect();
+        const inactiveVisibleCount = [...document.querySelectorAll('.control-section')]
+          .filter((other) => other.id !== id && getComputedStyle(other).display !== 'none' &&
+            getComputedStyle(other).visibility !== 'hidden').length;
         return { width:Math.round(r.width), height:Math.round(r.height), display:getComputedStyle(panel).display,
           selectedCount:document.querySelectorAll('.tool-tab[aria-selected="true"]').length,
-        tabStopCount:document.querySelectorAll('.tool-tab[tabindex="0"]').length,
-        activeTabIndex:document.querySelector('.tool-tab.active')?.tabIndex };
+          activePanelCount:document.querySelectorAll('.control-section.active').length,
+          activePanelId:document.querySelector('.control-section.active')?.id || null,
+          inactiveVisibleCount,
+          tabStopCount:document.querySelectorAll('.tool-tab[tabindex="0"]').length,
+          activeTabIndex:document.querySelector('.tool-tab.active')?.tabIndex };
       }, item.target);
       const passed = geometry.width > 0 && geometry.height > 0 && geometry.display !== 'none' &&
-        geometry.selectedCount === 1 && geometry.tabStopCount === 1 && geometry.activeTabIndex === 0;
+        geometry.selectedCount === 1 && geometry.activePanelCount === 1 && geometry.activePanelId === item.target &&
+        geometry.inactiveVisibleCount === 0 && geometry.tabStopCount === 1 && geometry.activeTabIndex === 0;
       if (!passed) failures.push('Panel is not visibly laid out: ' + item.target + ' ' + JSON.stringify(geometry));
       const slug = item.target.replace(/[^a-z0-9_-]+/gi, '-');
       await page.screenshot({ path:path.join(OUT, 'tab-' + String(i+1).padStart(2,'0') + '-' + slug + '.png') });
