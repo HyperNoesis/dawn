@@ -305,7 +305,10 @@ class MODNetSegmentationProvider {
   }
 
   dispose() {
-    if (this.session && this.session.release) this.session.release();
+    try {
+      const result = this.session && this.session.release && this.session.release();
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch (e) { /* best-effort native session release */ }
     this.session = null;
   }
 }
