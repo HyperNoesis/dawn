@@ -216,16 +216,16 @@
           cand.onProgress = (p) => showBenchNote('Loading high-quality model: ' + Math.round(p * 100) + '%');
           await withTimeout(cand.initialize(quality), 45000, c.name + ' model initialization timed out after 45 seconds');
           if (c.requiresQualification) {
+            // Check the expensive human-video evidence registry before benchmarking,
+            // but defer the exact runtime identity check until the final device rung
+            // is known. The resolution ladder changes preprocessing dimensions.
             const gate = V.MatteQualityQualification;
-            const identity = cand && typeof cand.getQualificationIdentity === 'function'
-              ? await cand.getQualificationIdentity()
-              : (cand && cand.qualificationIdentity);
-            const qualification = gate ? gate.evaluate(c.key, identity) : {
+            const registration = gate ? gate.registered(c.key) : {
               eligible: false,
               reason: 'The quality qualification module is unavailable.'
             };
-            if (!qualification.eligible) {
-              throw new Error('Automatic quality qualification blocked ' + c.name + ': ' + qualification.reason);
+            if (!registration.eligible) {
+              throw new Error('Automatic quality qualification blocked ' + c.name + ': ' + registration.reason);
             }
           }
           if (V.MatteEngines && typeof V.MatteEngines.validateProvider === 'function') {
@@ -285,6 +285,24 @@
           segLogPush('bench', { engine: c.key, ms: Math.round(ms), edge: usedEdge, budget: maxMs(), gpu: !!cand.usingWebGPU });
           if (stale()) { cand.dispose?.(); cand = null; return; }
           if (ms <= maxMs()) {
+            // Recompute identity after all mobile caps, resolution-ladder steps and
+            // any single-thread reinitialization. Qualification is for the exact
+            // active preprocessing/postprocessing/runtime configuration, not the
+            // candidate's pre-benchmark settings.
+            if (c.requiresQualification) {
+              cand.longEdge = usedEdge;
+              const gate = V.MatteQualityQualification;
+              const identity = cand && typeof cand.getQualificationIdentity === 'function'
+                ? await cand.getQualificationIdentity()
+                : (cand && cand.qualificationIdentity);
+              const qualification = gate ? gate.evaluate(c.key, identity) : {
+                eligible: false,
+                reason: 'The quality qualification module is unavailable.'
+              };
+              if (!qualification.eligible) {
+                throw new Error('Final device configuration failed quality qualification for ' + c.name + ': ' + qualification.reason);
+              }
+            }
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
@@ -2635,6 +2653,7 @@
       }
       // Prewarm OFF the frame path: the old engine keeps drawing while the new one loads, then the swap is one frame.
       let to; await Promise.race([cand.initialize(runningQuality), new Promise((_, rej) => { to = setTimeout(() => rej(new Error('timed out loading ' + a.engine)), 45000); })]).finally(() => clearTimeout(to));
+      if (!a.emergency) cand.longEdge = a.edge;
       if (!a.emergency && a.engine !== previousEngine && a.engine !== 'modnet' && a.engine !== 'mediapipe') {
         const gate = window.VS.MatteQualityQualification;
         const identity = cand && typeof cand.getQualificationIdentity === 'function'
@@ -2651,7 +2670,6 @@
       if (!a.emergency && window.VS.MatteEngines && typeof window.VS.MatteEngines.validateProvider === 'function') {
         window.VS.MatteEngines.validateProvider(a.engine, cand);
       }
-      if (!a.emergency) cand.longEdge = a.edge;
       if (!running || token !== loopToken) { cand.dispose?.(); cand = null; return; }
       const old = segProvider; segProvider = cand; cand = null;
       govProvider = segProvider; govLight = !!a.emergency;
