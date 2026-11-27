@@ -120,7 +120,13 @@
       }
     }
 
-    dispose() { try { if (this.session && this.session.release) this.session.release(); } catch (e) { /* ignore */ } this.session = null; this._px = null; this._fused = null; }
+    dispose() {
+      try {
+        const result = this.session && this.session.release && this.session.release();
+        if (result && typeof result.catch === 'function') result.catch(() => {});
+      } catch (e) { /* best-effort native session release */ }
+      this.session = null; this._px = null; this._fused = null;
+    }
   }
 
   BiRefNetSegmentationProvider.core = { resampleAlpha, resampleAlphaRect, fitRect, looksLikeLogits, toProb };
