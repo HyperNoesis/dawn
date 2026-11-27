@@ -146,20 +146,48 @@
     const bb = bboxFromAlpha(base, bw, bh, 128, 0.01);
     if (!bb) return null;
     const pr = promptFromBox(bb, bw, bh, base);
-    const T = (type, data, dims) => new ort.Tensor(type, data, dims);
-    const e = await enc.run({ pixel_values: T('float32', toPixelValues(rgba1024), [1, 3, SIZE, SIZE]) });
-    const names = Object.keys(e);
-    const o = await dec.run({
-      input_points: T('float32', pr.points, [1, 1, 1, 2]),
-      input_labels: T('int64', pr.labels, [1, 1, 1]),
-      input_boxes: T('float32', pr.boxes, [1, 1, 4]),
-      'image_embeddings.0': e[names[0]], 'image_embeddings.1': e[names[1]], 'image_embeddings.2': e[names[2]]
-    });
-    const on = Object.keys(o);
-    const iou = Array.from(o[on[0]].data), k = pickBest(iou);
-    const masks = o[on[1]].data;
-    const gate = gateFromLogits(masks.subarray(k * MASK * MASK, (k + 1) * MASK * MASK));
-    return { gate, iou: iou[k], obj: o[on[2]] ? o[on[2]].data[0] : null, bbox: bb };
+    // ONNX Runtime Web tensors own WASM/WebGPU allocations. Dispose every
+    // input and output after the decoder result has been copied into plain JS
+    // values; otherwise each periodic tracker refresh leaks native memory.
+    const owned = new Set();
+    const tensor = (type, data, dims) => {
+      const value = new ort.Tensor(type, data, dims);
+      if (value && typeof value.dispose === 'function') owned.add(value);
+      return value;
+    };
+    const collect = (outputs) => {
+      if (outputs && typeof outputs === 'object') {
+        Object.keys(outputs).forEach((key) => {
+          const value = outputs[key];
+          if (value && typeof value.dispose === 'function') owned.add(value);
+        });
+      }
+    };
+    try {
+      const image = tensor('float32', toPixelValues(rgba1024), [1, 3, SIZE, SIZE]);
+      const e = await enc.run({ pixel_values: image });
+      collect(e);
+      const names = Object.keys(e);
+      if (names.length < 3) throw new Error('EdgeTAM encoder returned fewer than three embedding tensors');
+      const o = await dec.run({
+        input_points: tensor('float32', pr.points, [1, 1, 1, 2]),
+        input_labels: tensor('int64', pr.labels, [1, 1, 1]),
+        input_boxes: tensor('float32', pr.boxes, [1, 1, 4]),
+        'image_embeddings.0': e[names[0]], 'image_embeddings.1': e[names[1]], 'image_embeddings.2': e[names[2]]
+      });
+      collect(o);
+      const on = Object.keys(o);
+      if (on.length < 2 || !o[on[0]].data || !o[on[1]].data) {
+        throw new Error('EdgeTAM decoder returned an invalid output tensor set');
+      }
+      const iou = Array.from(o[on[0]].data), k = pickBest(iou);
+      const masks = o[on[1]].data;
+      if (masks.length < (k + 1) * MASK * MASK) throw new Error('EdgeTAM decoder mask tensor has an invalid shape');
+      const gate = gateFromLogits(masks.subarray(k * MASK * MASK, (k + 1) * MASK * MASK));
+      return { gate, iou: iou[k], obj: o[on[2]] ? o[on[2]].data[0] : null, bbox: bb };
+    } finally {
+      owned.forEach((value) => { try { value.dispose(); } catch (e) { /* release remaining tensors */ } });
+    }
   }
 
   const api = { SIZE, MASK, toPixelValues, bboxFromAlpha, promptFromBox, pickBest, gateFromLogits, softGate, componentGate, applyGate, gateIsSafe, refreshGate };
