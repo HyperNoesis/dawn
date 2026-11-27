@@ -296,6 +296,10 @@
         const Q = V.MatteQualificationIdentity;
         if (!Q) throw new Error('Canonical matte qualification identity helper is unavailable.');
         const parentIdentity = await base.getQualificationIdentity();
+        const wasmEnv = own.ortRef && own.ortRef.env && own.ortRef.env.wasm;
+        if (!wasmEnv || !Number.isSafeInteger(wasmEnv.numThreads) || wasmEnv.numThreads < 1) {
+          throw new Error('EdgeTAM cannot identify the effective ONNX Runtime WASM thread count; automatic qualification is blocked.');
+        }
         return Q.extend(parentIdentity, {
           modelVersionSuffix: '+edgetam-' + own.modelId + '@registry-' + String(own.registryVersion),
           modelSha256: own.modelSha256,
@@ -332,7 +336,9 @@
               runtimeScript: bundle.script,
               runtimeWasmStem: bundle.wasmStem,
               precisionFallback: String(own.precisionFallback || ''),
-              decoderBackend: 'wasm'
+              decoderBackend: 'wasm',
+              wasmThreads: wasmEnv.numThreads,
+              wasmProxy: wasmEnv.proxy === true
             }
           }
         });
