@@ -2036,10 +2036,18 @@
     try { sourceFrame = captureSegmentationFrame(els.video); }
     catch (e) {
       if (maskMotion) maskMotion.reset();
+      // The old matte belongs to a prior frame and cannot be safely aligned
+      // when a fresh immutable source frame could not be captured. Discard it
+      // and render the camera through until a new valid inference succeeds.
+      const staleMask = cachedMaskBitmap;
+      cachedMaskBitmap = null;
+      cachedMaskFramePacket = null;
+      lastSegmentationFramePacket = null;
+      try { if (staleMask) staleMask.close(); } catch (closeError) { /* already released */ }
       asyncSegBusy = false;
       asyncSegLastAt = performance.now();
       segLogPush('frame-snapshot-failed', { stage: 'async-inference', reason: String((e && e.message) || e) });
-      return; // never infer against the mutable live video after snapshot failure
+      return; // never infer against the mutable live video or reuse an unpaired matte
     }
     const packet = sourceFrame.__vsSegmentationFramePacket;
     let job;
