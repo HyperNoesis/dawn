@@ -2,59 +2,43 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Genesis matte benchmark JSONL entry",
   "type": "object",
-  "required": [
-    "id",
-    "prediction",
-    "target",
-    "usage_rights",
-    "provenance"
-  ],
+  "required": ["id", "prediction", "target", "usage_rights", "provenance"],
   "properties": {
-    "id": {
-      "type": "string",
-      "minLength": 1
+    "id": {"type": "string", "minLength": 1},
+    "prediction": {"type": "string", "minLength": 1},
+    "target": {"type": "string", "minLength": 1},
+    "sequence": {"type": "string"},
+    "frame": {"type": "integer", "minimum": 0},
+    "split": {"enum": ["train", "validation", "test", "benchmark"]},
+    "usage_rights": {"enum": ["commercial-cleared", "research-only", "permission-pending"]},
+    "provenance": {"type": "string", "minLength": 1},
+    "consent_or_lawful_basis": {"type": "string", "minLength": 1},
+    "participant_id": {"type": "string", "minLength": 1},
+    "source_video_id": {"type": "string", "minLength": 1},
+    "clip_id": {"type": "string", "minLength": 1},
+    "strata": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "annotation_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "annotation_protocol_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "inter_annotator_review_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "independent_annotators": {"type": "integer", "minimum": 2},
+    "frame_alignment_verified": {"type": "boolean"},
+    "alpha_encoding": {"enum": ["uint8-0-255", "uint16-0-65535", "float32-0-1"]},
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "inference_ms": {"type": "number", "minimum": 0},
+        "mask_age_ms": {"type": "number", "minimum": 0},
+        "camera_fps": {"type": "number", "minimum": 0},
+        "render_fps": {"type": "number", "minimum": 0},
+        "preview_fps": {"type": "number", "minimum": 0},
+        "dropped_frames": {"type": "number", "minimum": 0},
+        "memory_mb": {"type": "number", "minimum": 0},
+        "battery_pct": {"type": "number", "minimum": 0, "maximum": 100},
+        "thermal_state": {"type": "string"}
+      },
+      "additionalProperties": false
     },
-    "prediction": {
-      "type": "string",
-      "minLength": 1
-    },
-    "target": {
-      "type": "string",
-      "minLength": 1
-    },
-    "sequence": {
-      "type": "string"
-    },
-    "frame": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "split": {
-      "enum": [
-        "train",
-        "validation",
-        "test",
-        "benchmark"
-      ]
-    },
-    "usage_rights": {
-      "enum": [
-        "commercial-cleared",
-        "research-only",
-        "permission-pending"
-      ]
-    },
-    "provenance": {
-      "type": "string",
-      "minLength": 1
-    },
-    "consent_or_lawful_basis": {
-      "type": "string",
-      "minLength": 1
-    },
-    "notes": {
-      "type": "string"
-    }
+    "notes": {"type": "string"}
   },
   "additionalProperties": false
 }

@@ -651,6 +651,7 @@ function renderFrame(personBitmap, maskBitmap, token) {
           ['radius', 'sigmaR', 'edgeLo', 'edgeHi', 'despill', 'colourSnap', 'smoothBase', 'smoothAdapt', 'plateStrength'].forEach((k) => {
             if (typeof st[k] === 'number') glMatte[k] = st[k];
           });
+          if (typeof st.preserveAlpha === 'boolean') glMatte.preserveAlpha = st.preserveAlpha;
         }
         break;
       }

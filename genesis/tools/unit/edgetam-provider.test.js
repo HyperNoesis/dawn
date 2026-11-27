@@ -37,7 +37,7 @@ global.document = { createElement: () => { const c = { width: 0, height: 0 }; c.
 global.window = global; global.navigator = { gpu: {} };
 global.ort = { Tensor: class { constructor(t, d, dims) { this.type = t; this.data = d; this.dims = dims; } }, InferenceSession: { create: async () => ({ release() {} }) } };
 const V = (global.VS = {}); require('../../js/providers/edgetam-core.js');
-let loadFail = false, failWebGPU = false;
+let loadFail = false, failWebGPU = false, releasedSessions = 0;
 const loadedModelIds = [], providerRequests = [];
 V.loadOrt = async () => {};
 V.ModelStore = {
@@ -63,8 +63,8 @@ ort.InferenceSession.create = async (bytes, options) => {
     throw new Error('WebGPU unsupported by this adapter');
   }
   return (bytes === 1 || bytes === 5)
-    ? { run: async () => ({ a: {}, b: {}, c: {} }), release() {} }
-    : { run: async () => { const m = new Float32Array(3 * 65536).fill(-5); for (let k = 0; k < 3; k++) for (let y = 0; y < G; y++) for (let x = 0; x < 128; x++) m[k * 65536 + y * G + x] = 4; return { iou_scores: { data: [0.5, 0.9, 0.4] }, pred_masks: { data: m }, object_score_logits: { data: [5] } }; }, release() {} };
+    ? { run: async () => ({ a: {}, b: {}, c: {} }), release() { releasedSessions++; } }
+    : { run: async () => { const m = new Float32Array(3 * 65536).fill(-5); for (let k = 0; k < 3; k++) for (let y = 0; y < G; y++) for (let x = 0; x < 128; x++) m[k * 65536 + y * G + x] = 4; return { iou_scores: { data: [0.5, 0.9, 0.4] }, pred_masks: { data: m }, object_score_logits: { data: [5] } }; }, release() { releasedSessions++; } };
 };
 class Base { constructor() { this.label = 'MODNet'; this.longEdge = 320; this.lowLightBoost = false; this.calls = 0; this.sourceFrameIds = []; }
   async initialize() { return 'inited'; }
@@ -177,6 +177,22 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   for (let i = 0; i < 4; i++) await emptyGate.segment(emptyVideo);
   assert.strictEqual(emptyGateAttempts, 2, 'a missing gate is retried after the configured interval');
   emptyGate.dispose();
+
+  // A hung encoder/decoder must not hold the first camera frame forever. The
+  // wrapper times out, disables only EdgeTAM, and returns the base matte.
+  V.EdgeTAMCore.refreshGate = () => new Promise(() => {});
+  const timeoutBase = new Base(), timeoutGate = E.create(timeoutBase);
+  await timeoutGate.initialize();
+  const releasesBeforeTimeout = releasedSessions;
+  const timeoutStarted = Date.now();
+  const timeoutResult = await timeoutGate.segment({ videoWidth: 640, videoHeight: 480, frameId: 111 });
+  const timeoutElapsed = Date.now() - timeoutStarted;
+  assert.ok(timeoutElapsed >= 3500 && timeoutElapsed < 6500, 'EdgeTAM first-frame wait is bounded by its 4-second watchdog (' + timeoutElapsed + ' ms)');
+  assert.strictEqual(timeoutGate.edgetam.status, 'failed', 'a hung tracker is disabled for the session');
+  assert.match(timeoutGate.edgetam.error, /timed out after 4000 ms/);
+  assert.ok(timeoutResult.segmentationMask._alpha, 'base segmentation remains available after tracker timeout');
+  assert.strictEqual(releasedSessions - releasesBeforeTimeout, 2, 'both EdgeTAM sessions are released after a tracker timeout');
+  timeoutGate.dispose();
   V.EdgeTAMCore.refreshGate = originalRefreshGate;
 
   p.dispose(); assert.strictEqual(base.disposed, true);

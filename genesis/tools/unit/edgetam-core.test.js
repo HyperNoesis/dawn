@@ -44,18 +44,47 @@ assert.strictEqual(C.gateIsSafe(1000, 900, -2), false, 'no object -> refuse'); a
 
 // refreshGate with a fake ort: wiring, tensor names, dims
 (async () => {
-  const calls = [];
-  const ort = { Tensor: class { constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; } } };
-  const enc = { run: async (f) => { calls.push(['enc', f.pixel_values.dims]); return { a: { dims: [1] }, b: { dims: [2] }, c: { dims: [3] } }; } };
+  const calls = [], disposed = { count: 0 };
+  const output = (data, dims) => ({ data, dims, dispose() { disposed.count++; } });
+  const ort = { Tensor: class {
+    constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; }
+    dispose() { disposed.count++; }
+  } };
+  const enc = { run: async (f) => {
+    calls.push(['enc', f.pixel_values.dims]);
+    return { a: output(null, [1]), b: output(null, [2]), c: output(null, [3]) };
+  } };
   const dec = { run: async (f) => {
     calls.push(['dec', Object.keys(f), f.input_boxes.dims, f.input_points.dims, f.input_labels.type]);
     const m = new Float32Array(3 * 65536).fill(-5); for (let i = 0; i < 65536; i++) m[65536 + i] = 3;  // mask #1 = everything
-    return { iou_scores: { data: [0.2, 0.9, 0.1] }, pred_masks: { data: m }, object_score_logits: { data: [4] } };
+    return {
+      iou_scores: output([0.2, 0.9, 0.1], [1, 1, 3]),
+      pred_masks: output(m, [1, 1, 3, 256, 256]),
+      object_score_logits: output([4], [1, 1, 1])
+    };
   } };
   const r = await C.refreshGate(ort, enc, dec, new Uint8ClampedArray(1024 * 1024 * 4), base, W, H);
   assert.deepStrictEqual(calls[0], ['enc', [1, 3, 1024, 1024]]);
   assert.deepStrictEqual(calls[1].slice(1), [['input_points', 'input_labels', 'input_boxes', 'image_embeddings.0', 'image_embeddings.1', 'image_embeddings.2'], [1, 1, 4], [1, 1, 1, 2], 'int64']);
   assert.strictEqual(r.iou, 0.9); assert.strictEqual(r.gate[0], 255); assert.strictEqual(r.obj, 4);
+  assert.strictEqual(disposed.count, 10, 'all four input tensors and six encoder/decoder output tensors are disposed after extraction');
   assert.strictEqual(await C.refreshGate(ort, enc, dec, new Uint8ClampedArray(4), new Uint8Array(W * H), W, H), null);
+
+  // A worker/session promise that never resolves must hit the core watchdog,
+  // release its owned input tensor, and not wait for the outer provider timeout.
+  const hungDisposed = { count: 0 };
+  const hungOrt = { Tensor: class { constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; }
+    dispose() { hungDisposed.count++; } } };
+  const hungEnc = { run: () => new Promise(() => {}) };
+  const hungDec = { run: async () => ({}) };
+  const hungStarted = Date.now();
+  await assert.rejects(
+    C.refreshGate(hungOrt, hungEnc, hungDec, new Uint8ClampedArray(1024 * 1024 * 4), base, W, H),
+    /EdgeTAM encoder timed out after/
+  );
+  const hungElapsed = Date.now() - hungStarted;
+  assert.ok(hungElapsed >= C.INFERENCE_TIMEOUT_MS - 100 && hungElapsed < C.INFERENCE_TIMEOUT_MS + 1000,
+    'EdgeTAM core watchdog is bounded (' + hungElapsed + ' ms)');
+  assert.strictEqual(hungDisposed.count, 1, 'owned input tensor is disposed when encoder inference times out');
   console.log('edgetam-core: all assertions passed');
 })().catch((e) => { console.error(e); process.exit(1); });

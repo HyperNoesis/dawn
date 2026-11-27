@@ -24,8 +24,16 @@
     ort.env.wasm.wasmPaths = local
       ? { mjs: base + stem + '.js', wasm: base + stem + '.wasm' }
       : base;
-    // Threads need cross-origin isolation (SharedArrayBuffer). Without it ORT falls back to 1 thread by itself; asking for more is harmless.
-    try { if (self.crossOriginIsolated) ort.env.wasm.numThreads = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1)); } catch (e) { /* ignore */ }
+    // Set an explicit effective thread count so runtime identity can describe
+    // the actual WASM execution configuration (rather than relying on ORT's
+    // implicit default when SharedArrayBuffer is unavailable).
+    let threads = 1;
+    try {
+      if (self.crossOriginIsolated) {
+        threads = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+      }
+    } catch (e) { /* retain the deterministic single-thread fallback */ }
+    ort.env.wasm.numThreads = threads;
     ort.env.wasm.proxy = false;
   }
 
@@ -42,7 +50,14 @@
           await window.VS.loadScript(t.url);
           if (typeof ort === 'undefined') throw new Error('runtime script loaded but ort is undefined');
           configure(ort, t.local, gpu);
+          const wasmStem = gpu ? 'ort-wasm-simd-threaded.asyncify' : 'ort-wasm-simd-threaded';
           window.VS.ortSource = t.local ? 'local' : 'cdn';
+          window.VS.ortBundle = Object.freeze({
+            source: window.VS.ortSource,
+            script: file,
+            wasmStem,
+            gpuRuntimeBuild: gpu
+          });
           return ort;
         } catch (e) { lastErr = e; }
       }

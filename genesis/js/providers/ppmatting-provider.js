@@ -51,7 +51,16 @@
       if (!V.TemporalMatte) await V.loadScript('js/providers/temporal-matte.js');
       if (!V.MatteRefine) { try { await V.loadScript('js/providers/matte-refine.js'); } catch (e) { /* optional */ } }
       if (!V.VideoGuard) { try { await V.loadScript('js/providers/video-guard.js'); } catch (e) { /* guard is optional: without it the provider behaves as before */ } }
-      const { bytes } = await V.ModelStore.load(this.modelId, { onProgress: (f, l) => { if (this.onProgress) this.onProgress(f, l); if (opts.onProgress) opts.onProgress(f, l); } });
+      const loaded = await V.ModelStore.load(this.modelId, { onProgress: (f, l) => { if (this.onProgress) this.onProgress(f, l); if (opts.onProgress) opts.onProgress(f, l); } });
+      const { bytes, entry, registryVersion } = loaded;
+      this._qualificationModelEntry = entry;
+      this._qualificationRegistryVersion = registryVersion;
+      this._qualificationModelSha256 = null;
+      try {
+        this._qualificationModelSha256 = await V.MatteQualificationIdentity.hashModelFiles(bytes);
+      } catch (error) {
+        this._qualificationModelHashError = String((error && error.message) || error);
+      }
       const file = Object.keys(bytes)[0], buf = bytes[file];
       const gpuWanted = typeof navigator !== 'undefined' && !!navigator.gpu && this._webgpuAllowed();
       const want = (opts.threads | 0) > 0 ? (opts.threads | 0) : (Base.threadsFor ? Base.threadsFor() : 1);
@@ -59,6 +68,7 @@
         bytes: (buf.byteOffset === 0 && buf.byteLength === buf.buffer.byteLength) ? buf.buffer : buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), gpu: gpuWanted
       }), want);
       this.usingWebGPU = !!r.gpu; this.initNote = r.note || ''; this._ready = true;
+      this._qualificationRuntime = { gpuRequested: gpuWanted, backend: this.usingWebGPU ? 'webgpu' : 'wasm', threads: Number(this.threads) || want };
       this.label = this.title + ' (beta, local, ' + (this.usingWebGPU ? 'WebGPU' : 'WASM' + (this.threads > 1 ? ' x' + this.threads : '')) + ')';
       this._mw = 0; this._mh = 0;
       this.tm = V.TemporalMatte.create();
@@ -123,6 +133,65 @@
       for (let i = 0, n = ow * oh; i < n; i++) { const o = i * 4; px[o] = 255; px[o + 1] = 255; px[o + 2] = 255; px[o + 3] = shown[i]; }
       this._outCtx.putImageData(this._outImageData, 0, 0);
       return { segmentationMask: this._emit() };
+    }
+
+    async getQualificationIdentity() {
+      if (!this._ready) throw new Error('PP-Matting provider is not initialized; runtime identity is unavailable.');
+      if (!this._qualificationModelSha256) throw new Error('PP-Matting model bytes could not be fingerprinted: ' + (this._qualificationModelHashError || 'SHA-256 unavailable'));
+      const Q = V.MatteQualificationIdentity;
+      if (!Q) throw new Error('Canonical matte qualification identity helper is unavailable.');
+      const runtime = this._qualificationRuntime || {};
+      const runtimeResources = runtime.gpuRequested
+        ? ['vendor/ort/ort.webgpu.min.js', 'vendor/ort/ort-wasm-simd-threaded.asyncify.js', 'vendor/ort/ort-wasm-simd-threaded.asyncify.wasm']
+        : ['vendor/ort/ort.min.js', 'vendor/ort/ort-wasm-simd-threaded.js', 'vendor/ort/ort-wasm-simd-threaded.wasm'];
+      return Q.create({
+        modelVersion: this.modelId + '@registry-' + String(this._qualificationRegistryVersion) + ':' +
+          String((this._qualificationModelEntry && this._qualificationModelEntry.title) || this.title),
+        modelSha256: this._qualificationModelSha256,
+        preprocessResources: [
+          'models/registry.json', 'js/providers/ppmatting-core.js', 'js/providers/ppmatting-worker.js',
+          'js/providers/modnet-provider.js', 'js/providers/roi-track.js'
+        ],
+        preprocessConfig: {
+          qualityLongEdge: this.longEdge,
+          roiEnabled: !!this.useRoi,
+          lowLightBoost: !!this.lowLightBoost,
+          inputContract: 'RGBA-to-RGB-NCHW-float32;mean=0.5;std=0.5;dimensions-multiple-of-32'
+        },
+        postprocessResources: [
+          'js/app.js', 'js/providers/ppmatting-provider.js', 'js/providers/temporal-matte.js',
+          'js/providers/video-guard.js', 'js/providers/matte-refine.js',
+          'js/providers/mask-clean.js', 'js/providers/mask-motion.js',
+          'js/providers/mask-refine.js', 'js/providers/segmentation-flight.js',
+          'js/providers/segmentation-generation.js', 'js/providers/gl-matte.js',
+          'js/providers/composition-engine.js', 'js/providers/render-provider.js',
+          'js/providers/gl-matte.js', 'js/render-core.js', 'js/render-worker.js',
+          'js/providers/modnet-provider.js'
+        ],
+        postprocessConfig: {
+          temporalMode: temporalMode(),
+          guardEnabled: !!this.guard,
+          guardPreference: guardOn(),
+          mainSubjectFilter: mainOn(),
+          roiEnabled: !!this.useRoi,
+          outputLongEdge: this.longEdge,
+          // This provider emits a fractional alpha matte regardless of the
+          // previously active engine. Fingerprint the compositor mode it
+          // requires, not a stale semantic-mask setting from the old provider.
+          studioMatte: Object.assign({}, V.currentMatteConfig || {}, { preserveAlpha: true, colourSnap: 0 })
+        },
+        runtime: {
+          name: 'onnxruntime-web-ppmatting',
+          backend: runtime.backend || (this.usingWebGPU ? 'webgpu' : 'wasm'),
+          resources: runtimeResources,
+          config: {
+            webgpuRequested: !!runtime.gpuRequested,
+            workerThreads: Number(runtime.threads) || 1,
+            wasmProxy: false,
+            initFallbackNote: String(this.initNote || '')
+          }
+        }
+      });
     }
 
     /** Camera restart / orientation change: forget the temporal state so an old matte can never ghost onto a new frame. */

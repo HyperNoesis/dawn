@@ -94,20 +94,39 @@
       const rgba = this._inCtx.getImageData(0, 0, 1024, 1024).data;
       const C = V.EdgeTAMCore;                                               // shared ImageNet preprocessing
       C.toPixelValues(rgba, 1024, this._px);
-      const out = await this.session.run({ [this._inName]: new ort.Tensor('float32', this._px, [1, 3, 1024, 1024]) });
-      const t = out[this._outName] || out[Object.keys(out)[0]];
-      const n = ow * oh;
-      let alpha = fit.dw === 1024 && fit.dh === 1024 ? resampleAlpha(t.data, 1024, ow, oh, looksLikeLogits(t.data), new Uint8Array(n)) : resampleAlphaRect(t.data, 1024, fit, ow, oh, looksLikeLogits(t.data), new Uint8Array(n));
-      if (this.temporal) { alpha = V.TemporalMask.fuse(this._fused && this._fused.length === n ? this._fused : null, alpha); this._fused = alpha; }
-      if (this._outCanvas.width !== ow || this._outCanvas.height !== oh) { this._outCanvas.width = ow; this._outCanvas.height = oh; this._img = null; }
-      if (!this._img) this._img = this._outCtx.createImageData(ow, oh);
-      const d = this._img.data;
-      for (let i = 0, j = 0; i < n; i++, j += 4) { d[j] = d[j + 1] = d[j + 2] = 255; d[j + 3] = alpha[i]; }
-      this._outCtx.putImageData(this._img, 0, 0);
-      return { segmentationMask: this._outCanvas };
+      const input = new ort.Tensor('float32', this._px, [1, 3, 1024, 1024]);
+      const owned = new Set([input]);
+      let out = null;
+      try {
+        out = await this.session.run({ [this._inName]: input });
+        if (out && typeof out === 'object') Object.keys(out).forEach((key) => {
+          if (out[key] && typeof out[key].dispose === 'function') owned.add(out[key]);
+        });
+        const t = out[this._outName] || out[Object.keys(out)[0]];
+        if (!t || !t.data || t.data.length < 1024 * 1024) throw new Error('BiRefNet returned an invalid output tensor');
+        const n = ow * oh, logits = looksLikeLogits(t.data);
+        let alpha = fit.dw === 1024 && fit.dh === 1024
+          ? resampleAlpha(t.data, 1024, ow, oh, logits, new Uint8Array(n))
+          : resampleAlphaRect(t.data, 1024, fit, ow, oh, logits, new Uint8Array(n));
+        if (this.temporal) { alpha = V.TemporalMask.fuse(this._fused && this._fused.length === n ? this._fused : null, alpha); this._fused = alpha; }
+        if (this._outCanvas.width !== ow || this._outCanvas.height !== oh) { this._outCanvas.width = ow; this._outCanvas.height = oh; this._img = null; }
+        if (!this._img) this._img = this._outCtx.createImageData(ow, oh);
+        const d = this._img.data;
+        for (let i = 0, j = 0; i < n; i++, j += 4) { d[j] = d[j + 1] = d[j + 2] = 255; d[j + 3] = alpha[i]; }
+        this._outCtx.putImageData(this._img, 0, 0);
+        return { segmentationMask: this._outCanvas };
+      } finally {
+        owned.forEach((tensor) => { try { tensor && tensor.dispose && tensor.dispose(); } catch (e) { /* release remaining tensors */ } });
+      }
     }
 
-    dispose() { try { if (this.session && this.session.release) this.session.release(); } catch (e) { /* ignore */ } this.session = null; this._px = null; this._fused = null; }
+    dispose() {
+      try {
+        const result = this.session && this.session.release && this.session.release();
+        if (result && typeof result.catch === 'function') result.catch(() => {});
+      } catch (e) { /* best-effort native session release */ }
+      this.session = null; this._px = null; this._fused = null;
+    }
   }
 
   BiRefNetSegmentationProvider.core = { resampleAlpha, resampleAlphaRect, fitRect, looksLikeLogits, toProb };

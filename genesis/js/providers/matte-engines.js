@@ -46,11 +46,9 @@
     });
   }
 
-  // First-run mode is Advanced Adaptive. MODNet is only the immediate safe
-  // bootstrap matte: app.js probes UltraMatte -> Hybrid -> PP-MattingV2 and
-  // promotes the strongest route that initializes and meets this device's
-  // measured frame-time budget. Weak devices keep the safe matte; no device is
-  // forced to run the heaviest model just to satisfy a default setting.
+  // First-run Automatic mode starts with the established local baseline.
+  // Experimental routes are not promoted until their exact model and processing
+  // versions have independent held-out human-video quality qualification.
   function defaultEngine() { return 'modnet'; }
 
   function isAutomaticDefault() {
@@ -283,7 +281,7 @@
     note.setAttribute('aria-live', 'polite');
 
     const explain = () => {
-      if (select.value === 'auto') return 'Advanced Adaptive starts immediately with a safe local matte, then tests Genesis UltraMatte (PP-MattingV2 + EdgeTAM + boundary tiles), Hybrid and PP-MattingV2. It promotes the strongest route this device can sustain and keeps a safe fallback if performance or startup conditions change.';
+      if (select.value === 'auto') return 'Automatic mode keeps the established local baseline until an exact model/preprocessing/postprocessing/runtime version has passed independent held-out human-video quality qualification. BETA routes remain available for explicit testing.';
       if (select.value === 'birefnet' && !(navigator.gpu)) return 'BiRefNet requires WebGPU. This browser may not be able to run it.';
       if (select.value === 'genesis-hybrid-tam') return 'Experimental. Runs PP-MattingV2, EdgeTAM subject gating and local boundary refinement. Quality and speed still require real-device validation.';
       if (select.value === 'genesis-hybrid') return 'Experimental. Uses PP-MattingV2 with local boundary refinement. Quality and speed still require real-device validation.';

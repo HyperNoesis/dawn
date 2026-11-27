@@ -25,9 +25,10 @@
   // ---- Model choice + one-time device speed test ----
   const MODNET_LOAD_TIMEOUT_MS = 45000;   // the model is bundled now; this only matters for the web version's first load
   const MODNET_MAX_MS = 100;              // baseline per-mask budget; runtime measurements decide promotion.
-  const MAX_ASYNC_MASK_MS = 150;          // cap async mask age to reduce stale edges during motion.
-  // v0.98 QUALITY FIRST (default on): the good model never gives way to the weak one. MODNet is the live engine at a 256 px floor; when a phone is slow the
-  // mask is refreshed less often (stride) instead. The weak MediaPipe engine is only used if MODNet cannot load at all. localStorage vs_quality_first = 0 restores the old ladder.
+  const MAX_ASYNC_MASK_MS = 150;          // per-mask latency budget used by adaptive route decisions; displayed-mask age is governed separately by MaskMotion.
+  // Automatic is device-profile-aware: constrained/mobile profiles start with the lightweight MediaPipe baseline and may probe MODNet when eligible;
+  // capable desktop profiles can start with MODNet. Experimental PP-MattingV2/Hybrid/UltraMatte routes remain manual BETA choices until exact-version
+  // held-out human-video qualification passes. The governor must not trade a qualified route for an unqualified one merely to improve timing.
   function qualityFirst() {   // v0.98: phones no longer start on MODNet (1.2 s/frame on a Mali-G52 = 2 FPS). Explicit '1'/'0' still wins; otherwise only desktops default to quality-first.
     try { const v = localStorage.getItem('vs_quality_first'); if (v === '1') return true; if (v === '0') return false; } catch (e) {}
     const ua = navigator.userAgent || '';
@@ -125,14 +126,31 @@
     const automatic = !!(matte && typeof matte.isAutomaticDefault === 'function' && matte.isAutomaticDefault());
     if ((livePref === 'auto' || automatic) && matte && (automatic || selected !== 'modnet')) {
       const visible = new Map((matte.visibleEngines() || []).map((item) => [item[0], item[1]]));
-      // Automatic mode first serves the safe live fallback, then benchmarks
-      // UltraMatte -> Hybrid -> PP-MattingV2 in the background. MODNet is added
-      // as a candidate only when the live fallback is the lighter MediaPipe
-      // route; do not benchmark the same MODNet instance twice on desktops.
+      // Automatic promotion is limited to routes with a registered qualification
+      // for the exact model/preprocessing/postprocessing/runtime identity. The
+      // experimental routes currently have no human-video qualification record.
+      // Explicit user selection remains available for deliberate BETA testing.
       const baseIsModnet = !!(segProvider && /MODNet/.test(segProvider.label || ''));
-      const keys = automatic
+      let keys = automatic
         ? ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2'].concat(baseIsModnet ? [] : ['modnet'])
         : [selected];
+      if (automatic) {
+        const gate = V.MatteQualityQualification;
+        const blocked = [];
+        keys = keys.filter((key) => {
+          if (key === 'modnet') return true; // established local baseline, not a new experimental promotion
+          const decision = gate
+            ? gate.registered(key)
+            : { eligible: false, reason: 'The quality qualification module is unavailable; automatic promotion is disabled.' };
+          if (!decision.eligible) blocked.push({ engine: key, code: decision.code, reason: decision.reason });
+          return !!decision.eligible;
+        });
+        V.matteAutomaticQualityStatus = {
+          eligible: keys.filter((key) => key !== 'modnet'),
+          blocked,
+          message: gate ? gate.automaticStatus().message : 'Automatic promotion is disabled because the quality qualification module is unavailable.'
+        };
+      }
       for (const key of keys) {
         if (key !== 'modnet' && !visible.has(key)) continue;
         const name = visible.get(key) || (key === 'modnet' ? 'MODNet' : key);
@@ -140,7 +158,8 @@
           name,
           key,
           prepare: () => matte.ensureEngine(key),
-          make: () => matte.createProvider(key)
+          make: () => matte.createProvider(key),
+          requiresQualification: automatic && key !== 'modnet'
         });
       }
       return list;
@@ -175,7 +194,13 @@
     upgrading = true;
     let cand = null;
     const results = {};
-    const stale = () => !running || sessionToken !== loopToken;
+    // Do not let a slow background benchmark overwrite a provider the user or
+    // governor selected while model loading / speed measurement was awaiting.
+    // The camera token alone is unchanged during an in-session provider swap.
+    const startingProvider = segProvider;
+    const startingGeneration = segProviderGeneration;
+    const stale = () => !running || sessionToken !== loopToken ||
+      segProvider !== startingProvider || segProviderGeneration !== startingGeneration;
     try {
       const cands = upgradeCandidates();
       for (let ci = 0; ci < cands.length; ci++) {
@@ -190,6 +215,19 @@
           cand.lowLightBoost = lowLightBoostEnabled;
           cand.onProgress = (p) => showBenchNote('Loading high-quality model: ' + Math.round(p * 100) + '%');
           await withTimeout(cand.initialize(quality), 45000, c.name + ' model initialization timed out after 45 seconds');
+          if (c.requiresQualification) {
+            // Check the expensive human-video evidence registry before benchmarking,
+            // but defer the exact runtime identity check until the final device rung
+            // is known. The resolution ladder changes preprocessing dimensions.
+            const gate = V.MatteQualityQualification;
+            const registration = gate ? gate.registered(c.key) : {
+              eligible: false,
+              reason: 'The quality qualification module is unavailable.'
+            };
+            if (!registration.eligible) {
+              throw new Error('Automatic quality qualification blocked ' + c.name + ': ' + registration.reason);
+            }
+          }
           if (V.MatteEngines && typeof V.MatteEngines.validateProvider === 'function') {
             V.MatteEngines.validateProvider(c.key, cand);
           }
@@ -247,6 +285,24 @@
           segLogPush('bench', { engine: c.key, ms: Math.round(ms), edge: usedEdge, budget: maxMs(), gpu: !!cand.usingWebGPU });
           if (stale()) { cand.dispose?.(); cand = null; return; }
           if (ms <= maxMs()) {
+            // Recompute identity after all mobile caps, resolution-ladder steps and
+            // any single-thread reinitialization. Qualification is for the exact
+            // active preprocessing/postprocessing/runtime configuration, not the
+            // candidate's pre-benchmark settings.
+            if (c.requiresQualification) {
+              cand.longEdge = usedEdge;
+              const gate = V.MatteQualityQualification;
+              const identity = cand && typeof cand.getQualificationIdentity === 'function'
+                ? await cand.getQualificationIdentity()
+                : (cand && cand.qualificationIdentity);
+              const qualification = gate ? gate.evaluate(c.key, identity) : {
+                eligible: false,
+                reason: 'The quality qualification module is unavailable.'
+              };
+              if (!qualification.eligible) {
+                throw new Error('Final device configuration failed quality qualification for ' + c.name + ': ' + qualification.reason);
+              }
+            }
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
@@ -260,6 +316,7 @@
             if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, fallbackReason);
             resetSegCache();
             rendererSend({ type: 'setMatte', state: {} });
+            pushMatte();
             updateStudioChrome();
             updateCostInfo();
             setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);
@@ -319,8 +376,7 @@
       // forever. The candidate is disposed by its caller after this timeout.
       const timeoutMs = Math.max(1500, Math.min(12000, maxMs() * 8));
       let timeoutHandle = null, sourceFrame = null;
-      try { sourceFrame = captureSegmentationFrame(els.video); }
-      catch (snapshotError) { sourceFrame = els.video; } // safe legacy fallback when canvas allocation is unavailable
+      sourceFrame = captureSegmentationFrame(els.video); // fail the candidate rather than benchmark a mutable live-video source
       const t0 = performance.now(); // match live timing: exclude snapshot setup, measure provider inference only
       // Candidate probes use the same immutable frame and per-provider flight
       // guard as foreground inference. A timeout must not destroy the frame or
@@ -693,6 +749,9 @@
   pushRealism();
   pushMask();
 
+  // The provider identity determines whether the compositor should preserve
+  // fractional model alpha or tighten a semantic segmentation mask.
+  let segProvider = null;
   // Sharp GPU matte (see js/providers/gl-matte.js). Falls back to the legacy
   // canvas edge path automatically if WebGL2 is unavailable.
   const matteState = { mode: 'gl', radius: 1, crisp: 0.5, despill: 0.6 };
@@ -705,21 +764,30 @@
   function pushMatte() {
     if (!(renderWorker || localCore)) return;
     const c = matteState.crisp;
-    rendererSend({ type: 'setMatte', state: {
+    const preserveAlpha = !(segProvider && window.VS.MediaPipeSegmentationProvider &&
+      segProvider instanceof window.VS.MediaPipeSegmentationProvider);
+    const configuredSnap = (function () { try { if (localStorage.getItem('vs_snap') === '0') return 0; } catch (e) {} const F = window.VS.Flags; return F ? F.get('colourSnap') : 0.8; })();
+    const state = {
       mode: matteState.mode,
       radius: matteState.radius,
       edgeLo: 0.15 + 0.30 * c,
       edgeHi: 0.85 - 0.30 * c,
+      preserveAlpha,
       despill: matteState.despill,
-      colourSnap: (function () { try { if (localStorage.getItem('vs_snap') === '0') return 0; } catch (e) {} const F = window.VS.Flags; return F ? F.get('colourSnap') : 0.8; })(),   // v0.89 colour-line edge correction; kill switches: localStorage vs_snap=0 (this device) or flags.json colourSnap (everyone, v0.90)
-    } });
+      // Colour-line snapping is a semantic-mask correction. Matting models
+      // already estimate alpha, so don't overwrite their fractional coverage.
+      colourSnap: preserveAlpha ? 0 : configuredSnap,
+    };
+    // Keep the exact live compositor settings beside the model-provider state
+    // so a qualification fingerprint covers the final alpha treatment too.
+    V.currentMatteConfig = Object.freeze(Object.assign({ profile: 'studio-gl-matte-v1', edgeProfile: 'auto', smoothBase: 0.45, smoothAdapt: 2.0, plateAssist: false }, state));
+    rendererSend({ type: 'setMatte', state });
   }
   pushMatte();
   if (window.VS.Flags) window.VS.Flags.ready.then(pushMatte);   // v0.90: re-send once flags.json has been read
   rendererSend({ type: 'matteQuery' });
 
   const envProvider = new window.VS.StaticEnvironmentProvider();
-  let segProvider = null;
 
   const compositionEngine = new window.VS.CompositionEngine();
   const captionsProvider = new window.VS.CaptionsProvider();
@@ -773,11 +841,14 @@
   let prevRender = null; // v0.46: promise of the render currently in flight
   let asyncSegBusy = false, asyncSegPromise = null, asyncSegLastAt = 0, asyncSegDone = 0, asyncSegMinGap = 150;
   let cachedMaskBitmap = null;     // last full-size mask, reused while async inference is in flight
+  let cachedMaskFramePacket = null, lastSegmentationFramePacket = null;
   const maskMotion = window.VS.MaskMotion ? new window.VS.MaskMotion.MaskMotion() : null;
   // Tracks timed-out inference jobs so snapshots remain valid until the underlying provider truly settles.
   const segmentationFlight = window.VS.SegmentationFlight.create();
   let segMsEma = 0;                // smoothed wall-clock cost of one segmentation call, ms
   let loopToken = 0;               // bumped on every start/stop: a superseded processLoop iteration exits instead of racing the new loop
+  let segProviderGeneration = 0;   // invalidates pending results whenever the active provider/cache is replaced
+  let segmentationFrameSequence = 0; // monotonic identity for immutable camera snapshots
   let perfBannerShown = false;     // true only while the degrade banner is showing a PERFORMANCE message (not camera-lost / crash)
   let perfBannerKey = '';
   let perfBannerHoldUntil = 0;
@@ -1182,9 +1253,9 @@
     // Phones (like a Redmi 14C) report WebGPU but are too slow for RVM in real time;
     // there the fast MediaPipe mask + the GPU sharp-edge stage gives better results.
     const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
-    // Model choice. AUTO = MODNet (Apache-2.0, real matting) if this device is fast
-    // enough (one-time speed test, remembered), otherwise MediaPipe (Apache-2.0, lightest).
-    // RVM is GPL-3.0, so it only runs if someone explicitly picks it (personal use).
+    // Model choice. Automatic uses the established device-profile baseline: MediaPipe on constrained/mobile devices and MODNet on
+    // capable desktop profiles. This is a safe bootstrap, not a human-quality certification; experimental matte routes require qualification.
+    // RVM is GPL-3.0 and is never an Automatic candidate.
     const VSNS = window.VS;
     // Wait for the optional engine router and its selected model dependencies.
     // A rapid Start tap must not race the dynamic loader and start on the base model.
@@ -1208,8 +1279,8 @@
     const pref = (els.modelSelect && els.modelSelect.value) || 'auto';
     const knownBench = readBench();
     let warmPromise = null;
-    // INSTANT START: Auto always starts on the light MediaPipe model (small, cached after first load)
-    // and upgrades to MODNet in the background. Only an explicit "MODNet" choice waits for it.
+    // INSTANT START: constrained/mobile Automatic profiles begin with MediaPipe; capable desktop profiles begin with MODNet.
+    // A lightweight baseline remains available while the optional model/router initializes; explicit engine choices are never silently rewritten.
     if (pref === 'rvm' && VSNS.RVMSegmentationProvider) {
       segProvider = new VSNS.RVMSegmentationProvider();
     } else if ((pref === 'modnet' || (pref === 'auto' && qualityFirst())) && VSNS.MODNetSegmentationProvider) {
@@ -1247,6 +1318,7 @@
       }
       updateStudioChrome();
       if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
+      pushMatte();
     } catch (err) {
       const edgeOnlyFailure = VSNS.MatteEngines && typeof VSNS.MatteEngines.hasUsableMatteFallback === 'function' &&
         VSNS.MatteEngines.hasUsableMatteFallback(matteChoice, segProvider);
@@ -1258,6 +1330,7 @@
           (segProvider.hy ? 'Genesis Hybrid' : 'the base matting provider') +
           ' without subject-gate cleanup. ' + (err && err.message ? err.message : err);
         if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, reason);
+        pushMatte();
         showBenchNote(reason);
       } else {
         if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(null, 'Selected engine initialisation failed: ' + (err && err.message ? err.message : err));
@@ -1277,6 +1350,7 @@
           );
           updateStudioChrome();
           if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, 'Requested engine failed; using MediaPipe fallback: ' + (err && err.message ? err.message : err));
+          pushMatte();
           showBenchNote('The selected engine could not start. MediaPipe is active instead. Reason: ' + (err && err.message ? err.message : err));
         } catch (fallbackErr) {
           modelFailedKeepCamera(fallbackErr.message);
@@ -1312,6 +1386,10 @@
     upgradeRetried = false; ladderRetries = 0;
     let tryModnet = true; try { tryModnet = localStorage.getItem('vs_try_modnet') !== '0'; } catch (e) {}   // Prompt 1: default ON; the bench (<=70 ms/mask) and the ladder keep weak phones on the light model
     const upCands = upgradeCandidates();
+    const qualityStatus = window.VS && window.VS.matteAutomaticQualityStatus;
+    if (tryModnet && pref === 'auto' && qualityStatus && qualityStatus.blocked && qualityStatus.blocked.length) {
+      showBenchNote(qualityStatus.message);
+    }
     if (tryModnet && pref === 'auto' && upCands.length && canProbeAdaptiveUpgrade(segProvider) &&
         !benchSaysSlow(knownBench, upCands)) {
       backgroundUpgrade(quality, loopToken);
@@ -1379,11 +1457,31 @@
   });
 
   function resetSegCache() {
+    // Results started against a previous cache/provider generation are obsolete,
+    // even when the camera session itself has not changed.
+    segProviderGeneration++;
     if (cachedMaskBitmap) { cachedMaskBitmap.close(); cachedMaskBitmap = null; }
+    cachedMaskFramePacket = null;
+    lastSegmentationFramePacket = null;
+    // Detach an old async job; its own finally block may not clear a newer job.
+    asyncSegBusy = false;
+    asyncSegPromise = null;
     if (maskMotion) maskMotion.reset();
     strideTick = 0;
     segMsEma = 0;
   }
+
+  window.VS.getSegmentationFrameStatus = function () {
+    const packet = cachedMaskFramePacket || lastSegmentationFramePacket;
+    if (!packet) return null;
+    const motion = maskMotion ? maskMotion.getMetrics() : null;
+    return Object.assign({}, packet, {
+      frameAgeMs: Math.max(0, Math.round(performance.now() - packet.capturedAtMs)),
+      maskAgeMs: motion ? motion.ageMs : null,
+      maskStatus: motion ? motion.status : 'direct',
+      currentProviderGeneration: segProviderGeneration
+    });
+  };
 
   let pipeFailCount = 0;
 
@@ -1704,6 +1802,8 @@
       coveragePct: cov == null ? null : Math.round(cov * 1000) / 10,
       maskSize: lastMaskSize,
       maskMotion: maskMotion ? (maskMotionEnabled() ? maskMotion.getMetrics() : { status: 'disabled' }) : null,
+      frameIdentity: window.VS.getSegmentationFrameStatus ? window.VS.getSegmentationFrameStatus() : null,
+      automaticQualityStatus: window.VS.matteAutomaticQualityStatus || null,
       segMs: segMsEma ? Math.round(segMsEma * 10) / 10 : null,
       renderMs: lastRenderMs,
       fps: running ? recentFps : null,
@@ -1797,28 +1897,70 @@
   };
   window.VS.pairReset = function () { pairLog.length = 0; };
 
+  let segmentationFramePool = null;
+  function getSegmentationFramePool() {
+    if (segmentationFramePool) return segmentationFramePool;
+    const api = window.VS && window.VS.SegmentationFramePool;
+    if (!api || typeof api.create !== 'function') throw new Error('Segmentation frame pool is unavailable');
+    segmentationFramePool = api.create({ maxFree: 1, maxPixels: 1920 * 1080 });
+    return segmentationFramePool;
+  }
+
   function captureSegmentationFrame(video) {
     const width = video && video.videoWidth, height = video && video.videoHeight;
     if (!(width > 0 && height > 0)) throw new Error('Camera frame has no dimensions');
-    const frame = document.createElement('canvas');
-    frame.width = width; frame.height = height;
-    const ctx = frame.getContext('2d');
-    if (!ctx) throw new Error('Could not create a camera-frame snapshot');
-    ctx.drawImage(video, 0, 0, width, height);
-    // MediaPipe accepts canvas ImageSources. Expose the video dimensions for
-    // the existing ONNX provider contract without changing the underlying frame.
-    Object.defineProperties(frame, {
-      videoWidth: { configurable: true, value: width },
-      videoHeight: { configurable: true, value: height },
-      // Providers may safely reuse this per-inference immutable source instead
-      // of copying the entire camera frame into another scratch canvas.
-      __vsSegmentationFrame: { configurable: true, value: true }
-    });
-    return frame;
+    const pool = getSegmentationFramePool();
+    const frame = pool.acquire(width, height);
+    try {
+      const ctx = frame.getContext('2d');
+      if (!ctx) throw new Error('Could not create a camera-frame snapshot');
+      ctx.drawImage(video, 0, 0, width, height);
+
+      const capturedAtMs = performance.now();
+      const frameId = ++segmentationFrameSequence;
+      let sourceVideoId = '', sourceStreamId = '';
+      try {
+        const tracks = stream && typeof stream.getVideoTracks === 'function' ? stream.getVideoTracks() : [];
+        sourceVideoId = tracks[0] && tracks[0].id ? String(tracks[0].id) : '';
+        sourceStreamId = stream && stream.id ? String(stream.id) : '';
+      } catch (e) { /* metadata is diagnostic; the immutable pixels remain usable */ }
+      let orientationDegrees = null;
+      try {
+        if (typeof screen !== 'undefined' && screen.orientation && Number.isFinite(screen.orientation.angle)) {
+          orientationDegrees = screen.orientation.angle;
+        } else if (typeof window.orientation === 'number') orientationDegrees = window.orientation;
+      } catch (e) { /* orientation is optional on older browsers */ }
+      const packet = Object.freeze({
+        frameId, sourceTimestampMs: capturedAtMs, capturedAtMs, width, height,
+        orientationDegrees, sourceVideoId, sourceStreamId,
+        providerGeneration: segProviderGeneration
+      });
+
+      // The packet is immutable; the property itself is replaceable only after
+      // every lease for this canvas has been released and the canvas is reused.
+      Object.defineProperties(frame, {
+        videoWidth: { configurable: true, value: width },
+        videoHeight: { configurable: true, value: height },
+        __vsSegmentationFrame: { configurable: true, value: true },
+        __vsSegmentationFramePacket: { configurable: true, enumerable: false, writable: false, value: packet }
+      });
+      return frame;
+    } catch (error) {
+      releaseSegmentationFrameNow(frame);
+      throw error;
+    }
   }
 
   function releaseSegmentationFrameNow(frame) {
-    try { frame.width = 1; frame.height = 1; } catch (e) { /* best-effort release */ }
+    try {
+      delete frame.videoWidth;
+      delete frame.videoHeight;
+      delete frame.__vsSegmentationFrame;
+      delete frame.__vsSegmentationFramePacket;
+      getSegmentationFramePool().release(frame);
+    } catch (e) {
+      try { frame.width = 1; frame.height = 1; } catch (ignored) { /* best effort release */ }
+    }
   }
 
   function releaseSegmentationFrame(frame) {
@@ -1913,30 +2055,61 @@
   }
 
   function startAsyncSeg(token) {
-    // A timed-out provider remains quarantined until its underlying promise
-    // settles or the governor swaps it out; do not enqueue work on it.
-    if (segmentationFlight.isBusy(segProvider)) return;
+    // Bind each job to the provider instance and generation that received it.
+    // A camera token alone does not detect a provider swap during inference.
+    const provider = segProvider;
+    const generation = segProviderGeneration;
+    if (!provider || segmentationFlight.isBusy(provider)) return;
+    const generationGuard = window.VS.SegmentationGeneration;
+    const jobStamp = generationGuard.stamp(provider, token, generation);
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
+    const stale = () => !generationGuard.matches(jobStamp, {
+      provider: segProvider, sessionToken: loopToken, providerGeneration: segProviderGeneration
+    });
     let sourceFrame = null;
     try { sourceFrame = captureSegmentationFrame(els.video); }
-    catch (e) { if (maskMotion) maskMotion.reset(); }
-    asyncSegPromise = Promise.resolve().then(() => segWithWatchdog(segProvider, sourceFrame || els.video)).then(async (r) => {
-      if (token !== loopToken || !r || !r.segmentationMask) return;
+    catch (e) {
+      if (maskMotion) maskMotion.reset();
+      // The old matte belongs to a prior frame and cannot be safely aligned
+      // when a fresh immutable source frame could not be captured. Discard it
+      // and render the camera through until a new valid inference succeeds.
+      const staleMask = cachedMaskBitmap;
+      cachedMaskBitmap = null;
+      cachedMaskFramePacket = null;
+      lastSegmentationFramePacket = null;
+      try { if (staleMask) staleMask.close(); } catch (closeError) { /* already released */ }
+      asyncSegBusy = false;
+      asyncSegLastAt = performance.now();
+      segLogPush('frame-snapshot-failed', { stage: 'async-inference', reason: String((e && e.message) || e) });
+      return; // never infer against the mutable live video or reuse an unpaired matte
+    }
+    const packet = sourceFrame.__vsSegmentationFramePacket;
+    let job;
+    job = Promise.resolve().then(() => segWithWatchdog(provider, sourceFrame)).then(async (r) => {
+      if (stale() || !r || !r.segmentationMask) return;
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
-      try { publishSegmentationPreview(sourceFrame || els.video, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
+      try { publishSegmentationPreview(sourceFrame, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       const fresh = await createImageBitmap(r.segmentationMask);
-      if (token !== loopToken) { fresh.close(); return; }
+      if (stale()) { fresh.close(); return; }
       seedMaskMotion(fresh, sourceFrame, t0);
-      const old = cachedMaskBitmap; cachedMaskBitmap = fresh; asyncSegDone++;
+      const old = cachedMaskBitmap;
+      cachedMaskBitmap = fresh;
+      cachedMaskFramePacket = packet;
+      lastSegmentationFramePacket = packet;
+      asyncSegDone++;
       if (old) setTimeout(() => { try { old.close(); } catch (e) {} }, 400);
       maskWatchdog();
     }).catch(() => {}).finally(() => {
       releaseSegmentationFrame(sourceFrame);
-      asyncSegBusy = false;
+      if (asyncSegPromise === job) {
+        asyncSegBusy = false;
+        asyncSegPromise = null;
+      }
     });
+    asyncSegPromise = job;
   }
 
   async function processLoop() {
@@ -1944,6 +2117,14 @@
     if (checkPaused) { scheduleNext(); return; }   // Studio Check owns the CPU/GPU; a background model benchmark must never freeze the camera/render loop
     if (!renderHealthy) return; // worker crashed fatally — stop hammering a dead worker; see 'fatal' handler above for why this can't self-recover
     const myLoop = loopToken;
+    // Bind the entire render tick—not only inference—to the provider generation
+    // that owned its source snapshot. A provider swap during any later await
+    // must discard this frame instead of compositing a copied old-generation mask.
+    const frameGenerationGuard = window.VS.SegmentationGeneration;
+    const frameStamp = frameGenerationGuard.stamp(segProvider, myLoop, segProviderGeneration);
+    const frameIsCurrent = () => frameGenerationGuard.matches(frameStamp, {
+      provider: segProvider, sessionToken: loopToken, providerGeneration: segProviderGeneration
+    });
     const frameStart = performance.now();
     // v0.13 Battery saver: cap the loop rate. Skipped ticks cost almost nothing.
     if (saverOn && lastLoopAt && frameStart - lastLoopAt < window.VS.PerfProfile.SAVER_FRAME_MS - 4) { requestAnimationFrame(processLoop); return; }
@@ -1959,15 +2140,30 @@
     const crop = compositionEngine.computeFrame(videoNativeW || w, videoNativeH || h, Math.max(w, h));
     const useAsync = asyncSegOn() && !noPersonMode;
     const initialSegAt = performance.now();
-    let initialSegFrame = null;
-    if (useAsync && !cachedMaskBitmap) {
+    let initialSegFrame = null, initialSnapshotError = null;
+    // Every inference route (synchronous or asynchronous) receives an owned
+    // immutable frame snapshot. If allocation fails, render a safe pass-through
+    // frame rather than reading a moving <video> element asynchronously.
+    if (!useAsync || !cachedMaskBitmap) {
       try { initialSegFrame = captureSegmentationFrame(els.video); }
-      catch (e) { /* preserve the legacy live-video path if snapshotting is unavailable */ }
+      catch (e) {
+        initialSnapshotError = e;
+        if (maskMotion) maskMotion.reset();
+        segLogPush('frame-snapshot-failed', { stage: 'render-loop', reason: String((e && e.message) || e) });
+      }
     }
     let inferenceSnapshot = initialSegFrame;
     const sampleFrame = camFrames();
     const personSource = initialSegFrame || els.video;
-    const personP = createImageBitmap(personSource, crop.sx, crop.sy, crop.sw, crop.sh, { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' });
+    // The person-image decode is a second consumer of the immutable frame.
+    // Give it its own lease so an early error/return cannot recycle the canvas
+    // while createImageBitmap is still reading it.
+    const personP = initialSegFrame
+      ? segmentationFlight.run({}, initialSegFrame, () =>
+          createImageBitmap(personSource, crop.sx, crop.sy, crop.sw, crop.sh,
+            { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' }))
+      : createImageBitmap(personSource, crop.sx, crop.sy, crop.sw, crop.sh,
+          { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' });
     personP.catch(() => {});                                   // a failure is handled where it is awaited below; never an unhandled rejection
     const dropPerson = () => {
       personP.then((b) => b.close()).catch(() => {});
@@ -1989,33 +2185,62 @@
     // matte aligned briefly; after its age/confidence limits, composition
     // passes through the live camera instead of freezing an old preview.
     if (benchBusy && cachedMaskBitmap) runInference = false;
+    if (runInference && !inferenceSnapshot && initialSnapshotError) runInference = false;
     if (runInference && asyncSegBusy && asyncSegPromise) { try { await asyncSegPromise; } catch (e) {} }   // first mask / after a cache reset: never run two inferences at once
+    // The source snapshot may have been captured before the await above. If a
+    // provider/cache reset occurred meanwhile, its frame packet is obsolete.
+    if (!frameIsCurrent()) {
+      dropPerson();
+      scheduleNext();
+      return;
+    }
 
-    let results = null, maskFrame = null;
+    let results = null, maskFrame = null, resultFramePacket = null;
+    let inferenceProvider = null, inferenceGeneration = null;
+    let inferenceIsCurrent = () => true;
     if (runInference) {
-      if (segmentationFlight.isBusy(segProvider)) {
-        // The previous call exceeded its watchdog. Keep the last rendered
-        // frame rather than corrupting a still-in-use snapshot or overlapping
-        // stateful temporal/tile inference on the same provider.
+      inferenceProvider = segProvider;
+      inferenceGeneration = segProviderGeneration;
+      const generationGuard = window.VS.SegmentationGeneration;
+      const inferenceStamp = generationGuard.stamp(inferenceProvider, myLoop, inferenceGeneration);
+      inferenceIsCurrent = () => generationGuard.matches(inferenceStamp, {
+        provider: segProvider, sessionToken: loopToken, providerGeneration: segProviderGeneration
+      });
+      if (segmentationFlight.isBusy(inferenceProvider)) {
         dropPerson();
         scheduleNext();
         return;
       }
+      const inferenceFrame = inferenceSnapshot;
+      if (!inferenceFrame) {
+        dropPerson();
+        scheduleNext();
+        return;
+      }
+      resultFramePacket = inferenceFrame.__vsSegmentationFramePacket || null;
       const segStart = performance.now(); maskFrame = camFrames();
       try {
-        results = await segWithWatchdog(segProvider, inferenceSnapshot || els.video);
+        results = await segWithWatchdog(inferenceProvider, inferenceFrame);
       } catch (err) {
         dropPerson();
-        if (myLoop !== loopToken) return; // stopped/restarted while waiting — whoever restarted owns the loop now
+        if (!inferenceIsCurrent()) {
+          scheduleNext();
+          return;
+        }
         els.statsEl.textContent = 'Segmentation error: ' + err.message;
         scheduleNext();
         return;
       }
-      if (myLoop !== loopToken) { dropPerson(); return; }
+      if (!inferenceIsCurrent()) {
+        dropPerson();
+        scheduleNext();
+        return;
+      }
+      lastSegmentationFramePacket = resultFramePacket;
       const segMs = performance.now() - segStart;
       if (results && results.segmentationMask) {
         lastMaskSize = (results.segmentationMask.width || '?') + 'x' + (results.segmentationMask.height || '?');
-        try { publishSegmentationPreview(inferenceSnapshot || els.video, results.segmentationMask); } catch (previewError) { /* diagnostics only */ }
+        try { publishSegmentationPreview(inferenceFrame, results.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       }
       segMsEma = segMsEma ? segMsEma * 0.8 + segMs * 0.2 : segMs;
       maskWatchdog();
@@ -2031,9 +2256,13 @@
       if (results) {
         try {
           const fresh = await createImageBitmap(results.segmentationMask);
-          if (myLoop !== loopToken) { fresh.close(); dropPerson(); return; }
+          if (!inferenceIsCurrent()) {
+            fresh.close(); dropPerson(); scheduleNext(); return;
+          }
           if (cachedMaskBitmap) cachedMaskBitmap.close();
           cachedMaskBitmap = fresh;
+          cachedMaskFramePacket = resultFramePacket;
+          lastSegmentationFramePacket = resultFramePacket;
           seedMaskMotion(fresh, inferenceSnapshot, initialSegAt);
           releaseSegmentationFrame(inferenceSnapshot);
           inferenceSnapshot = initialSegFrame = null;
@@ -2066,8 +2295,11 @@
       }
       if (!maskSource) { dropPerson(); scheduleNext(); return; }
     } else {
-      maskSource = results.segmentationMask;
+      maskSource = results && results.segmentationMask ? results.segmentationMask : passCanvas;
     }
+    // A missing or failed inference has no trustworthy matte. Pass the camera
+    // through; never retain a stale silhouette or fabricate a segmentation.
+    if (!maskSource) maskSource = passCanvas;
 
     // The crop (zoom/pan) AND the resize to final output dimensions both
     // happen right here, inside createImageBitmap — genuinely off the main
@@ -2103,6 +2335,13 @@
           ? createImageBitmap(passCanvas, { resizeWidth: 64, resizeHeight: 36 })   // fully opaque mask = show the camera as is
           : createImageBitmap(maskSource, mcrop.sx, mcrop.sy, mcrop.sw, mcrop.sh, { resizeWidth: Math.min(w, 640), resizeHeight: Math.max(1, Math.round(h * Math.min(w, 640) / w)), resizeQuality: 'medium' }),
       ]);
+      if (!frameIsCurrent()) {
+        personBitmap.close();
+        maskBitmap.close();
+        dropPerson();
+        scheduleNext();
+        return;
+      }
       pipeFailCount = 0;
       stg.bmp = ema(stg.bmp, performance.now() - tB0);
     } catch (err) {
@@ -2112,7 +2351,12 @@
       scheduleNext();
       return;
     }
-    if (myLoop !== loopToken) { personBitmap.close(); maskBitmap.close(); return; }
+    if (myLoop !== loopToken || !frameIsCurrent()) {
+      personBitmap.close();
+      maskBitmap.close();
+      dropPerson();
+      return;
+    }
 
     // Arm the frame-done listener BEFORE dispatching: in localCore mode,
     // dispatch() resolves this synchronously, in the same call — if the
@@ -2278,7 +2522,7 @@
       if (!running || token !== loopToken) { cand.dispose?.(); return; }
       const old = segProvider; segProvider = cand; cand = null;
       if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, 'Performance governor switched to MediaPipe because the selected matting engine could not sustain the target frame rate.');
-      resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
+      resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); pushMatte(); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);
       segLogPush('light-active'); showBenchNote('Light model active: this device could not hold a steady frame rate with the high-quality model.');
       // A short dip (camera exposure change, a notification, a hot moment) must not cost the whole session its good cut-out: look again after 90 s, at most twice per camera session.
@@ -2350,39 +2594,51 @@
     if (/MODNet/.test(l)) return 'modnet';
     return null;
   }
-  function govChainFor(engine) {
+  function govChainFor(engine, currentEdge) {
     const sizes = [512, 448, 384, 320, 256, 224], ppSizes = [512, 448, 384, 320], ch = [];
-    // Adaptive degradation order preserves the best remaining segmentation
-    // route at each measured step. UltraMatte sheds EdgeTAM first, then sparse
-    // tile refinement, then the PP model itself, and only then moves to MODNet.
-    // Simpler candidates enter at 320 px: this is the smallest normal PP-trained
-    // inference tier and avoids jumping to an unnecessarily expensive 512 px
-    // model merely because the engine boundary was crossed.
+    const gate = window.VS && window.VS.MatteQualityQualification;
+    const automatic = !!(window.VS && window.VS.MatteEngines &&
+      window.VS.MatteEngines.isAutomaticDefault && window.VS.MatteEngines.isAutomaticDefault());
+    // A qualification identity includes the exact input/output resolution. An
+    // automatically promoted experimental route must therefore stay on the
+    // resolution that was actually qualified. Its governor may move to another
+    // registered route (which is checked again on initialization), or to the
+    // established MODNet baseline, but may not silently resize the same model
+    // into an unqualified pipeline. Explicit BETA selections retain their
+    // user-requested adaptive resolution ladder.
+    const activeExperimentalEdges = automatic && engine !== 'modnet'
+      ? [Math.max(1, Number(currentEdge) || 320)]
+      : ppSizes;
+    const registered = (id) => !!(gate && typeof gate.registered === 'function' && gate.registered(id).eligible);
+    // The active manually-selected BETA route may adapt its own resolution.
+    // Cross-engine degradation is allowed only to a route with a registered
+    // human-video quality decision; the established MODNet baseline remains
+    // the explicit safe fallback. Runtime identity is checked again on swap.
     if (engine === 'genesis-hybrid-tam') {
-      ch.push({ engine: 'genesis-hybrid-tam', edges: ppSizes });
-      ch.push({ engine: 'genesis-hybrid', edges: [320] });
-      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      ch.push({ engine: 'genesis-hybrid-tam', edges: activeExperimentalEdges });
+      if (registered('genesis-hybrid')) ch.push({ engine: 'genesis-hybrid', edges: [320] });
+      if (registered('ppmatting-v2')) ch.push({ engine: 'ppmatting-v2', edges: [320] });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'genesis-hybrid') {
-      ch.push({ engine: 'genesis-hybrid', edges: ppSizes });
-      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      ch.push({ engine: 'genesis-hybrid', edges: activeExperimentalEdges });
+      if (registered('ppmatting-v2')) ch.push({ engine: 'ppmatting-v2', edges: [320] });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'ppmatting-v2') {
-      ch.push({ engine: 'ppmatting-v2', edges: ppSizes });
+      ch.push({ engine: 'ppmatting-v2', edges: activeExperimentalEdges });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'edgetam') {
-      ch.push({ engine: 'edgetam', edges: ppSizes });
+      ch.push({ engine: 'edgetam', edges: activeExperimentalEdges });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'ppmatting-hrnet') {
-      ch.push({ engine: 'ppmatting-hrnet', edges: ppSizes });
+      ch.push({ engine: 'ppmatting-hrnet', edges: activeExperimentalEdges });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
@@ -2428,9 +2684,22 @@
     // The provider changed outside the governor (startup upgrade, the person picked another engine): start fresh from what is really running.
     try {   // begin where this device last held steady (kept 6 h), so the first seconds are not a slideshow
       const sv = JSON.parse(localStorage.getItem('vs_gov_last') || 'null');
-      if (sv && sv.engine === eng && sv.edge > 0 && sv.edge < (segProvider.longEdge | 0) && Date.now() - sv.at < 6 * 3600 * 1000) { segProvider.longEdge = sv.edge; resetSegCache(); }
+      const automatic = !!(window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault &&
+        window.VS.MatteEngines.isAutomaticDefault());
+      // A saved governor rung is only a performance preference, not quality
+      // evidence. Never let it rewrite the exact resolution of an automatically
+      // promoted experimental provider after that provider passed identity checks.
+      const policy = window.VS.MatteEnginePolicy;
+      const exactQualifiedRoute = policy && typeof policy.canRestoreSavedGovernorRung === 'function'
+        ? !policy.canRestoreSavedGovernorRung(eng, automatic)
+        : (automatic && eng !== 'modnet');
+      if (!exactQualifiedRoute && sv && sv.engine === eng && sv.edge > 0 &&
+          sv.edge < (segProvider.longEdge | 0) && Date.now() - sv.at < 6 * 3600 * 1000) {
+        segProvider.longEdge = sv.edge;
+        resetSegCache();
+      }
     } catch (e) {}
-    governor = G.create({ chain: govChainFor(eng), startEngine: eng, startEdge: segProvider.longEdge | 0, now: performance.now() });
+    governor = G.create({ chain: govChainFor(eng, segProvider.longEdge | 0), startEngine: eng, startEdge: segProvider.longEdge | 0, now: performance.now() });
     govProvider = segProvider; govLight = false;
     return governor;
   }
@@ -2451,7 +2720,7 @@
     // When the emergency light model is active, recovery must retry the
     // originally selected advanced engine—not an unrelated plain MODNet tier.
     const startEdge = /^(ppmatting|genesis-hybrid)/.test(preferred) ? 320 : 224;
-    governor = G.create({ chain: govChainFor(preferred), startEngine: preferred, startEdge, now: performance.now() });
+    governor = G.create({ chain: govChainFor(preferred, startEdge), startEngine: preferred, startEdge, now: performance.now() });
     governor.applied({ emergency: true, rungIndex: -1, type: 'emergency' }, performance.now());
     govProvider = segProvider; govLight = true;
   }
@@ -2467,7 +2736,9 @@
   async function govSwap(a, gv) {
     if (ladderSwapping) return;
     ladderSwapping = true;
-    const token = loopToken; let cand = null;
+    const token = loopToken;
+    const previousEngine = govEngineId(segProvider);
+    let cand = null;
     try {
       if (a.emergency) {
         showBenchNote('Still slow even at the smallest matting size. Using the light model until this device has room again.');
@@ -2479,10 +2750,29 @@
       }
       // Prewarm OFF the frame path: the old engine keeps drawing while the new one loads, then the swap is one frame.
       let to; await Promise.race([cand.initialize(runningQuality), new Promise((_, rej) => { to = setTimeout(() => rej(new Error('timed out loading ' + a.engine)), 45000); })]).finally(() => clearTimeout(to));
+      if (!a.emergency) cand.longEdge = a.edge;
+      const mattePolicy = window.VS.MatteEnginePolicy;
+      const automaticMode = !!(window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault &&
+        window.VS.MatteEngines.isAutomaticDefault());
+      const requiresRuntimeQualification = mattePolicy && typeof mattePolicy.requiresRuntimeQualification === 'function'
+        ? mattePolicy.requiresRuntimeQualification(a.engine, previousEngine, automaticMode)
+        : (a.engine !== 'modnet' && a.engine !== 'mediapipe' && (a.engine !== previousEngine || automaticMode));
+      if (!a.emergency && requiresRuntimeQualification) {
+        const gate = window.VS.MatteQualityQualification;
+        const identity = cand && typeof cand.getQualificationIdentity === 'function'
+          ? await cand.getQualificationIdentity()
+          : (cand && cand.qualificationIdentity);
+        const qualification = gate ? gate.evaluate(a.engine, identity) : {
+          eligible: false,
+          reason: 'The quality qualification module is unavailable.'
+        };
+        if (!qualification.eligible) {
+          throw new Error('Governor engine switch blocked by quality qualification: ' + qualification.reason);
+        }
+      }
       if (!a.emergency && window.VS.MatteEngines && typeof window.VS.MatteEngines.validateProvider === 'function') {
         window.VS.MatteEngines.validateProvider(a.engine, cand);
       }
-      if (!a.emergency) cand.longEdge = a.edge;
       if (!running || token !== loopToken) { cand.dispose?.(); cand = null; return; }
       const old = segProvider; segProvider = cand; cand = null;
       govProvider = segProvider; govLight = !!a.emergency;
@@ -2494,7 +2784,7 @@
           ? 'Performance adaptation moved from ' + selectedEngine + ' to ' + activeEngine + ' to protect preview responsiveness.'
           : null);
       if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, governorReason);
-      resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
+      resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); pushMatte(); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);   // disposing a hung worker terminates it
       gv.applied(a, performance.now()); govSave(a);
       segLogPush('gov-applied', { type: a.type, engine: a.engine, edge: a.edge });
@@ -3297,13 +3587,39 @@
   // ============================================================
   // Tool rail tab switching
   // ============================================================
-  els.toolRail.querySelectorAll('.tool-tab').forEach(tab => {
+  const studioToolTabs = Array.from(els.toolRail.querySelectorAll('.tool-tab'));
+  // ARIA tabs use a roving tab stop: only the selected tab participates in the
+  // page Tab sequence; arrow keys move within the tablist.
+  const initialStudioTab = studioToolTabs.find(t => t.getAttribute('aria-selected') === 'true') || studioToolTabs[0];
+  studioToolTabs.forEach(t => { t.tabIndex = t === initialStudioTab ? 0 : -1; });
+  studioToolTabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      els.toolRail.querySelectorAll('.tool-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+      const panel = document.getElementById(tab.dataset.target);
+      if (!panel) return;
+      studioToolTabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); t.tabIndex = -1; });
       tab.classList.add('active');
       tab.setAttribute('aria-selected', 'true');
+      tab.tabIndex = 0;
       document.querySelectorAll('.control-section').forEach(sec => sec.classList.remove('active'));
-      document.getElementById(tab.dataset.target).classList.add('active');
+      panel.classList.add('active');
+    });
+    // The rail is a vertical ARIA tablist. Arrow keys move between visible
+    // tabs; Home/End jump to the first/last visible tab. Native Tab still
+    // leaves the tablist and enters the active tabpanel.
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+      const visible = studioToolTabs.filter(t => !t.hidden && t.getClientRects().length > 0);
+      const current = visible.indexOf(tab);
+      if (current < 0 || !visible.length) return;
+      let next = current;
+      if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = visible.length - 1;
+      else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (current + 1) % visible.length;
+      else next = (current - 1 + visible.length) % visible.length;
+      event.preventDefault();
+      const target = visible[next];
+      target.focus();
+      target.click();
     });
   });
 

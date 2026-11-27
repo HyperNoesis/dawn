@@ -2,11 +2,11 @@
 
 ## Changed
 
-- **Advanced Adaptive is the first-run default.** It starts immediately with the existing device-appropriate local live model (MODNet on quality-first desktop routes; MediaPipe remains the lightweight mobile/emergency baseline). The user-facing picker identifies this as `Advanced Adaptive (default)`; MODNet is labelled as a safe fallback, not the product's architecture default.
-- Automatic mode then probes advanced local routes in the background in quality order: Genesis UltraMatte (PP-MattingV2 + EdgeTAM + boundary tiles), Genesis Hybrid, and PP-MattingV2. A candidate is promoted only if its measured mask time fits the live budget. A route that is too slow or fails to initialise is skipped, not treated as success.
+- **Automatic is baseline-first.** It starts from the established local route (MediaPipe on constrained/mobile profiles; MODNet where the active device/profile supports it). It does not automatically promote PP-MattingV2, Genesis Hybrid or Genesis UltraMatte while their exact model/preprocess/postprocess/runtime versions lack independent held-out human-video qualification.
+- PP-MattingV2, Genesis Hybrid and UltraMatte remain explicitly selectable BETA/test routes. A route becomes eligible for Automatic only after the quality registry records rights-cleared held-out participant/source-video splits, independent human alpha labels, complete per-stratum measurements, critical-stratum non-regression and an exact pipeline identity; the initialized provider must expose and match that identity.
 - Legacy explicit `vs_live_engine` choices (`rvm`, `modnet`, `light`) are preserved on upgraded installations. Selecting Automatic or any engine in the new picker writes the new preference and clears a stale legacy override.
-- The live governor uses a route-aware degradation chain and retains its ability to recover when performance headroom returns.
-- The per-device benchmark cache version is incremented so old measurements do not suppress new routes.
+- The governor may change resolution on the active route or fall back to the established local baseline. It must not silently cross-promote between unqualified experimental routes.
+- Device timing is used only to select among quality-qualified routes. The per-device benchmark cache remains versioned; timing alone never proves image quality.
 
 ## Correctness and performance fixes
 
@@ -25,7 +25,7 @@
 - Legacy preference migration to Automatic.
 - State transitions for trusted warp, low-confidence hold, scene cuts, stale mattes, frame gaps and expiry.
 - Aspect-ratio mapping for landscape and portrait EdgeTAM inputs.
-- Simulated quality-governor transitions through the advanced fallback chain.
+- Qualification-gated governor transitions; exact-version mismatches fail closed and unqualified routes cannot be silently promoted.
 
 ## Validation boundary
 

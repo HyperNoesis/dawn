@@ -142,27 +142,89 @@
    * rgba1024: Uint8ClampedArray of the frame drawn to 1024x1024; base: Uint8Array alpha (bw x bh).
    * Returns { gate: Uint8Array 256x256 (0/255), iou, obj, bbox } or null when there is nothing to track.
    */
+  const INFERENCE_TIMEOUT_MS = 3000;
+
+  function disposeOutputs(outputs) {
+    if (!outputs || typeof outputs !== 'object') return;
+    Object.keys(outputs).forEach((key) => {
+      const value = outputs[key];
+      try { if (value && typeof value.dispose === 'function') value.dispose(); } catch (e) { /* best-effort release */ }
+    });
+  }
+
+  function runBounded(session, feeds, deadline, label) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      const error = new Error(label + ' exceeded the EdgeTAM inference deadline');
+      error.code = 'EDGETAM_INFERENCE_TIMEOUT';
+      return Promise.reject(error);
+    }
+    let timer, timedOut = false;
+    const operation = Promise.resolve().then(() => session.run(feeds));
+    // ORT does not expose reliable cancellation. If a timed-out operation later
+    // resolves, release its late output tensors rather than leaking WASM/GPU memory.
+    operation.then((outputs) => { if (timedOut) disposeOutputs(outputs); }, () => {});
+    const timeout = new Promise((resolve, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        const error = new Error(label + ' timed out after ' + remaining + ' ms');
+        error.code = 'EDGETAM_INFERENCE_TIMEOUT';
+        reject(error);
+      }, remaining);
+    });
+    return Promise.race([operation, timeout]).finally(() => clearTimeout(timer));
+  }
+
   async function refreshGate(ort, enc, dec, rgba1024, base, bw, bh) {
     const bb = bboxFromAlpha(base, bw, bh, 128, 0.01);
     if (!bb) return null;
     const pr = promptFromBox(bb, bw, bh, base);
-    const T = (type, data, dims) => new ort.Tensor(type, data, dims);
-    const e = await enc.run({ pixel_values: T('float32', toPixelValues(rgba1024), [1, 3, SIZE, SIZE]) });
-    const names = Object.keys(e);
-    const o = await dec.run({
-      input_points: T('float32', pr.points, [1, 1, 1, 2]),
-      input_labels: T('int64', pr.labels, [1, 1, 1]),
-      input_boxes: T('float32', pr.boxes, [1, 1, 4]),
-      'image_embeddings.0': e[names[0]], 'image_embeddings.1': e[names[1]], 'image_embeddings.2': e[names[2]]
-    });
-    const on = Object.keys(o);
-    const iou = Array.from(o[on[0]].data), k = pickBest(iou);
-    const masks = o[on[1]].data;
-    const gate = gateFromLogits(masks.subarray(k * MASK * MASK, (k + 1) * MASK * MASK));
-    return { gate, iou: iou[k], obj: o[on[2]] ? o[on[2]].data[0] : null, bbox: bb };
+    // ONNX Runtime Web tensors own WASM/WebGPU allocations. Dispose every
+    // input and output after the decoder result has been copied into plain JS
+    // values; otherwise each periodic tracker refresh leaks native memory.
+    const owned = new Set();
+    const tensor = (type, data, dims) => {
+      const value = new ort.Tensor(type, data, dims);
+      if (value && typeof value.dispose === 'function') owned.add(value);
+      return value;
+    };
+    const collect = (outputs) => {
+      if (outputs && typeof outputs === 'object') {
+        Object.keys(outputs).forEach((key) => {
+          const value = outputs[key];
+          if (value && typeof value.dispose === 'function') owned.add(value);
+        });
+      }
+    };
+    const deadline = Date.now() + INFERENCE_TIMEOUT_MS;
+    try {
+      const image = tensor('float32', toPixelValues(rgba1024), [1, 3, SIZE, SIZE]);
+      const e = await runBounded(enc, { pixel_values: image }, deadline, 'EdgeTAM encoder');
+      collect(e);
+      const names = Object.keys(e);
+      if (names.length < 3) throw new Error('EdgeTAM encoder returned fewer than three embedding tensors');
+      const o = await runBounded(dec, {
+        input_points: tensor('float32', pr.points, [1, 1, 1, 2]),
+        input_labels: tensor('int64', pr.labels, [1, 1, 1]),
+        input_boxes: tensor('float32', pr.boxes, [1, 1, 4]),
+        'image_embeddings.0': e[names[0]], 'image_embeddings.1': e[names[1]], 'image_embeddings.2': e[names[2]]
+      }, deadline, 'EdgeTAM decoder');
+      collect(o);
+      const on = Object.keys(o);
+      if (on.length < 2 || !o[on[0]].data || !o[on[1]].data) {
+        throw new Error('EdgeTAM decoder returned an invalid output tensor set');
+      }
+      const iou = Array.from(o[on[0]].data), k = pickBest(iou);
+      const masks = o[on[1]].data;
+      if (masks.length < (k + 1) * MASK * MASK) throw new Error('EdgeTAM decoder mask tensor has an invalid shape');
+      const gate = gateFromLogits(masks.subarray(k * MASK * MASK, (k + 1) * MASK * MASK));
+      return { gate, iou: iou[k], obj: o[on[2]] ? o[on[2]].data[0] : null, bbox: bb };
+    } finally {
+      owned.forEach((value) => { try { value.dispose(); } catch (e) { /* release remaining tensors */ } });
+    }
   }
 
-  const api = { SIZE, MASK, toPixelValues, bboxFromAlpha, promptFromBox, pickBest, gateFromLogits, softGate, componentGate, applyGate, gateIsSafe, refreshGate };
+  const api = { SIZE, MASK, INFERENCE_TIMEOUT_MS, toPixelValues, bboxFromAlpha, promptFromBox, pickBest, gateFromLogits, softGate, componentGate, applyGate, gateIsSafe, refreshGate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.VS = root.VS || {};
   root.VS.EdgeTAMCore = api;

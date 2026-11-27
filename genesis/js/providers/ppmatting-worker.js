@@ -40,15 +40,25 @@ async function run(m) {
   if (w % 32 || h % 32) throw new Error('size must be a multiple of 32, got ' + w + 'x' + h);
   const rgba = new Uint8ClampedArray(m.rgba);
   inBuf = core.toTensor(rgba, w, h, inBuf && inBuf.length === 3 * w * h ? inBuf : null);
-  const out = await session.run({ [inName]: new ort.Tensor('float32', inBuf, [1, 3, h, w]) });
-  const t = out[outName] || out[Object.keys(out)[0]];
-  if (!t || !t.data) throw new Error('model did not return an alpha tensor');
-  const dims = t.dims || [1, 1, h, w], oh = dims[dims.length - 2], ow = dims[dims.length - 1];
-  if (ow !== w || oh !== h) throw new Error('alpha dimensions ' + ow + 'x' + oh + ' do not match input ' + w + 'x' + h);
-  const valid = core.validateAlphaOutput(t.data, ow * oh);
-  if (!valid.ok) throw new Error('invalid PP-Matting alpha output: ' + valid.reason);
-  const alpha = core.toAlpha(t.data, ow * oh);
-  return { w: ow, h: oh, alpha, ms: (self.performance || Date).now() - t0 };
+  const input = new ort.Tensor('float32', inBuf, [1, 3, h, w]);
+  const owned = new Set([input]);
+  let out = null;
+  try {
+    out = await session.run({ [inName]: input });
+    if (out && typeof out === 'object') Object.keys(out).forEach((key) => {
+      if (out[key] && typeof out[key].dispose === 'function') owned.add(out[key]);
+    });
+    const t = out[outName] || out[Object.keys(out)[0]];
+    if (!t || !t.data) throw new Error('model did not return an alpha tensor');
+    const dims = t.dims || [1, 1, h, w], oh = dims[dims.length - 2], ow = dims[dims.length - 1];
+    if (ow !== w || oh !== h) throw new Error('alpha dimensions ' + ow + 'x' + oh + ' do not match input ' + w + 'x' + h);
+    const valid = core.validateAlphaOutput(t.data, ow * oh);
+    if (!valid.ok) throw new Error('invalid PP-Matting alpha output: ' + valid.reason);
+    const alpha = core.toAlpha(t.data, ow * oh);
+    return { w: ow, h: oh, alpha, ms: (self.performance || Date).now() - t0 };
+  } finally {
+    owned.forEach((tensor) => { try { tensor && tensor.dispose && tensor.dispose(); } catch (e) { /* release remaining tensors */ } });
+  }
 }
 
 self.onmessage = async (ev) => {

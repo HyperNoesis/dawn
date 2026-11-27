@@ -76,6 +76,9 @@ jobs:
           npm install --no-save --package-lock=false playwright@1.49.1
           npx playwright install --with-deps chromium
 
+      - name: Run Studio tab navigation and responsive shell smoke gate
+        run: node tools/e2e/t51_studio_shell_responsive.js
+
       - name: Run camera, model, motion, and matte-edge browser gates
         run: |
           node tools/e2e/t40_pipeline_gate.js
@@ -113,3 +116,4 @@ jobs:
             genesis/ultramatte_gate_report.json
             genesis/ultramatte_last_comparison.png
             genesis/ultramatte_last_composite.png
+            genesis/studio-smoke-artifacts/**

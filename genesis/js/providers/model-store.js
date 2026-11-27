@@ -80,7 +80,7 @@
     for (const f of entry.files) {
       bytes[f.local] = await loadFile(reg, f, (n) => { have += n; if (o.onProgress) o.onProgress(Math.max(0, Math.min(1, have / total)), entry.title); }, o.signal);
     }
-    return { bytes, entry };
+    return { bytes, entry, registryVersion: reg.version };
   }
 
   const api = { registry, load, CACHE };

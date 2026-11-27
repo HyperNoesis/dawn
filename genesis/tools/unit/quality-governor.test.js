@@ -116,6 +116,24 @@ const moves = (r) => r.log.map((m) => m.type + ':' + (m.emergency ? 'light' : m.
   assert.strictEqual(edge, 224, 'the simulated constrained device reaches the smallest responsive matting rung');
 }
 
+// 21. A quality-qualified automatic route is supplied as a single exact-resolution rung.
+ // The app must not resize that route into a different, unqualified pipeline.
+{
+  const exact = G.buildRungs([
+    { engine: 'qualified-experimental', edges: [320] },
+    { engine: 'modnet', edges: [512, 448, 384, 320, 256, 224] },
+  ], 'qualified-experimental', 320);
+  assert.deepStrictEqual(
+    exact.map((r) => [r.engine, r.edge]),
+    [
+      ['qualified-experimental', 320],
+      ['modnet', 512], ['modnet', 448], ['modnet', 384],
+      ['modnet', 320], ['modnet', 256], ['modnet', 224],
+    ],
+    'automatic qualified route remains at its evidence-backed resolution and degrades through the established baseline'
+  );
+}
+
 console.log('quality-governor: all assertions passed');
 
 // 17. (found by the live heat emulation) a mask of ~350 ms at the smallest size is a 3 fps slideshow but below HOPELESS_MS: must still reach the light model after SLIDESHOW_SEC, and not before

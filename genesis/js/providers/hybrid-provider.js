@@ -62,6 +62,41 @@
       return super.initialize(qualityMode, opts);
     }
 
+    async getQualificationIdentity() {
+      if (typeof super.getQualificationIdentity !== 'function') {
+        throw new Error('Hybrid parent provider cannot supply a canonical model identity.');
+      }
+      const parent = await super.getQualificationIdentity();
+      const Q = V.MatteQualificationIdentity;
+      if (!Q) throw new Error('Canonical matte qualification identity helper is unavailable.');
+      return Q.extend(parent, {
+        modelVersionSuffix: '+genesis-hybrid-v1',
+        preprocessResources: ['js/providers/hybrid-provider.js', 'js/providers/band-refine-core.js'],
+        preprocessConfig: {
+          tileCore: TILE,
+          contextMargin: MARGIN,
+          networkInput: IN,
+          outputLongEdgeCap: lsNum('vs_hy_long', 512, 256, 768)
+        },
+        postprocessResources: [
+          'js/providers/hybrid-provider.js',
+          'js/providers/band-refine-core.js',
+          'js/providers/matte-critic.js'
+        ],
+        postprocessConfig: {
+          enabled: hyOn(),
+          temporalWarp: warpOn(),
+          tileTargetMs: lsNum('vs_hy_target_ms', 60, 15, 300),
+          maxTilesPerFrame: lsNum('vs_hy_tiles', 3, 0, 8),
+          tileCacheMaxAge: lsNum('vs_hy_cache_frames', 4, 2, 12),
+          rejectedTileBackoff: lsNum('vs_hy_reject_backoff', 4, 1, 12),
+          criticTextureWeight: 1.25,
+          criticTextureThreshold: 14,
+          historyCap: Number(V.BandRefineCore && V.BandRefineCore.HIST_CAP) || 0
+        }
+      });
+    }
+
     async segment(video) {
       const t0 = performance.now();
       this.hy.tracked = false;

@@ -130,7 +130,11 @@ function fakeAdapter(over) {
   const provider = createAimlapiProvider({ key: 'sk-UPSTREAM-SECRET', base: 'http://127.0.0.1:' + upPort + '/v2' });
   const relay = createRelay(relayOptions(provider, { dailyCap: 2, maxActive: 5 }));
   const rPort = await listen(relay); const base = 'http://127.0.0.1:' + rPort;
-  const clip = new Blob([Buffer.alloc(2048, 7)], { type: 'video/mp4' });
+  // Minimal ISO-BMFF ftyp fixture: the relay validates the declared MIME
+  // against the container signature before forwarding test uploads.
+  const mp4Bytes = Buffer.alloc(2048, 7);
+  mp4Bytes.set([0,0,0,24,0x66,0x74,0x79,0x70,0x69,0x73,0x6f,0x6d,0,0,0,0,0x69,0x73,0x6f,0x6d,0x61,0x76,0x63], 0);
+  const clip = new Blob([mp4Bytes], { type: 'video/mp4' });
 
   await t('end to end: client -> relay -> upstream; request matches the documented contract', async () => {
     const adapter = RP.createRelayAdapter({ baseUrl: base, token: testAccessToken() });

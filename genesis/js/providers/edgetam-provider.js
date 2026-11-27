@@ -60,10 +60,23 @@
     const o = Object.assign({ refreshEvery: 8, dilate: 2, keepDilate: 3, feather: 2, minOverlap: 0.3 }, options || {});
     const own = {
       status: 'idle', gateError: null, gate: null, gateAge: 0, frame: 0, busy: false, enc: null, dec: null, ortRef: null,
-      modelId: null, usingWebGPU: false, precisionFallback: null,
+      modelId: null, usingWebGPU: false, precisionFallback: null, modelSha256: null, registryVersion: null, modelTitle: null, modelIdentityError: null, runtimeSource: null, runtimeBundle: null,
       info: null, sourceCanvas: null, sourceCtx: null, frameCanvas: null, frameCtx: null, baseCanvas: null, baseCtx: null, outCanvas: null, outCtx: null, gateCanvas: null, gateCtx: null, gateImg: null
     };
     const C = () => V.EdgeTAMCore;
+
+    function releaseSession(session) {
+      try {
+        const result = session && session.release && session.release();
+        if (result && typeof result.catch === 'function') result.catch(() => {});
+      } catch (e) { /* best-effort release */ }
+    }
+
+    function releaseSessions() {
+      releaseSession(own.enc);
+      releaseSession(own.dec);
+      own.enc = own.dec = own.ortRef = null;
+    }
 
     function ensureCanvases() {
       if (own.frameCanvas) return;
@@ -117,7 +130,16 @@
         for (const id of candidates) {
           let encoder = null, decoder = null;
           try {
-            const { bytes, entry } = await V.ModelStore.load(id, { onProgress: opts && opts.onProgress });
+            const { bytes, entry, registryVersion } = await V.ModelStore.load(id, { onProgress: opts && opts.onProgress });
+            own.registryVersion = registryVersion;
+            own.modelTitle = entry.title || id;
+            own.modelSha256 = null;
+            try {
+              if (!V.MatteQualificationIdentity) throw new Error('Canonical identity helper unavailable');
+              own.modelSha256 = await V.MatteQualificationIdentity.hashModelFiles(bytes);
+            } catch (identityError) {
+              own.modelIdentityError = String((identityError && identityError.message) || identityError);
+            }
             const external = entry.external || {};
             const ext = Object.keys(external).map((path) => ({ path, data: bytes[external[path]] }));
             const encoderDataName = Object.keys(external).find((path) => /vision_encoder/.test(path));
@@ -140,7 +162,7 @@
               externalData: decoderDataName ? ext.filter((item) => item.path === decoderDataName) : []
             });
             own.enc = encoder; own.dec = decoder; own.ortRef = ort;
-            own.modelId = id; own.usingWebGPU = gpu;
+            own.modelId = id; own.usingWebGPU = gpu; own.runtimeSource = V.ortSource || null; own.runtimeBundle = V.ortBundle || null;
             own.precisionFallback = failures.length ? failures.join(' | ') : null;
             own.gateError = null; own.status = 'ready';
             return;
@@ -156,6 +178,19 @@
         own.gateError = String((e && e.message) || e);
       }
     }
+    const TRACKER_INFERENCE_TIMEOUT_MS = 4000;
+    function withTimeout(promise, ms, label) {
+      let timer;
+      const timeout = new Promise((resolve, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error((label || 'EdgeTAM inference') + ' timed out after ' + ms + ' ms');
+          error.code = 'EDGETAM_INFERENCE_TIMEOUT';
+          reject(error);
+        }, ms);
+      });
+      return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timer));
+    }
+
     async function refresh(video, baseAlpha) {
       if (own.busy || own.status !== 'ready') return;
       own.busy = true;
@@ -174,7 +209,11 @@
         own.frameCtx.fillRect(0, 0, 1024, 1024);
         own.frameCtx.drawImage(video, 0, 0, rect.width, rect.height);
         const rgba = own.frameCtx.getImageData(0, 0, 1024, 1024).data;
-        const r = await C().refreshGate(own.ortRef, own.enc, own.dec, rgba, baseAlpha, G, G);
+        const r = await withTimeout(
+          C().refreshGate(own.ortRef, own.enc, own.dec, rgba, baseAlpha, G, G),
+          TRACKER_INFERENCE_TIMEOUT_MS,
+          'EdgeTAM tracker inference'
+        );
         if (!r) { own.gate = null; return; }
         const grown = C().softGate(r.gate, G, G, o.dilate, 0);          // the SAME mask that is used every frame, so the safety check matches reality
         const keep = C().componentGate(baseAlpha, grown, G, G, 128, o.minOverlap);
@@ -184,7 +223,17 @@
         own.info = { iou: r.iou, obj: r.obj, gateFrac: gateFg / r.gate.length, baseArea, kept, safe, box: [r.bbox.x0, r.bbox.y0, r.bbox.x1, r.bbox.y1] };
         own.gate = safe ? grown : null;
         own.gateAge = 0;
-      } catch (e) { own.gateError = String((e && e.message) || e); own.gate = null; }
+      } catch (e) {
+        own.gateError = String((e && e.message) || e);
+        own.gate = null;
+        // A timed-out ORT run cannot be cancelled reliably. Disable this tracker
+        // instance and fall back to the base matte so a late result can never
+        // install a stale gate or leave the camera waiting on an unbounded run.
+        if (e && e.code === 'EDGETAM_INFERENCE_TIMEOUT') {
+          if (own.status !== 'idle') own.status = 'failed';
+          releaseSessions();
+        }
+      }
       finally { own.busy = false; }
     }
 
@@ -232,6 +281,68 @@
         await load({ onProgress: base.onProgress });
         return r;
       },
+      async getQualificationIdentity() {
+        if (own.status !== 'ready') throw new Error('EdgeTAM runtime is not ready; exact runtime identity is unavailable.');
+        if (own.runtimeSource !== 'local') throw new Error('EdgeTAM is using a non-bundled or unknown ONNX Runtime source; exact runtime identity is unavailable for automatic qualification.');
+        const bundle = own.runtimeBundle;
+        if (!bundle || bundle.source !== 'local' || !['ort.min.js', 'ort.webgpu.min.js'].includes(bundle.script) ||
+            !['ort-wasm-simd-threaded', 'ort-wasm-simd-threaded.asyncify'].includes(bundle.wasmStem)) {
+          throw new Error('EdgeTAM cannot identify the exact bundled ONNX Runtime JavaScript/WASM pair; automatic qualification is blocked.');
+        }
+        if (!own.modelSha256) throw new Error('EdgeTAM model bytes could not be fingerprinted: ' + (own.modelIdentityError || 'SHA-256 unavailable'));
+        if (!base || typeof base.getQualificationIdentity !== 'function') {
+          throw new Error('The wrapped base provider cannot supply a canonical qualification identity.');
+        }
+        const Q = V.MatteQualificationIdentity;
+        if (!Q) throw new Error('Canonical matte qualification identity helper is unavailable.');
+        const parentIdentity = await base.getQualificationIdentity();
+        const wasmEnv = own.ortRef && own.ortRef.env && own.ortRef.env.wasm;
+        if (!wasmEnv || !Number.isSafeInteger(wasmEnv.numThreads) || wasmEnv.numThreads < 1) {
+          throw new Error('EdgeTAM cannot identify the effective ONNX Runtime WASM thread count; automatic qualification is blocked.');
+        }
+        return Q.extend(parentIdentity, {
+          modelVersionSuffix: '+edgetam-' + own.modelId + '@registry-' + String(own.registryVersion),
+          modelSha256: own.modelSha256,
+          preprocessResources: ['js/providers/edgetam-provider.js', 'js/providers/edgetam-core.js'],
+          preprocessConfig: {
+            encoderInputSide: 1024,
+            gateGrid: G,
+            preserveAspectRatio: true,
+            padding: 'rgb(124,116,104)',
+            resize: 'half-pixel-bilinear'
+          },
+          postprocessResources: ['js/providers/edgetam-provider.js', 'js/providers/edgetam-core.js'],
+          postprocessConfig: {
+            refreshEvery: o.refreshEvery,
+            dilate: o.dilate,
+            keepDilate: o.keepDilate,
+            feather: o.feather,
+            minOverlap: o.minOverlap,
+            gateGrid: G,
+            trackerHooked: !!own.hooked
+          },
+          runtime: {
+            name: 'onnxruntime-web-edgetam',
+            backend: own.usingWebGPU ? 'encoder-webgpu+decoder-wasm' : 'encoder-wasm+decoder-wasm',
+            resources: [
+              'js/ort-loader.js',
+              'vendor/ort/' + bundle.script,
+              'vendor/ort/' + bundle.wasmStem + '.js',
+              'vendor/ort/' + bundle.wasmStem + '.wasm'
+            ],
+            config: {
+              selectedModel: own.modelId,
+              runtimeSource: own.runtimeSource,
+              runtimeScript: bundle.script,
+              runtimeWasmStem: bundle.wasmStem,
+              precisionFallback: String(own.precisionFallback || ''),
+              decoderBackend: 'wasm',
+              wasmThreads: wasmEnv.numThreads,
+              wasmProxy: wasmEnv.proxy === true
+            }
+          }
+        });
+      },
       async segment(video) {
         // Hybrid owns its own same-frame snapshot and calls the tracker hook
         // before building/refining the uncertainty band. Do not add another
@@ -257,9 +368,10 @@
         return own.gate ? Object.assign({}, res, { segmentationMask: compose(res.segmentationMask) }) : res;
       },
       dispose() {
-        try { own.enc && own.enc.release && own.enc.release(); own.dec && own.dec.release && own.dec.release(); } catch (e) { /* ignore */ }
-        own.enc = own.dec = null; own.sourceCanvas = own.frameCanvas = null; own.sourceCtx = own.frameCtx = null;
-        own.status = 'idle'; return base.dispose && base.dispose();
+        releaseSessions();
+        own.sourceCanvas = own.frameCanvas = null; own.sourceCtx = own.frameCtx = null;
+        own.baseCanvas = own.baseCtx = own.outCanvas = own.outCtx = own.gateCanvas = own.gateCtx = own.gateImg = null;
+        own.gate = null; own.status = 'idle'; return base.dispose && base.dispose();
       },
       get label() {
         const baseLabel = own.status === 'failed' && base.hy
@@ -273,7 +385,7 @@
           status: own.status, error: own.gateError, gateActive: !!own.gate,
           refreshEvery: o.refreshEvery, modelId: own.modelId,
           runtime: own.usingWebGPU ? 'webgpu-encoder+wasm-decoder' : (own.modelId ? 'wasm' : null),
-          precisionFallback: own.precisionFallback, info: own.info
+          precisionFallback: own.precisionFallback, runtimeSource: own.runtimeSource, runtimeBundle: own.runtimeBundle, info: own.info
         };
       }
     };

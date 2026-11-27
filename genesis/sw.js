@@ -6,7 +6,7 @@
 
 // Bump on every deploy that touches js/*, css/*, or SHELL_ASSETS — this is
 // what forces an already-installed client to drop stale cached files.
-const SHELL_CACHE = 'genesis-shell-v146';
+const SHELL_CACHE = 'genesis-shell-v147';
 const RUNTIME_CACHE = 'genesis-runtime-v10';
 
 const SHELL_ASSETS = [
@@ -67,6 +67,22 @@ const SHELL_ASSETS = [
   'landing.html', 'manifest.json', 'privacy.html', 'projects.html',
   'remote.html', 'reset-password.html', 'settings.html', 'studio.html',
   'terms.html', 'tests.html', 'vendor/webm-muxer/webm-muxer.js',
+
+  // Segmentation runtime, dynamic providers, and frame/qualification helpers must be offline-ready.
+  'js/providers/matte-engines.js',
+  'js/providers/birefnet-provider.js',
+  'js/providers/edgetam-core.js',
+  'js/providers/edgetam-provider.js',
+  'js/providers/gpu-probe.js',
+  'js/providers/matte-qualification-identity.js',
+  'js/providers/matte-quality-qualification.js',
+  'js/providers/matting-metrics.js',
+  'js/providers/model-store.js',
+  'js/providers/ppmatting-export.js',
+  'js/providers/segmentation-flight.js',
+  'js/providers/segmentation-frame-pool.js',
+  'js/providers/segmentation-generation.js',
+  'js/providers/temporal-mask.js',
 ];
 
 self.addEventListener('install', (event) => {

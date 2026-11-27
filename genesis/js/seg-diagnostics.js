@@ -123,6 +123,8 @@
     var mm = diag.maskMotion || null;
     var hy = diag.hybrid || null;
     var route = diag.matteRoute || null;
+    var fp = diag.frameIdentity || null;
+    var aq = diag.automaticQualityStatus || null;
     var motionEnabled = window.VS && window.VS.maskMotionEnabled ? window.VS.maskMotionEnabled() : false;
     motionToggle.textContent = 'Motion alignment: ' + (motionEnabled ? 'ON — tap to disable' : 'OFF — tap to enable');
     motionToggle.disabled = !window.VS || !window.VS.setMaskMotionEnabled;
@@ -130,6 +132,11 @@
       row('Background removal', run ? s.pill : 'Camera off') +
       row('Motion alignment', mm ? mm.status : '--') +
       row('Mask age', mm && mm.ageMs != null ? mm.ageMs + ' ms' : '--') +
+      row('Source frame ID', fp ? fp.frameId : '--') +
+      row('Source frame age', fp ? fp.frameAgeMs + ' ms' : '--') +
+      row('Source frame geometry / orientation', fp ? fp.width + ' × ' + fp.height + (fp.orientationDegrees == null ? '' : ' · ' + fp.orientationDegrees + '°') : '--') +
+      row('Frame / provider generation', fp ? fp.frameId + ' / ' + fp.providerGeneration + ' → ' + fp.currentProviderGeneration : '--') +
+      row('Automatic quality gate', aq ? aq.message : '--') +
       row('Motion confidence / coverage', mm ? mm.meanConfidence + ' / ' + mm.coverage : '--') +
       row('Propagation cost', mm && mm.durationMs != null ? mm.durationMs + ' ms' : '--') +
       row('Preset model', m ? (m.options[m.selectedIndex] ? m.options[m.selectedIndex].text.replace(/\s*\(.*\)/, '') : m.value) : '--') +

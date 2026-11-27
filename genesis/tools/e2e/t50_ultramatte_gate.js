@@ -223,19 +223,32 @@ function withTimeout(promise, ms, label) {
       if (!V.GLMatte) throw new Error('Studio GLMatte edge/decontamination stage was not loaded');
       const edgeMatte = new V.GLMatte();
       if (!edgeMatte.ok) throw new Error('Studio GLMatte failed to initialize: ' + (edgeMatte.error || 'unknown'));
+      // UltraMatte is a true alpha-matting route: the Studio compositor must
+      // retain its fractional coverage instead of applying semantic-mask
+      // threshold tightening a second time.
+      edgeMatte.preserveAlpha = true;
+      edgeMatte.colourSnap = 0; // match the app's alpha-matting default
       // Diagnostic-only A/B: widen the alpha transition while keeping every
       // other renderer parameter identical. Do not change Studio defaults until
       // labelled-reference scores and the existing edge suite agree.
       const softEdgeMatte = new V.GLMatte();
       if (!softEdgeMatte.ok) throw new Error('Soft-edge A/B GLMatte failed to initialize: ' + (softEdgeMatte.error || 'unknown'));
+      softEdgeMatte.edgeProfile = 'fixed';
       softEdgeMatte.edgeLo = 0.15;
       softEdgeMatte.edgeHi = 0.85;
       // A second, deliberately conservative transition tests whether the
       // current 0.30/0.70 tightening is erasing useful hair/antialias alpha.
       const featherEdgeMatte = new V.GLMatte();
       if (!featherEdgeMatte.ok) throw new Error('Feather-edge A/B GLMatte failed to initialize: ' + (featherEdgeMatte.error || 'unknown'));
+      featherEdgeMatte.edgeProfile = 'fixed';
       featherEdgeMatte.edgeLo = 0.05;
       featherEdgeMatte.edgeHi = 0.95;
+      // Diagnostic A/B: re-enable colour-line snapping on a matting alpha to
+      // measure whether it damages fractional edge coverage.
+      const snapMatte = new V.GLMatte();
+      if (!snapMatte.ok) throw new Error('Colour-snap A/B GLMatte failed to initialize: ' + (snapMatte.error || 'unknown'));
+      snapMatte.preserveAlpha = true;
+      snapMatte.colourSnap = 0.8;
       const tInit = performance.now();
       await Promise.race([
         provider.initialize('fast', { threads: 1 }),
@@ -244,6 +257,24 @@ function withTimeout(promise, ms, label) {
       const initMs = performance.now() - tInit;
       if (!provider.edgetam || provider.edgetam.status !== 'ready') {
         throw new Error('EdgeTAM did not become ready: ' + JSON.stringify(provider.edgetam || {}));
+      }
+
+      // Verify the exact live provider identity against the real loaded model
+      // bytes, pre/post-processing sources, and ONNX runtime assets. This is
+      // identity integrity, not a human-footage quality approval.
+      if (typeof provider.getQualificationIdentity !== 'function') {
+        throw new Error('UltraMatte provider did not expose its runtime qualification identity');
+      }
+      const qualificationIdentity = await provider.getQualificationIdentity();
+      const identityApi = V.MatteQualificationIdentity;
+      if (!identityApi || !identityApi.validHash(qualificationIdentity.modelSha256) ||
+          !identityApi.validHash(qualificationIdentity.preprocessHash) ||
+          !identityApi.validHash(qualificationIdentity.postprocessHash) ||
+          !/^.+;backend=.+;sha256=[a-f0-9]{64}$/i.test(qualificationIdentity.runtimeBackend || '')) {
+        throw new Error('UltraMatte returned an incomplete canonical pipeline identity: ' + JSON.stringify(qualificationIdentity));
+      }
+      if (V.ortSource !== 'local') {
+        throw new Error('UltraMatte identity test requires the bundled local ONNX Runtime; observed ' + String(V.ortSource));
       }
 
       const samples = [], hybridFrames = [];
@@ -318,6 +349,16 @@ function withTimeout(promise, ms, label) {
         featherReadbackCtx.drawImage(featherForeground, 0, 0);
         const featherPixels = featherReadbackCtx.getImageData(0, 0, featherReadback.width, featherReadback.height).data;
         const featherQuality = scoreAlpha(featherPixels, 3, gtFullRgba, 0, featherReadback.width, featherReadback.height);
+        const snapForeground = snapMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
+        if (!snapForeground) throw new Error('Colour-snap A/B GLMatte returned no foreground on frame ' + frame);
+        const snapReadback = document.createElement('canvas');
+        snapReadback.width = snapForeground.width;
+        snapReadback.height = snapForeground.height;
+        const snapReadbackCtx = snapReadback.getContext('2d', { willReadFrequently: true });
+        if (!snapReadbackCtx) throw new Error('Could not create colour-snap A/B readback canvas');
+        snapReadbackCtx.drawImage(snapForeground, 0, 0);
+        const snapPixels = snapReadbackCtx.getImageData(0, 0, snapReadback.width, snapReadback.height).data;
+        const snapQuality = scoreAlpha(snapPixels, 3, gtFullRgba, 0, snapReadback.width, snapReadback.height);
         let renderedForegroundCount = 0, renderedSoftCount = 0;
         for (let i = 0; i < renderedPixels.length; i += 4) {
           const alpha = renderedPixels[i + 3];
@@ -340,6 +381,19 @@ function withTimeout(promise, ms, label) {
         ctx.drawImage(gtImage, 0, 0, canvas.width, canvas.height);
         const gtMaskRgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const rawQuality = scoreAlpha(rgba, 3, gtMaskRgba, 0, canvas.width, canvas.height);
+        // Compare raw provider alpha and final Studio alpha at identical output
+        // dimensions. Keep native model-resolution quality separate; comparing
+        // its edge MAE directly with the 640x480 compositor is invalid.
+        const rawOutputCanvas = document.createElement('canvas');
+        rawOutputCanvas.width = renderedForeground.width;
+        rawOutputCanvas.height = renderedForeground.height;
+        const rawOutputCtx = rawOutputCanvas.getContext('2d', { willReadFrequently: true });
+        if (!rawOutputCtx) throw new Error('Could not create same-resolution raw-alpha comparison canvas');
+        rawOutputCtx.imageSmoothingEnabled = true;
+        rawOutputCtx.drawImage(mask, 0, 0, rawOutputCanvas.width, rawOutputCanvas.height);
+        const rawOutputPixels = rawOutputCtx.getImageData(0, 0, rawOutputCanvas.width, rawOutputCanvas.height).data;
+        const rawOutputQuality = scoreAlpha(rawOutputPixels, 3, gtFullRgba, 0,
+          rawOutputCanvas.width, rawOutputCanvas.height);
         let foreground = 0, soft = 0, alphaSum = 0, invalid = 0;
         for (let i = 0; i < rgba.length; i += 4) {
           const a = rgba[i + 3];
@@ -396,8 +450,9 @@ function withTimeout(promise, ms, label) {
             outputHeight: renderedForeground.height
           },
           syntheticGroundTruth: {
-            rawMatte: rawQuality,
-            studioMatte: renderedQuality,
+            rawMatteNativeResolution: rawQuality,
+            rawMatteAtOutputResolution: rawOutputQuality,
+            studioMatteAtOutputResolution: renderedQuality,
             edgeThresholdExperiment: {
               parameters: { edgeLo: 0.15, edgeHi: 0.85 },
               studioMatte: softQuality
@@ -405,6 +460,10 @@ function withTimeout(promise, ms, label) {
             featherEdgeExperiment: {
               parameters: { edgeLo: 0.05, edgeHi: 0.95 },
               studioMatte: featherQuality
+            },
+            colourSnapExperiment: {
+              parameters: { colourSnap: 0.8, edgeProfile: 'auto', effectiveThresholds: V.GLMatte.resolveEdgeThresholds(mask.width, mask.height, edgeMatte.edgeLo, edgeMatte.edgeHi, edgeMatte.edgeProfile) },
+              studioMatte: snapQuality
             }
           }
         });
@@ -437,6 +496,13 @@ function withTimeout(promise, ms, label) {
         label: provider.label,
         ortSource: V.ortSource || 'unknown',
         ortVersion: ort.env && ort.env.versions ? ort.env.versions.web : 'unknown',
+        qualificationIdentity: {
+          modelVersion: qualificationIdentity.modelVersion,
+          modelSha256: qualificationIdentity.modelSha256,
+          preprocessHash: qualificationIdentity.preprocessHash,
+          postprocessHash: qualificationIdentity.postprocessHash,
+          runtimeBackend: qualificationIdentity.runtimeBackend
+        },
         initMs: Math.round(initMs),
         performance: performanceMetrics,
         syntheticGroundTruth: {
@@ -454,11 +520,15 @@ function withTimeout(promise, ms, label) {
         },
         renderMatte: {
           active: !!edgeMatte.ok,
+          preserveAlpha: !!edgeMatte.preserveAlpha,
+          colourSnap: edgeMatte.colourSnap,
           error: edgeMatte.error || null,
+          effectiveEdgeThresholds: V.GLMatte.resolveEdgeThresholds(512, 384, edgeMatte.edgeLo, edgeMatte.edgeHi, edgeMatte.edgeProfile),
           edgeThresholdExperiment: {
             active: !!softEdgeMatte.ok,
             parameters: { edgeLo: 0.15, edgeHi: 0.85 },
-            featherExperiment: { active: !!featherEdgeMatte.ok, parameters: { edgeLo: 0.05, edgeHi: 0.95 } }
+            featherExperiment: { active: !!featherEdgeMatte.ok, parameters: { edgeLo: 0.05, edgeHi: 0.95 } },
+            colourSnapExperiment: { active: !!snapMatte.ok, parameters: { colourSnap: 0.8, edgeProfile: 'auto' } }
           }
         },
         edgeTam: {

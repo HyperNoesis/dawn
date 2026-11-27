@@ -44,24 +44,24 @@
 
     <div class="studio-body" id="studioBody">
       <!-- LEFT: tool rail -->
-      <div class="tool-rail" id="toolRail" role="tablist" aria-label="Studio tools">
-        <button class="tool-tab active" data-target="panel-env" title="Environment" role="tab" aria-selected="true"><span class="tab-label">Scene</span></button>
-        <button class="tool-tab" data-target="panel-looks" title="Looks" role="tab" aria-selected="false"><span class="tab-label">Looks</span></button>
-        <button class="tool-tab" data-target="panel-show" title="Show" role="tab" aria-selected="false"><span class="tab-label">Show</span></button>
-        <button class="tool-tab" data-target="panel-audio" title="Audio" role="tab" aria-selected="false"><span class="tab-label">Audio</span></button>
-        <button class="tool-tab" data-target="panel-camera" title="Camera &amp; audio" role="tab" aria-selected="false"><span class="tab-label">Camera</span></button>
-        <button class="tool-tab" data-target="panel-composition" title="Framing" role="tab" aria-selected="false"><span class="tab-label">Framing</span></button>
-        <button class="tool-tab" data-target="panel-realism" title="Realism" role="tab" aria-selected="false"><span class="tab-label">Realism</span></button>
-        <button class="tool-tab" data-target="panel-refine" title="Refine mask" role="tab" aria-selected="false"><span class="tab-label">Mask</span></button>
-        <button class="tool-tab" data-target="panel-graphics" title="Graphics" role="tab" aria-selected="false"><span class="tab-label">Graphics</span></button>
-        <button class="tool-tab" data-target="panel-prompter" title="Teleprompter" role="tab" aria-selected="false"><span class="tab-label">Prompter</span></button>
-        <button class="tool-tab" data-target="panel-captions" title="Captions" role="tab" aria-selected="false"><span class="tab-label">Captions</span></button>
-        <button class="tool-tab" data-target="panel-content" title="Content overlay" role="tab" aria-selected="false"><span class="tab-label">Content</span></button>
-        <button class="tool-tab" data-target="panel-templates" title="Templates" role="tab" aria-selected="false"><span class="tab-label">Presets</span></button>
-        <button class="tool-tab" data-target="panel-quality" title="Quality" role="tab" aria-selected="false"><span class="tab-label">Quality</span></button>
-        <button class="tool-tab" data-target="panel-recordings" title="Recordings" role="tab" aria-selected="false"><span class="tab-label">Recordings</span></button>
-        <button class="tool-tab" data-target="panel-live" title="Live streaming" role="tab" aria-selected="false"><span class="tab-label">Go Live</span></button>
-        <button class="tool-tab" data-target="panel-advanced" title="Advanced" role="tab" aria-selected="false"><span class="tab-label">Advanced</span></button>
+      <div class="tool-rail" id="toolRail" role="tablist" aria-orientation="vertical" aria-label="Studio tools">
+        <button class="tool-tab active" id="tab-panel-env" data-target="panel-env" aria-controls="panel-env" title="Environment" role="tab" aria-selected="true" tabindex="0"><span class="tab-label">Scene</span></button>
+        <button class="tool-tab" id="tab-panel-looks" data-target="panel-looks" aria-controls="panel-looks" title="Looks" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Looks</span></button>
+        <button class="tool-tab" id="tab-panel-show" data-target="panel-show" aria-controls="panel-show" title="Show" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Show</span></button>
+        <button class="tool-tab" id="tab-panel-audio" data-target="panel-audio" aria-controls="panel-audio" title="Audio" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Audio</span></button>
+        <button class="tool-tab" id="tab-panel-camera" data-target="panel-camera" aria-controls="panel-camera" title="Camera &amp; audio" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Camera</span></button>
+        <button class="tool-tab" id="tab-panel-composition" data-target="panel-composition" aria-controls="panel-composition" title="Framing" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Framing</span></button>
+        <button class="tool-tab" id="tab-panel-realism" data-target="panel-realism" aria-controls="panel-realism" title="Realism" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Realism</span></button>
+        <button class="tool-tab" id="tab-panel-refine" data-target="panel-refine" aria-controls="panel-refine" title="Refine mask" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Mask</span></button>
+        <button class="tool-tab" id="tab-panel-graphics" data-target="panel-graphics" aria-controls="panel-graphics" title="Graphics" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Graphics</span></button>
+        <button class="tool-tab" id="tab-panel-prompter" data-target="panel-prompter" aria-controls="panel-prompter" title="Teleprompter" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Prompter</span></button>
+        <button class="tool-tab" id="tab-panel-captions" data-target="panel-captions" aria-controls="panel-captions" title="Captions" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Captions</span></button>
+        <button class="tool-tab" id="tab-panel-content" data-target="panel-content" aria-controls="panel-content" title="Content overlay" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Content</span></button>
+        <button class="tool-tab" id="tab-panel-templates" data-target="panel-templates" aria-controls="panel-templates" title="Templates" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Presets</span></button>
+        <button class="tool-tab" id="tab-panel-quality" data-target="panel-quality" aria-controls="panel-quality" title="Quality" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Quality</span></button>
+        <button class="tool-tab" id="tab-panel-recordings" data-target="panel-recordings" aria-controls="panel-recordings" title="Recordings" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Recordings</span></button>
+        <button class="tool-tab" id="tab-panel-live" data-target="panel-live" aria-controls="panel-live" title="Live streaming" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Go Live</span></button>
+        <button class="tool-tab" id="tab-panel-advanced" data-target="panel-advanced" aria-controls="panel-advanced" title="Advanced" role="tab" aria-selected="false" tabindex="-1"><span class="tab-label">Advanced</span></button>
       </div>
 
       <!-- CENTER: live preview -->
@@ -98,7 +98,7 @@
       <!-- RIGHT: control panel -->
       <div class="control-panel">
 
-        <div class="control-section active" id="panel-env">
+        <div class="control-section active" id="panel-env" role="tabpanel" aria-labelledby="tab-panel-env" tabindex="0">
           <h3>Choose environment</h3>
           <div id="envMiniGrid" class="env-mini-grid"></div>
           <select id="envSelect" aria-label="Selected environment" style="display:none;"></select>
@@ -165,7 +165,7 @@
           <p class="text-dim" style="font-size:11.5px; margin-top:6px;">Your description is sent to Pollinations.ai to generate the image.</p>
         </div>
 
-        <div class="control-section" id="panel-camera">
+        <div class="control-section" id="panel-camera" role="tabpanel" aria-labelledby="tab-panel-camera" tabindex="0">
           <h3>Camera</h3>
           <div class="field">
             <select id="cameraSelect" aria-label="Camera device"><option value="">Default</option></select>
@@ -182,7 +182,7 @@
           <p class="honesty-note" id="autoStartHelp">Off by default. Genesis only attempts this if you explicitly enable it and your browser has already granted camera permission. You can turn it off here at any time.</p>
         </div>
 
-        <div class="control-section" id="panel-composition">
+        <div class="control-section" id="panel-composition" role="tabpanel" aria-labelledby="tab-panel-composition" tabindex="0">
           <h3>Aspect ratio</h3>
           <div class="seg-control" id="aspectSegControl" role="radiogroup" aria-label="Aspect ratio"></div>
 
@@ -208,7 +208,7 @@
             <span>Safe-area &amp; rule-of-thirds guides</span>
           </label>        </div>
 
-        <div class="control-section" id="panel-realism">
+        <div class="control-section" id="panel-realism" role="tabpanel" aria-labelledby="tab-panel-realism" tabindex="0">
           <h3>Make it believable</h3>
           <label class="toggle-row">
             <input type="checkbox" id="realismToggle" checked>
@@ -231,7 +231,7 @@
             <span>A/B split preview (left: off, right: on)</span>
           </label>        </div>
 
-        <div class="control-section" id="panel-refine">
+        <div class="control-section" id="panel-refine" role="tabpanel" aria-labelledby="tab-panel-refine" tabindex="0">
           <section class="seg-card" aria-labelledby="segH">
             <h3 id="segH">Background removal</h3>
             <div class="seg-presets" id="segPresets" role="radiogroup" aria-label="Background removal">
@@ -324,7 +324,7 @@
           </details>
         </div>
 
-        <div class="control-section" id="panel-audio">
+        <div class="control-section" id="panel-audio" role="tabpanel" aria-labelledby="tab-panel-audio" tabindex="0">
           <h3>Audio</h3>
           <p class="honesty-note">Processing runs on this device. Recording and Go Live use the processed sound. Use headphones if you hear echo.</p>
           <div class="field"><label for="audioPreset">Sound</label><select id="audioPreset" aria-label="Sound preset"></select></div>
@@ -356,7 +356,7 @@
           <audio id="audioTestPlayer" controls style="width:100%;margin-top:8px;display:none;"></audio>
         </div>
 
-        <div class="control-section" id="panel-looks">
+        <div class="control-section" id="panel-looks" role="tabpanel" aria-labelledby="tab-panel-looks" tabindex="0">
           <h3>One-tap looks</h3>
           <p class="honesty-note">A look sets the background, framing, realism and broadcast graphics together. It never touches your camera, and you can undo it.</p>
           <div id="looksList" style="display:grid; gap:8px;"></div>
@@ -386,7 +386,7 @@
           <button class="btn ghost" id="gradeReset" type="button" style="min-height:44px;width:100%;">Reset colour, skin and framing</button>
         </div>
 
-        <div class="control-section" id="panel-show">
+        <div class="control-section" id="panel-show" role="tabpanel" aria-labelledby="tab-panel-show" tabindex="0">
           <h3>Show (run of show)</h3>
           <p class="honesty-note">A list of steps. Tap NEXT (or press Space, the right arrow or Page Down; many presentation clickers send Page Down) and each step can change your lower third, banner, card, ticker, look and audio at once. Back and tapping an earlier step rebuild the on-screen graphics from your steps, so a card you no longer want goes away.</p>
           <div id="showNow" class="show-now" aria-live="polite"></div>
@@ -429,7 +429,7 @@
           <button class="btn ghost" id="showClear" type="button" style="min-height:44px;width:100%;margin-top:8px;">Remove all steps</button>
         </div>
 
-        <div class="control-section" id="panel-graphics">
+        <div class="control-section" id="panel-graphics" role="tabpanel" aria-labelledby="tab-panel-graphics" tabindex="0">
           <h3>Broadcast graphics</h3>
           <p class="honesty-note">These appear in your recording and live stream. Keys 1 to 9 trigger rundown items, H hides the lower third.</p>
           <div class="field"><label for="gfxName">Name</label><input type="text" id="gfxName" maxlength="60" style="width:100%;"></div>
@@ -504,7 +504,7 @@
           <button class="btn ghost" id="gfxClearAll" type="button" style="min-height:44px;width:100%;margin-top:10px;">Clear all graphics</button>
         </div>
 
-        <div class="control-section" id="panel-prompter">
+        <div class="control-section" id="panel-prompter" role="tabpanel" aria-labelledby="tab-panel-prompter" tabindex="0">
           <h3>Teleprompter</h3>
           <p class="honesty-note">Only you see this. It is never recorded or streamed.</p>
           <label class="toggle-row"><input type="checkbox" id="prompterShow"><span>Show the teleprompter over the preview</span></label>
@@ -535,7 +535,7 @@
           <input id="remoteLink" type="text" readonly style="display:none;width:100%;" aria-label="Remote link">
         </div>
 
-        <div class="control-section" id="panel-captions">
+        <div class="control-section" id="panel-captions" role="tabpanel" aria-labelledby="tab-panel-captions" tabindex="0">
           <h3>Live captions</h3>
           <label class="toggle-row">
             <input type="checkbox" id="captionsToggle">
@@ -546,7 +546,7 @@
           </div>
           <div id="captionsList" class="recordings-mini" style="margin-top:14px;"></div>        </div>
 
-        <div class="control-section" id="panel-content">
+        <div class="control-section" id="panel-content" role="tabpanel" aria-labelledby="tab-panel-content" tabindex="0">
           <h3>Content overlays</h3>          <div class="field">
             <label for="layoutModeSelect">Layout (uses your first overlay above)</label>
             <select id="layoutModeSelect">
@@ -615,7 +615,7 @@
           </div>
         </div>
 
-        <div class="control-section" id="panel-templates">
+        <div class="control-section" id="panel-templates" role="tabpanel" aria-labelledby="tab-panel-templates" tabindex="0">
           <h3>Brand kit</h3>
           <div class="field">
             <label for="brandColorInput">Brand color</label>
@@ -641,7 +641,7 @@
           <h3>Saved templates</h3>
           <div id="templateList"></div>        </div>
 
-        <div class="control-section" id="panel-quality">
+        <div class="control-section" id="panel-quality" role="tabpanel" aria-labelledby="tab-panel-quality" tabindex="0">
           <h3>Quality mode</h3>
           <div class="seg-control" id="qualitySegControl"></div>
           <p class="honesty-note" id="deviceTierNote" style="display:none; margin-top:0;"></p>
@@ -673,7 +673,7 @@
             </select>
           </div>        </div>
 
-        <div class="control-section" id="panel-recordings">
+        <div class="control-section" id="panel-recordings" role="tabpanel" aria-labelledby="tab-panel-recordings" tabindex="0">
           <h3>Saved on this device</h3>
           <div id="draftRecoveryBanner" style="display:none;"></div>
           <p id="recFormatNote" class="honesty-note"></p>
@@ -688,7 +688,7 @@
           <p id="baMsg" class="honesty-note" role="status"></p>
           <div id="recordingsList" class="recordings-mini"></div>        </div>
 
-        <div class="control-section" id="panel-live">
+        <div class="control-section" id="panel-live" role="tabpanel" aria-labelledby="tab-panel-live" tabindex="0">
           <h3>Go live wizard</h3>
           <div id="liveWizard">
             <div class="wizard-step" data-step="1">
@@ -810,7 +810,7 @@
             </div>
           </details>        </div>
 
-        <div class="control-section" id="panel-advanced">
+        <div class="control-section" id="panel-advanced" role="tabpanel" aria-labelledby="tab-panel-advanced" tabindex="0">
           <h3>Diagnostics</h3>
           <div class="diag-block">
             <div id="stats">FPS: -- | Frame latency: -- ms</div>
@@ -922,7 +922,10 @@
   <script src="js/gesture-control.js"></script>
   <script src="js/flags.js"></script>
   <script src="js/providers/mask-motion.js"></script>
+  <script src="js/providers/segmentation-frame-pool.js"></script>
   <script src="js/providers/segmentation-flight.js"></script>
+  <script src="js/providers/segmentation-generation.js"></script>
+  <script src="js/providers/matte-quality-qualification.js"></script>
   <script src="js/app.js"></script>
   <script src="js/studio-ux.js"></script>
   <script src="js/studio-shell.js"></script>

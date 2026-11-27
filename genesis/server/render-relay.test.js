@@ -36,14 +36,19 @@ function tokenFor(secret, sub, overrides = {}) {
   const userA = '00000000-0000-4000-8000-000000000001';
   const userB = '00000000-0000-4000-8000-000000000002';
   const bearer = (sub, extra) => ({ Authorization: 'Bearer ' + tokenFor(secret, sub, extra) });
-  const postJob = (headers) => fetch(base + '/render/jobs', {
-    method: 'POST', headers: Object.assign({ 'Content-Type': 'video/mp4' }, headers), body: Buffer.from('clip')
+  const mp4Fixture = Buffer.from([0,0,0,24,0x66,0x74,0x79,0x70,0x69,0x73,0x6f,0x6d,0,0,0,0,0x69,0x73,0x6f,0x6d,0x61,0x76,0x63]);
+  const postJob = (headers, body = mp4Fixture) => fetch(base + '/render/jobs', {
+    method: 'POST', headers: Object.assign({ 'Content-Type': 'video/mp4' }, headers), body
   });
   try {
     assert.strictEqual((await fetch(base + '/render/health')).status, 200);
     assert.strictEqual((await postJob({})).status, 401, 'anonymous callers are rejected');
     assert.strictEqual((await postJob(bearer(userA, { aud: 'anon' }))).status, 401, 'anon JWTs are rejected');
     assert.strictEqual((await postJob(bearer(userA, { role: 'service_role' }))).status, 401, 'service-role claims are not accepted as users');
+    assert.strictEqual((await postJob(bearer(userA), Buffer.from('not a video'))).status, 415,
+      'a declared video MIME type cannot bypass container-signature validation');
+    assert.strictEqual((await postJob(bearer(userA), Buffer.from([0x1a,0x45,0xdf,0xa3,0,0,0,0,0,0,0,0]))).status, 415,
+      'a WebM signature cannot be submitted under an MP4 content type');
 
     const first = await postJob(bearer(userA));
     assert.strictEqual(first.status, 202);

@@ -1,3 +1,20 @@
+# Current execution state — 26 November 2026
+
+This dated block supersedes the older v0.54 snapshot and earlier handoff instructions below. Keep the historical notes for context, but do not treat them as the current code state.
+
+- Primary source: `HyperNoesis/dawn`; PR #5 remains the existing adaptive-segmentation proposal.
+- Follow-up work: PR #7, base `segmentation/adaptive-ultramatte-default`, branch `genesis/final-studio-segmentation-execution`. It is a draft and is not merged.
+- Automatic currently retains the established local baseline. PP-MattingV2, Hybrid and UltraMatte are explicit BETA routes, not auto-promoted, until exact-version human-video qualification is registered and passes. Runtime providers now expose a canonical, fail-closed identity covering loaded model bytes, preprocessing/postprocessing sources and configuration, and the actual runtime backend/bundle; identity is necessary but does not prove visual quality.
+- Qualification requires rights-cleared held-out participant/source-video splits, independent alpha annotation and separate metrics for all 23 difficult-scene/hair strata; synthetic fixtures do not qualify.
+- Provider-generation guards and immutable source-frame metadata are in `js/app.js`; canonical runtime identity is in `js/providers/matte-qualification-identity.js` and the PP-Matting, Hybrid and EdgeTAM providers; qualification gate is `js/providers/matte-quality-qualification.js`. Identity, provider-composition, policy-load-order and qualification-gate tests are in `tools/unit/`.
+- The mask-age cap remains the pre-existing 1,500 ms provisional value. Do not change it based on preference alone; calibrate against representative motion clips and device measurements.
+- Device rows remain BLOCKED until actual Diagnostics reports are captured on each device. No phone FPS, battery, thermal, real-human hair/finger quality or long-session stability is certified.
+- Review `GENESIS_FINAL_EXECUTION_REPORT.md`, `GENESIS_SEGMENTATION_QUALIFICATION.md`, `GENESIS_STUDIO_ACCEPTANCE_MATRIX.md` and `docs/DEVICE_MATRIX.md` before making release claims.
+- Legal blockers: RVM GPL-3.0 assets remain publicly served; PP-MattingV2/MODNet research training-data terms need review; BiRefNet training-data terms are unresolved; MatAnyone 2/SAM2Matting are non-commercial and not to be used in paid paths.
+- Current executable-code head `8bfffcb3585bdad8c63eb5d5a13674c28423a7c8` passed segmentation CI run [45908860131](https://github.com/HyperNoesis/dawn/actions/runs/45908860131) and Android debug build [45908860172](https://github.com/HyperNoesis/dawn/actions/runs/45908860172). Studio shell, synthetic model and export gates passed; this is not human-video or phone qualification. Do not merge or deploy a signed/paid release until rights-cleared human-video evidence, real-device sessions, complete security review and legal clearance are finished.
+
+---
+
 **READ FIRST: docs/PLAN_FOR_THE_REAL_FIX.md** (diagnosis, measure-first step, 3 paths to a convincing in-background look, and what to do if the AI plan ends).
 **v0.54:** Smart light (tone curve) added; the person-only LUT path is reused. Not run in a browser/phone. CHAT SIZE RULE: chat takes ~30 MB max, so deliver the LITE zip (leaves out models/modnet.onnx + vendor/ort/*.wasm; restore with scripts/restore-big-files.sh, hashes in BIG_FILES.sha256).
 **v0.53:** Fit me in frame (one-shot auto zoom/pan from Face Mesh). Maths tested in node; the face model load and real-face accuracy are UNVERIFIED. sw cache v080.

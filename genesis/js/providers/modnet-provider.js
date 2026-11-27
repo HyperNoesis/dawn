@@ -248,8 +248,22 @@ class MODNetSegmentationProvider {
       chw[size + i] = data[i * 4 + 1] / 127.5 - 1;
       chw[2 * size + i] = data[i * 4 + 2] / 127.5 - 1;
     }
-    const out = await this.session.run({ [this._inputName]: new ort.Tensor('float32', chw, [1, 3, mh, mw]) });
-    return out[this._outputName] || out[Object.keys(out)[0]];
+    const input = new ort.Tensor('float32', chw, [1, 3, mh, mw]);
+    const owned = new Set();
+    if (input && typeof input.dispose === 'function') owned.add(input);
+    let out = null;
+    try {
+      out = await this.session.run({ [this._inputName]: input });
+      if (out && typeof out === 'object') Object.keys(out).forEach((key) => {
+        if (out[key] && typeof out[key].dispose === 'function') owned.add(out[key]);
+      });
+      const tensor = out[this._outputName] || out[Object.keys(out)[0]];
+      if (!tensor || !tensor.data) throw new Error('MODNet did not return an alpha tensor');
+      // Copy out of ORT-owned WASM/GPU memory before disposing its tensor.
+      return { dims: tensor.dims, data: Float32Array.from(tensor.data) };
+    } finally {
+      owned.forEach((tensor) => { try { tensor && tensor.dispose && tensor.dispose(); } catch (e) { /* release remaining tensors */ } });
+    }
   }
 
   async segment(videoElement) {
@@ -291,7 +305,10 @@ class MODNetSegmentationProvider {
   }
 
   dispose() {
-    if (this.session && this.session.release) this.session.release();
+    try {
+      const result = this.session && this.session.release && this.session.release();
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch (e) { /* best-effort native session release */ }
     this.session = null;
   }
 }
@@ -326,18 +343,58 @@ class MODNetWorkerProvider extends MODNetSegmentationProvider {
       return !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
     } catch (e) { return true; }
   }
-  _send(msg, transfer) {
+  _send(msg, transfer, timeoutMs) {
     return new Promise((resolve, reject) => {
-      const id = ++this._seq; this._pending.set(id, { resolve, reject });
-      try { this._worker.postMessage(Object.assign({ id }, msg), transfer || []); } catch (e) { this._pending.delete(id); reject(e); }
+      const id = ++this._seq;
+      const limit = Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? timeoutMs
+        : (msg.type === 'init' ? 45000 : (msg.type === 'profile-get' ? 5000 : 15000));
+      const timer = setTimeout(() => {
+        const pending = this._pending.get(id);
+        if (!pending) return;
+        this._pending.delete(id);
+        const error = new Error('MODNet worker ' + msg.type + ' request timed out after ' + limit + ' ms');
+        error.code = 'WORKER_REQUEST_TIMEOUT';
+        pending.reject(error);
+        // A worker that stopped answering is not reusable. Terminate it and
+        // settle every queued request so no flight lease or caller stays busy.
+        const worker = this._worker;
+        this._worker = null;
+        this._ready = false;
+        for (const other of this._pending.values()) {
+          clearTimeout(other.timer);
+          try { other.reject(error); } catch (e) { /* continue settling */ }
+        }
+        this._pending.clear();
+        try { if (worker) worker.terminate(); } catch (e) { /* already stopped */ }
+      }, limit);
+      this._pending.set(id, { resolve, reject, timer });
+      try {
+        if (!this._worker) throw new Error('MODNet worker is not available');
+        this._worker.postMessage(Object.assign({ id }, msg), transfer || []);
+      } catch (e) {
+        clearTimeout(timer);
+        this._pending.delete(id);
+        reject(e);
+      }
     });
   }
   /** Start the worker script (relative path) and wire replies. Returns the base URL. */
   _startWorker(rel) {
     const base = new URL('.', document.baseURI).href;
     this._worker = new Worker(new URL(rel, base).href);
-    this._worker.onmessage = (ev) => { const m = ev.data, p = this._pending.get(m.id); if (!p) return; this._pending.delete(m.id); m.type === 'error' ? p.reject(new Error(m.message)) : p.resolve(m); };
-    this._worker.onerror = (ev) => { const err = new Error('worker crashed: ' + (ev && ev.message || 'unknown')); for (const p of this._pending.values()) p.reject(err); this._pending.clear(); };
+    this._worker.onmessage = (ev) => {
+      const m = ev.data, p = this._pending.get(m.id);
+      if (!p) return;
+      this._pending.delete(m.id); clearTimeout(p.timer);
+      m.type === 'error' ? p.reject(new Error(m.message)) : p.resolve(m);
+    };
+    this._worker.onerror = (ev) => {
+      const err = new Error('worker crashed: ' + (ev && ev.message || 'unknown'));
+      err.code = 'WORKER_CRASH';
+      for (const p of this._pending.values()) { clearTimeout(p.timer); p.reject(err); }
+      this._pending.clear(); this._ready = false;
+    };
     return base;
   }
   /** Boot the worker with N threads; if a multi-thread start fails for any reason, start again with 1 (so threads can never make a phone worse than before). */
@@ -378,6 +435,22 @@ class MODNetWorkerProvider extends MODNetSegmentationProvider {
     this._outCtx.putImageData(this._outImageData, 0, 0);
     return { segmentationMask: this._emit() };
   }
-  dispose() { try { this._worker && this._worker.postMessage({ type: 'dispose' }); this._worker && this._worker.terminate(); } catch (e) { /* ignore */ } this._worker = null; this._ready = false; this.session = null; }
+  dispose() {
+    // terminate() does not reliably dispatch an error event to the main thread.
+    // Reject every outstanding _send() promise first so segmentation-flight
+    // leases and watchdog-owned work can settle instead of remaining busy forever.
+    const error = new Error('MODNet worker provider disposed before pending operations completed');
+    error.code = 'PROVIDER_DISPOSED';
+    for (const pending of this._pending.values()) {
+      clearTimeout(pending.timer);
+      try { pending.reject(error); } catch (e) { /* continue rejecting remaining work */ }
+    }
+    this._pending.clear();
+    const worker = this._worker;
+    this._worker = null;
+    this._ready = false;
+    this.session = null;
+    try { if (worker) worker.terminate(); } catch (e) { /* worker is already gone */ }
+  }
 }
 window.VS.MODNetWorkerProvider = MODNetWorkerProvider;

@@ -18,6 +18,8 @@ V.MODNetWorkerProvider = Worker_;
 
 // Load the pure dependency policy just as the browser's dynamic loader does.
 V.MatteEnginePolicy = require('../../js/providers/matte-engine-policy.js');
+V.MatteQualificationIdentity = {};
+V.MatteCritic = {};
 const M = require('../../js/providers/matte-engines.js');
 M.installRouter(); M.installRouter();      // idempotent
 const R = V.MODNetWorkerProvider;
