@@ -65,7 +65,15 @@
     return !(automatic && engine !== 'modnet');
   }
 
-  const api = { SPECS, getSpec, resolve, scriptsFor, canRestoreSavedGovernorRung };
+  // Cross-engine promotions always need a registered identity. An automatic
+  // same-engine restart also needs one because a fresh initialization may pick
+  // a different backend/runtime than the provider that originally qualified.
+  function requiresRuntimeQualification(engine, previousEngine, automatic) {
+    if (engine === 'modnet' || engine === 'mediapipe') return false;
+    return engine !== previousEngine || !!automatic;
+  }
+
+  const api = { SPECS, getSpec, resolve, scriptsFor, canRestoreSavedGovernorRung, requiresRuntimeQualification };
   root.VS = root.VS || {};
   root.VS.MatteEnginePolicy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
