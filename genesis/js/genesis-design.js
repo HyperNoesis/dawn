@@ -41,7 +41,7 @@
  <button class="g-theme-choice" data-g-accent="emerald"><i class="g-swatch" style="background:#53D6A0"></i>Emerald</button>
  <button class="g-theme-choice" data-g-accent="amber"><i class="g-swatch" style="background:#F0B77A"></i>Amber</button></div>
  <strong style="font-size:12px">Workspace density</strong><div class="g-theme-row" role="group" aria-label="Workspace density"><button class="g-theme-choice" data-g-density="beginner" title="Larger controls and more guidance">Beginner</button><button class="g-theme-choice" data-g-density="creator" title="Balanced tools and spacing">Creator</button><button class="g-theme-choice" data-g-density="professional" title="Compact controls and expanded advanced options">Professional</button></div>
- <p style="margin:8px 0 0">Appearance and density change the interface, never your recordings or scene assets.</p>`;
+ <p style="margin:8px 0 0">Appearance and density change the interface.</p>`;
  const launch=document.createElement('button');launch.className='g-theme-launch';launch.type='button';launch.innerHTML=window.VS&&window.VS.icon?window.VS.icon('palette',18):'◐';launch.setAttribute('aria-label','Open appearance settings');launch.setAttribute('aria-expanded','false');launch.setAttribute('aria-controls',panel.id);
  document.body.append(panel);
  const studioTopbar=document.querySelector('#studioShell .studio-topbar');

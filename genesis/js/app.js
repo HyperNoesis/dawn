@@ -969,20 +969,19 @@
       // takes over for every return visit.
       const seenExplainer = localStorage.getItem('vs_seen_camera_explainer');
       if (!seenExplainer) {
-        els.overlayTitle.textContent = 'Before your camera turns on';
-        els.overlaySub.textContent = 'This is your space, not a broadcast. Nothing leaves your browser unless you choose to hit Record or Go Live.';
+        els.overlayTitle.textContent = '';
+        els.overlaySub.textContent = '';
       } else {
-        els.overlayTitle.textContent = 'Ready when you are';
-        els.overlaySub.textContent = 'Start your camera to preview the studio composite live. Nothing is recorded until you hit Record.' +
-          (autoPickedFast && els.qualitySelect.value === 'fast' ? ' FAST mode was pre-selected for this device.' : '');
+        els.overlayTitle.textContent = '';
+        els.overlaySub.textContent = '';
       }
       els.startBtn.style.display = 'inline-flex';
       els.startBtn.disabled = false;
       els.startBtn.textContent = 'Start Camera';
       if (els.previewEnvLink) els.previewEnvLink.style.display = 'inline-block';
     } else if (state === 'preparing') {
-      els.overlayTitle.textContent = opts.message || 'Preparing your studio...';
-      els.overlaySub.textContent = 'Getting your camera and local segmentation model ready. This only takes a moment.';
+      els.overlayTitle.textContent = opts.message || 'Starting...';
+      els.overlaySub.textContent = '';
       els.startBtn.style.display = 'none';
       if (els.previewEnvLink) els.previewEnvLink.style.display = 'none';
     } else if (state === 'error') {

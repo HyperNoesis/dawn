@@ -12,6 +12,8 @@
 window.VS = window.VS || {};
 window.VS.config = {
   // M5 business details. The Privacy and Terms pages fill these in; while any is empty they show a visible "not ready to publish" banner.
+  // Set studioOpen to true the day the studio is ready: until then every "Open Studio" button on the landing page shows "Coming soon".
+  studioOpen: false,
   business: { name: '', email: '', jurisdiction: 'Nigeria', effectiveDate: '', whatsapp: '' },
   // Optional hosted payment links (e.g. a Paystack payment page). Empty = the pricing buttons say "Join the pilot" instead.
   payLinks: { pro: '' },
