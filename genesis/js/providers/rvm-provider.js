@@ -64,6 +64,16 @@ const QUALITY_CONFIG = {
   quality:  { longEdge: 1024, downsampleRatio: 0.375 },
 };
 
+function disposeTensor(tensor) {
+  try { if (tensor && typeof tensor.dispose === 'function') tensor.dispose(); } catch (e) { /* best-effort native-memory release */ }
+}
+function releaseSession(session) {
+  try {
+    const result = session && session.release && session.release();
+    if (result && typeof result.catch === 'function') result.catch(() => {});
+  } catch (e) { /* best-effort release */ }
+}
+
 class RVMSegmentationProvider {
   constructor() {
     this.session = null;
@@ -155,9 +165,9 @@ class RVMSegmentationProvider {
   }
 
   _resetRecurrentState() {
-    // Per RVM's own ONNX spec: these tiny all-zero placeholder tensors mean
-    // "no memory yet" to the model — real, resolution-matched state tensors
-    // come back as r1o..r4o from frame 1 onward and get recycled from there.
+    // A size/orientation change invalidates the old recurrent tensors. Release
+    // them before replacing the state with fresh zero placeholders.
+    (this._rec || []).forEach(disposeTensor);
     const zero = () => new ort.Tensor('float32', new Float32Array([0]), [1, 1, 1, 1]);
     this._rec = [zero(), zero(), zero(), zero()];
   }
@@ -226,34 +236,53 @@ class RVMSegmentationProvider {
       chw[2 * size + i] = data[i * 4 + 2] / 255;
     }
 
+    const previousState = (this._rec || []).slice();
+    const srcTensor = new ort.Tensor('float32', chw, [1, 3, mh, mw]);
+    const ratioTensor = new ort.Tensor('float32', new Float32Array([this.config.downsampleRatio]), [1]);
     const feeds = {
-      src: new ort.Tensor('float32', chw, [1, 3, mh, mw]),
-      r1i: this._rec[0], r2i: this._rec[1], r3i: this._rec[2], r4i: this._rec[3],
-      downsample_ratio: new ort.Tensor('float32', new Float32Array([this.config.downsampleRatio]), [1]),
+      src: srcTensor,
+      r1i: previousState[0], r2i: previousState[1], r3i: previousState[2], r4i: previousState[3],
+      downsample_ratio: ratioTensor,
     };
+    let out = null, nextState = null, committed = false;
+    try {
+      out = await this.session.run(feeds);
+      nextState = [out.r1o, out.r2o, out.r3o, out.r4o];
+      if (nextState.some((tensor) => !tensor || !tensor.data) || !out.pha || !out.pha.data || out.pha.data.length < size) {
+        throw new Error('RVM returned an incomplete recurrent state or alpha tensor');
+      }
 
-    const out = await this.session.run(feeds);
-    this._rec = [out.r1o, out.r2o, out.r3o, out.r4o]; // carry memory into next frame
-
-    // pha is [1,1,H,W] float32 0..1. The rest of this app's pipeline
-    // (mask-refine.js, render-core.js) reads mask meaning from the ALPHA
-    // channel of a canvas — same convention MediaPipe's own segmentationMask
-    // output uses — so paint pha into alpha over solid white RGB.
-    const pha = out.pha.data;
-    const rgba = this._outImageData.data;
-    for (let i = 0; i < size; i++) {
-      const o = i * 4;
-      rgba[o] = 255; rgba[o + 1] = 255; rgba[o + 2] = 255;
-      rgba[o + 3] = Math.max(0, Math.min(255, Math.round(pha[i] * 255)));
+      // pha is [1,1,H,W] float32 0..1. Copy it into the canvas before releasing
+      // transient ORT output tensors; only r1o..r4o remain owned as next-frame
+      // recurrent state.
+      const pha = out.pha.data;
+      const rgba = this._outImageData.data;
+      for (let i = 0; i < size; i++) {
+        const o = i * 4;
+        rgba[o] = 255; rgba[o + 1] = 255; rgba[o + 2] = 255;
+        rgba[o + 3] = Math.max(0, Math.min(255, Math.round(pha[i] * 255)));
+      }
+      this._outCtx.putImageData(this._outImageData, 0, 0);
+      this._rec = nextState;
+      committed = true;
+      return { segmentationMask: this._outCanvas };
+    } finally {
+      disposeTensor(srcTensor);
+      disposeTensor(ratioTensor);
+      if (out && typeof out === 'object') Object.keys(out).forEach((key) => {
+        const tensor = out[key];
+        if (!committed || !nextState.includes(tensor)) disposeTensor(tensor);
+      });
+      // Old recurrent states are safe to release only after the model has
+      // completed successfully and the replacement state is installed.
+      if (committed) previousState.forEach(disposeTensor);
     }
-    this._outCtx.putImageData(this._outImageData, 0, 0);
-
-    return { segmentationMask: this._outCanvas };
   }
 
   dispose() {
-    if (this.session && this.session.release) this.session.release();
+    releaseSession(this.session);
     this.session = null;
+    (this._rec || []).forEach(disposeTensor);
     this._rec = null;
   }
 }
