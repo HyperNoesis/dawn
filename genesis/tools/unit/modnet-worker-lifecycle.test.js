@@ -1,6 +1,13 @@
 'use strict';
 global.window = globalThis;
 globalThis.VS = globalThis.VS || {};
+// The worker lifecycle is exercised in Node; provide only the canvas factory
+// needed by the provider constructor (the test never performs pixel work).
+global.document = {
+  createElement() {
+    return { width: 0, height: 0, getContext() { return {}; } };
+  }
+};
 
 const assert = require('assert');
 require('../../js/providers/modnet-provider.js');
