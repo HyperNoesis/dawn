@@ -243,8 +243,8 @@ function withTimeout(promise, ms, label) {
       featherEdgeMatte.edgeProfile = 'fixed';
       featherEdgeMatte.edgeLo = 0.05;
       featherEdgeMatte.edgeHi = 0.95;
-      // Diagnostic ablation: remove colour-line alpha snap while keeping the
-      // same high-resolution threshold profile and temporal filtering.
+      // Diagnostic A/B: re-enable colour-line snapping on a matting alpha to
+      // measure whether it damages fractional edge coverage.
       const snapMatte = new V.GLMatte();
       if (!snapMatte.ok) throw new Error('Colour-snap A/B GLMatte failed to initialize: ' + (snapMatte.error || 'unknown'));
       snapMatte.preserveAlpha = true;
@@ -349,16 +349,16 @@ function withTimeout(promise, ms, label) {
         featherReadbackCtx.drawImage(featherForeground, 0, 0);
         const featherPixels = featherReadbackCtx.getImageData(0, 0, featherReadback.width, featherReadback.height).data;
         const featherQuality = scoreAlpha(featherPixels, 3, gtFullRgba, 0, featherReadback.width, featherReadback.height);
-        const noSnapForeground = snapMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
-        if (!noSnapForeground) throw new Error('Colour-snap A/B GLMatte returned no foreground on frame ' + frame);
-        const noSnapReadback = document.createElement('canvas');
-        noSnapReadback.width = noSnapForeground.width;
-        noSnapReadback.height = noSnapForeground.height;
-        const noSnapReadbackCtx = noSnapReadback.getContext('2d', { willReadFrequently: true });
-        if (!noSnapReadbackCtx) throw new Error('Could not create no-snap A/B readback canvas');
-        noSnapReadbackCtx.drawImage(noSnapForeground, 0, 0);
-        const noSnapPixels = noSnapReadbackCtx.getImageData(0, 0, noSnapReadback.width, noSnapReadback.height).data;
-        const noSnapQuality = scoreAlpha(noSnapPixels, 3, gtFullRgba, 0, noSnapReadback.width, noSnapReadback.height);
+        const snapForeground = snapMatte.process(sourceFrame, mask, sourceFrame.width, sourceFrame.height);
+        if (!snapForeground) throw new Error('Colour-snap A/B GLMatte returned no foreground on frame ' + frame);
+        const snapReadback = document.createElement('canvas');
+        snapReadback.width = snapForeground.width;
+        snapReadback.height = snapForeground.height;
+        const snapReadbackCtx = snapReadback.getContext('2d', { willReadFrequently: true });
+        if (!snapReadbackCtx) throw new Error('Could not create colour-snap A/B readback canvas');
+        snapReadbackCtx.drawImage(snapForeground, 0, 0);
+        const snapPixels = snapReadbackCtx.getImageData(0, 0, snapReadback.width, snapReadback.height).data;
+        const snapQuality = scoreAlpha(snapPixels, 3, gtFullRgba, 0, snapReadback.width, snapReadback.height);
         let renderedForegroundCount = 0, renderedSoftCount = 0;
         for (let i = 0; i < renderedPixels.length; i += 4) {
           const alpha = renderedPixels[i + 3];
@@ -448,8 +448,8 @@ function withTimeout(promise, ms, label) {
               studioMatte: featherQuality
             },
             colourSnapExperiment: {
-              parameters: { colourSnap: 0, edgeProfile: 'auto', effectiveThresholds: V.GLMatte.resolveEdgeThresholds(mask.width, mask.height, edgeMatte.edgeLo, edgeMatte.edgeHi, edgeMatte.edgeProfile) },
-              studioMatte: noSnapQuality
+              parameters: { colourSnap: 0.8, edgeProfile: 'auto', effectiveThresholds: V.GLMatte.resolveEdgeThresholds(mask.width, mask.height, edgeMatte.edgeLo, edgeMatte.edgeHi, edgeMatte.edgeProfile) },
+              studioMatte: snapQuality
             }
           }
         });
@@ -514,7 +514,7 @@ function withTimeout(promise, ms, label) {
             active: !!softEdgeMatte.ok,
             parameters: { edgeLo: 0.15, edgeHi: 0.85 },
             featherExperiment: { active: !!featherEdgeMatte.ok, parameters: { edgeLo: 0.05, edgeHi: 0.95 } },
-            colourSnapExperiment: { active: !!snapMatte.ok, parameters: { colourSnap: 0, edgeProfile: 'auto' } }
+            colourSnapExperiment: { active: !!snapMatte.ok, parameters: { colourSnap: 0.8, edgeProfile: 'auto' } }
           }
         },
         edgeTam: {
