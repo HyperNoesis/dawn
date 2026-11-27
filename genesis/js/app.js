@@ -2679,7 +2679,13 @@
       // Prewarm OFF the frame path: the old engine keeps drawing while the new one loads, then the swap is one frame.
       let to; await Promise.race([cand.initialize(runningQuality), new Promise((_, rej) => { to = setTimeout(() => rej(new Error('timed out loading ' + a.engine)), 45000); })]).finally(() => clearTimeout(to));
       if (!a.emergency) cand.longEdge = a.edge;
-      if (!a.emergency && a.engine !== previousEngine && a.engine !== 'modnet' && a.engine !== 'mediapipe') {
+      const mattePolicy = window.VS.MatteEnginePolicy;
+      const automaticMode = !!(window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault &&
+        window.VS.MatteEngines.isAutomaticDefault());
+      const requiresRuntimeQualification = mattePolicy && typeof mattePolicy.requiresRuntimeQualification === 'function'
+        ? mattePolicy.requiresRuntimeQualification(a.engine, previousEngine, automaticMode)
+        : (a.engine !== 'modnet' && a.engine !== 'mediapipe' && (a.engine !== previousEngine || automaticMode));
+      if (!a.emergency && requiresRuntimeQualification) {
         const gate = window.VS.MatteQualityQualification;
         const identity = cand && typeof cand.getQualificationIdentity === 'function'
           ? await cand.getQualificationIdentity()
