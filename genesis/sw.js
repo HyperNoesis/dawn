@@ -69,6 +69,7 @@ const SHELL_ASSETS = [
   'terms.html', 'tests.html', 'vendor/webm-muxer/webm-muxer.js',
 
   // Segmentation runtime, dynamic providers, and frame/qualification helpers must be offline-ready.
+  'js/providers/matte-engines.js',
   'js/providers/birefnet-provider.js',
   'js/providers/edgetam-core.js',
   'js/providers/edgetam-provider.js',
