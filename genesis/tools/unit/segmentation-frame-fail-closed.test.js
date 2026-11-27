@@ -17,5 +17,7 @@ assert.match(app, /never infer against the mutable live video after snapshot fai
   'async frame-capture failure must be explicit and fail closed');
 assert.match(app, /if \(!maskSource\) maskSource = passCanvas/,
   'a missing trustworthy matte must pass the camera through instead of retaining a stale silhouette');
+assert.match(app, /const staleMask = cachedMaskBitmap;[\\s\\S]{0,220}cachedMaskBitmap = null;[\\s\\S]{0,100}cachedMaskFramePacket = null/,
+  'a failed async snapshot must invalidate the previous matte and its frame identity');
 
 console.log('segmentation-frame-fail-closed: no mutable-video inference fallback');
