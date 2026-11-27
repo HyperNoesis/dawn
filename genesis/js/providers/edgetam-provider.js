@@ -65,6 +65,19 @@
     };
     const C = () => V.EdgeTAMCore;
 
+    function releaseSession(session) {
+      try {
+        const result = session && session.release && session.release();
+        if (result && typeof result.catch === 'function') result.catch(() => {});
+      } catch (e) { /* best-effort release */ }
+    }
+
+    function releaseSessions() {
+      releaseSession(own.enc);
+      releaseSession(own.dec);
+      own.enc = own.dec = own.ortRef = null;
+    }
+
     function ensureCanvases() {
       if (own.frameCanvas) return;
       const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
@@ -216,7 +229,10 @@
         // A timed-out ORT run cannot be cancelled reliably. Disable this tracker
         // instance and fall back to the base matte so a late result can never
         // install a stale gate or leave the camera waiting on an unbounded run.
-        if (e && e.code === 'EDGETAM_INFERENCE_TIMEOUT') own.status = 'failed';
+        if (e && e.code === 'EDGETAM_INFERENCE_TIMEOUT') {
+          own.status = 'failed';
+          releaseSessions();
+        }
       }
       finally { own.busy = false; }
     }
@@ -346,9 +362,10 @@
         return own.gate ? Object.assign({}, res, { segmentationMask: compose(res.segmentationMask) }) : res;
       },
       dispose() {
-        try { own.enc && own.enc.release && own.enc.release(); own.dec && own.dec.release && own.dec.release(); } catch (e) { /* ignore */ }
-        own.enc = own.dec = null; own.sourceCanvas = own.frameCanvas = null; own.sourceCtx = own.frameCtx = null;
-        own.status = 'idle'; return base.dispose && base.dispose();
+        releaseSessions();
+        own.sourceCanvas = own.frameCanvas = null; own.sourceCtx = own.frameCtx = null;
+        own.baseCanvas = own.baseCtx = own.outCanvas = own.outCtx = own.gateCanvas = own.gateCtx = own.gateImg = null;
+        own.gate = null; own.status = 'idle'; return base.dispose && base.dispose();
       },
       get label() {
         const baseLabel = own.status === 'failed' && base.hy
