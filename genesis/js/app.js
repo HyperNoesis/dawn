@@ -316,6 +316,7 @@
             if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, fallbackReason);
             resetSegCache();
             rendererSend({ type: 'setMatte', state: {} });
+            pushMatte();
             updateStudioChrome();
             updateCostInfo();
             setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);
@@ -748,6 +749,9 @@
   pushRealism();
   pushMask();
 
+  // The provider identity determines whether the compositor should preserve
+  // fractional model alpha or tighten a semantic segmentation mask.
+  let segProvider = null;
   // Sharp GPU matte (see js/providers/gl-matte.js). Falls back to the legacy
   // canvas edge path automatically if WebGL2 is unavailable.
   const matteState = { mode: 'gl', radius: 1, crisp: 0.5, despill: 0.6 };
@@ -765,6 +769,8 @@
       radius: matteState.radius,
       edgeLo: 0.15 + 0.30 * c,
       edgeHi: 0.85 - 0.30 * c,
+      preserveAlpha: !(segProvider && window.VS.MediaPipeSegmentationProvider &&
+        segProvider instanceof window.VS.MediaPipeSegmentationProvider),
       despill: matteState.despill,
       colourSnap: (function () { try { if (localStorage.getItem('vs_snap') === '0') return 0; } catch (e) {} const F = window.VS.Flags; return F ? F.get('colourSnap') : 0.8; })(),   // v0.89 colour-line edge correction; kill switches: localStorage vs_snap=0 (this device) or flags.json colourSnap (everyone, v0.90)
     };
@@ -778,7 +784,6 @@
   rendererSend({ type: 'matteQuery' });
 
   const envProvider = new window.VS.StaticEnvironmentProvider();
-  let segProvider = null;
 
   const compositionEngine = new window.VS.CompositionEngine();
   const captionsProvider = new window.VS.CaptionsProvider();
@@ -1309,6 +1314,7 @@
       }
       updateStudioChrome();
       if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
+      pushMatte();
     } catch (err) {
       const edgeOnlyFailure = VSNS.MatteEngines && typeof VSNS.MatteEngines.hasUsableMatteFallback === 'function' &&
         VSNS.MatteEngines.hasUsableMatteFallback(matteChoice, segProvider);
@@ -1320,6 +1326,7 @@
           (segProvider.hy ? 'Genesis Hybrid' : 'the base matting provider') +
           ' without subject-gate cleanup. ' + (err && err.message ? err.message : err);
         if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, reason);
+        pushMatte();
         showBenchNote(reason);
       } else {
         if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(null, 'Selected engine initialisation failed: ' + (err && err.message ? err.message : err));
@@ -1339,6 +1346,7 @@
           );
           updateStudioChrome();
           if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, 'Requested engine failed; using MediaPipe fallback: ' + (err && err.message ? err.message : err));
+          pushMatte();
           showBenchNote('The selected engine could not start. MediaPipe is active instead. Reason: ' + (err && err.message ? err.message : err));
         } catch (fallbackErr) {
           modelFailedKeepCamera(fallbackErr.message);
@@ -2510,7 +2518,7 @@
       if (!running || token !== loopToken) { cand.dispose?.(); return; }
       const old = segProvider; segProvider = cand; cand = null;
       if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, 'Performance governor switched to MediaPipe because the selected matting engine could not sustain the target frame rate.');
-      resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
+      resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); pushMatte(); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);
       segLogPush('light-active'); showBenchNote('Light model active: this device could not hold a steady frame rate with the high-quality model.');
       // A short dip (camera exposure change, a notification, a hot moment) must not cost the whole session its good cut-out: look again after 90 s, at most twice per camera session.
@@ -2772,7 +2780,7 @@
           ? 'Performance adaptation moved from ' + selectedEngine + ' to ' + activeEngine + ' to protect preview responsiveness.'
           : null);
       if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, governorReason);
-      resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
+      resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); pushMatte(); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);   // disposing a hung worker terminates it
       gv.applied(a, performance.now()); govSave(a);
       segLogPush('gov-applied', { type: a.type, engine: a.engine, edge: a.edge });
