@@ -14,7 +14,7 @@ assert.doesNotMatch(app, /inferenceSnapshot\s*\|\|\s*els\.video/,
   'foreground inference must require an owned frame snapshot');
 assert.doesNotMatch(app, /catch\s*\([^)]*\)\s*\{\s*sourceFrame\s*=\s*els\.video/,
   'candidate benchmarks must fail when frame capture fails');
-assert.match(app, /never infer against the mutable live video after snapshot failure/,
+assert.match(app, /never infer against the mutable live video or reuse an unpaired matte/,
   'async frame-capture failure must be explicit and fail closed');
 assert.match(app, /if \(!maskSource\) maskSource = passCanvas/,
   'a missing trustworthy matte must pass the camera through instead of retaining a stale silhouette');
