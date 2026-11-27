@@ -2612,7 +2612,17 @@
     // The provider changed outside the governor (startup upgrade, the person picked another engine): start fresh from what is really running.
     try {   // begin where this device last held steady (kept 6 h), so the first seconds are not a slideshow
       const sv = JSON.parse(localStorage.getItem('vs_gov_last') || 'null');
-      if (sv && sv.engine === eng && sv.edge > 0 && sv.edge < (segProvider.longEdge | 0) && Date.now() - sv.at < 6 * 3600 * 1000) { segProvider.longEdge = sv.edge; resetSegCache(); }
+      const automatic = !!(window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault &&
+        window.VS.MatteEngines.isAutomaticDefault());
+      // A saved governor rung is only a performance preference, not quality
+      // evidence. Never let it rewrite the exact resolution of an automatically
+      // promoted experimental provider after that provider passed identity checks.
+      const exactQualifiedRoute = automatic && eng !== 'modnet';
+      if (!exactQualifiedRoute && sv && sv.engine === eng && sv.edge > 0 &&
+          sv.edge < (segProvider.longEdge | 0) && Date.now() - sv.at < 6 * 3600 * 1000) {
+        segProvider.longEdge = sv.edge;
+        resetSegCache();
+      }
     } catch (e) {}
     governor = G.create({ chain: govChainFor(eng, segProvider.longEdge | 0), startEngine: eng, startEdge: segProvider.longEdge | 0, now: performance.now() });
     govProvider = segProvider; govLight = false;
