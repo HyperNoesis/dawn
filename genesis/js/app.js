@@ -375,8 +375,7 @@
       // forever. The candidate is disposed by its caller after this timeout.
       const timeoutMs = Math.max(1500, Math.min(12000, maxMs() * 8));
       let timeoutHandle = null, sourceFrame = null;
-      try { sourceFrame = captureSegmentationFrame(els.video); }
-      catch (snapshotError) { sourceFrame = els.video; } // safe legacy fallback when canvas allocation is unavailable
+      sourceFrame = captureSegmentationFrame(els.video); // fail the candidate rather than benchmark a mutable live-video source
       const t0 = performance.now(); // match live timing: exclude snapshot setup, measure provider inference only
       // Candidate probes use the same immutable frame and per-provider flight
       // guard as foreground inference. A timeout must not destroy the frame or
@@ -2035,15 +2034,21 @@
     });
     let sourceFrame = null;
     try { sourceFrame = captureSegmentationFrame(els.video); }
-    catch (e) { if (maskMotion) maskMotion.reset(); }
-    const packet = sourceFrame && sourceFrame.__vsSegmentationFramePacket || null;
+    catch (e) {
+      if (maskMotion) maskMotion.reset();
+      asyncSegBusy = false;
+      asyncSegLastAt = performance.now();
+      segLogPush('frame-snapshot-failed', { stage: 'async-inference', reason: String((e && e.message) || e) });
+      return; // never infer against the mutable live video after snapshot failure
+    }
+    const packet = sourceFrame.__vsSegmentationFramePacket;
     let job;
-    job = Promise.resolve().then(() => segWithWatchdog(provider, sourceFrame || els.video)).then(async (r) => {
+    job = Promise.resolve().then(() => segWithWatchdog(provider, sourceFrame)).then(async (r) => {
       if (stale() || !r || !r.segmentationMask) return;
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
-      try { publishSegmentationPreview(sourceFrame || els.video, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
+      try { publishSegmentationPreview(sourceFrame, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       const fresh = await createImageBitmap(r.segmentationMask);
       if (stale()) { fresh.close(); return; }
       seedMaskMotion(fresh, sourceFrame, t0);
@@ -2092,10 +2097,17 @@
     const crop = compositionEngine.computeFrame(videoNativeW || w, videoNativeH || h, Math.max(w, h));
     const useAsync = asyncSegOn() && !noPersonMode;
     const initialSegAt = performance.now();
-    let initialSegFrame = null;
-    if (useAsync && !cachedMaskBitmap) {
+    let initialSegFrame = null, initialSnapshotError = null;
+    // Every inference route (synchronous or asynchronous) receives an owned
+    // immutable frame snapshot. If allocation fails, render a safe pass-through
+    // frame rather than reading a moving <video> element asynchronously.
+    if (!useAsync || !cachedMaskBitmap) {
       try { initialSegFrame = captureSegmentationFrame(els.video); }
-      catch (e) { /* preserve the legacy live-video path if snapshotting is unavailable */ }
+      catch (e) {
+        initialSnapshotError = e;
+        if (maskMotion) maskMotion.reset();
+        segLogPush('frame-snapshot-failed', { stage: 'render-loop', reason: String((e && e.message) || e) });
+      }
     }
     let inferenceSnapshot = initialSegFrame;
     const sampleFrame = camFrames();
@@ -2122,6 +2134,7 @@
     // matte aligned briefly; after its age/confidence limits, composition
     // passes through the live camera instead of freezing an old preview.
     if (benchBusy && cachedMaskBitmap) runInference = false;
+    if (runInference && !inferenceSnapshot && initialSnapshotError) runInference = false;
     if (runInference && asyncSegBusy && asyncSegPromise) { try { await asyncSegPromise; } catch (e) {} }   // first mask / after a cache reset: never run two inferences at once
     // The source snapshot may have been captured before the await above. If a
     // provider/cache reset occurred meanwhile, its frame packet is obsolete.
@@ -2147,8 +2160,13 @@
         scheduleNext();
         return;
       }
-      const inferenceFrame = inferenceSnapshot || els.video;
-      resultFramePacket = inferenceFrame && inferenceFrame.__vsSegmentationFramePacket || null;
+      const inferenceFrame = inferenceSnapshot;
+      if (!inferenceFrame) {
+        dropPerson();
+        scheduleNext();
+        return;
+      }
+      resultFramePacket = inferenceFrame.__vsSegmentationFramePacket || null;
       const segStart = performance.now(); maskFrame = camFrames();
       try {
         results = await segWithWatchdog(inferenceProvider, inferenceFrame);
@@ -2226,8 +2244,11 @@
       }
       if (!maskSource) { dropPerson(); scheduleNext(); return; }
     } else {
-      maskSource = results.segmentationMask;
+      maskSource = results && results.segmentationMask ? results.segmentationMask : passCanvas;
     }
+    // A missing or failed inference has no trustworthy matte. Pass the camera
+    // through; never retain a stale silhouette or fabricate a segmentation.
+    if (!maskSource) maskSource = passCanvas;
 
     // The crop (zoom/pan) AND the resize to final output dimensions both
     // happen right here, inside createImageBitmap — genuinely off the main
