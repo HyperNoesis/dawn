@@ -46,6 +46,15 @@ globalThis.fetch = async (path) => {
   assert.strictEqual(Identity.validHash(ppIdentity.preprocessHash), true);
   assert.strictEqual(Identity.validHash(ppIdentity.postprocessHash), true);
   assert.match(ppIdentity.runtimeBackend, /backend=wasm/);
+  // Device ladder changes must produce a different exact identity. The app
+  // therefore rechecks the final selected resolution immediately before swap.
+  pp.longEdge = 320;
+  const pp320Identity = await pp.getQualificationIdentity();
+  assert.notStrictEqual(pp320Identity.preprocessHash, ppIdentity.preprocessHash,
+    'a changed device resolution must invalidate a qualification for the previous preprocessing dimensions');
+  assert.notStrictEqual(pp320Identity.postprocessHash, ppIdentity.postprocessHash,
+    'the final output resolution is part of the exact pipeline identity');
+  pp.longEdge = 384;
 
   const hybrid = new GenesisHybridProvider();
   Object.assign(hybrid, {
