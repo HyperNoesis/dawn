@@ -193,6 +193,12 @@
           document.getElementById('suPassword').value
         );
         if (result.needsConfirmation) {
+          // v0.98: if Supabase still has "Confirm email" on, try signing in right away (works the moment confirmation is off / auto-confirmed).
+          try {
+            await window.VS.auth.signIn(document.getElementById('suEmail').value, document.getElementById('suPassword').value);
+            window.location.href = nextUrl();
+            return;
+          } catch (e2) { /* really needs the e-mail: fall through to the message */ }
           noticeEl.textContent = 'Almost there. Check your email to confirm your account, then sign in.';
           noticeEl.style.display = 'block';
           signUpForm.reset();
