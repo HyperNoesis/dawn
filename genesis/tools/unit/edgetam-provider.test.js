@@ -177,6 +177,20 @@ assert.deepStrictEqual(E.fitRect(1080, 1920, 1024), { x: 0, y: 0, width: 576, he
   for (let i = 0; i < 4; i++) await emptyGate.segment(emptyVideo);
   assert.strictEqual(emptyGateAttempts, 2, 'a missing gate is retried after the configured interval');
   emptyGate.dispose();
+
+  // A hung encoder/decoder must not hold the first camera frame forever. The
+  // wrapper times out, disables only EdgeTAM, and returns the base matte.
+  V.EdgeTAMCore.refreshGate = () => new Promise(() => {});
+  const timeoutBase = new Base(), timeoutGate = E.create(timeoutBase);
+  await timeoutGate.initialize();
+  const timeoutStarted = Date.now();
+  const timeoutResult = await timeoutGate.segment({ videoWidth: 640, videoHeight: 480, frameId: 111 });
+  const timeoutElapsed = Date.now() - timeoutStarted;
+  assert.ok(timeoutElapsed >= 3500 && timeoutElapsed < 6500, 'EdgeTAM first-frame wait is bounded by its 4-second watchdog (' + timeoutElapsed + ' ms)');
+  assert.strictEqual(timeoutGate.edgetam.status, 'failed', 'a hung tracker is disabled for the session');
+  assert.match(timeoutGate.edgetam.error, /timed out after 4000 ms/);
+  assert.ok(timeoutResult.segmentationMask._alpha, 'base segmentation remains available after tracker timeout');
+  timeoutGate.dispose();
   V.EdgeTAMCore.refreshGate = originalRefreshGate;
 
   p.dispose(); assert.strictEqual(base.disposed, true);
