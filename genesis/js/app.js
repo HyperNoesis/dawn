@@ -110,8 +110,11 @@
   let upgradeRetried = false;  // one automatic re-test per camera session after a slow verdict
   /** Load MODNet while the camera is already live; swap it in only if this device runs it fast enough. */
   function legacyLivePreference() {
-    try { return localStorage.getItem('vs_live_engine') || 'auto'; }
-    catch (e) { return 'auto'; }
+    let v = 'auto';
+    try { v = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) { /* default */ }
+    // GPL-free distribution build (window.VS_NO_GPL set by scripts/build-site.sh): RVM weights are not shipped, so a saved 'rvm' choice means MODNet.
+    if (v === 'rvm' && window.VS_NO_GPL) v = 'modnet';
+    return v;
   }
 
   /** Which live matting engines may be tried, best first. Legacy explicit rvm/modnet/light choices remain honoured; otherwise Automatic benchmarks the advanced local routes. */
@@ -2466,7 +2469,7 @@
     const legacy = legacyLivePreference();
     if (legacy === 'light') return;
     let preferred = legacy === 'rvm' ? 'rvm' : 'modnet';
-    if (els.modelSelect && els.modelSelect.value === 'rvm') preferred = 'rvm';
+    if (els.modelSelect && els.modelSelect.value === 'rvm' && !window.VS_NO_GPL) preferred = 'rvm';
     else if (window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault && window.VS.MatteEngines.isAutomaticDefault()) {
       preferred = 'genesis-hybrid-tam';
     } else if (window.VS.MatteEngines && window.VS.MatteEngines.pref) {

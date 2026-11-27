@@ -27,7 +27,7 @@ const VIEWS = [['phone', 390, 844], ['tablet', 820, 1180], ['desktop', 1440, 900
       const name = (e) => (e.getAttribute('aria-label') || e.getAttribute('aria-labelledby') || e.getAttribute('title') || (e.labels && e.labels.length && 'label') || e.textContent.trim() || e.getAttribute('placeholder') || '');
       const ctrls = [...document.querySelectorAll('button,input:not([type=hidden]),select,textarea,[role=button],[role=tab]')].filter(vis);
       const unlabeled = ctrls.filter((e) => !name(e)).map((e) => e.id || e.className || e.tagName).slice(0, 25);
-      const small = ctrls.filter((e) => { const r = e.getBoundingClientRect(); return Math.min(r.width, r.height) < 24; }).map((e) => e.id || e.className || e.tagName).slice(0, 25);
+      const small = ctrls.filter((e) => { const lab = (e.type === 'checkbox' || e.type === 'radio') && e.closest('label'); const r = (lab || e).getBoundingClientRect(); return Math.min(r.width, r.height) < 24; }).map((e) => e.id || e.className || e.tagName).slice(0, 25);
       const de = document.documentElement;
       return { overflowX: de.scrollWidth - de.clientWidth, controls: ctrls.length, unlabeled, tooSmall: small, h1: document.querySelectorAll('h1').length, lang: de.lang, title: document.title, liveRegions: document.querySelectorAll('[aria-live],[role=status],[role=alert]').length };
     });

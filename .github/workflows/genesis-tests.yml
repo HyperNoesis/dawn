@@ -90,6 +90,9 @@ jobs:
           MATTE_PARAMS='{"edgeLo":0.15,"edgeHi":0.85}' node tools/e2e/t49_matte_edge_gate.js --report
           MATTE_PARAMS='{"edgeLo":0.05,"edgeHi":0.95}' node tools/e2e/t49_matte_edge_gate.js --report
           node tools/e2e/t50_ultramatte_gate.js
+          # Studio user journeys (record/save/reload/camera denied/Go Live failure) and responsive + accessibility audit (phone/tablet/desktop).
+          node tools/e2e/t61_studio_journeys.js
+          node tools/e2e/t60_studio_responsive_audit.js ci
 
       - name: Run export safety and API regression suites
         run: |
