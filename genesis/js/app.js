@@ -2522,39 +2522,51 @@
     if (/MODNet/.test(l)) return 'modnet';
     return null;
   }
-  function govChainFor(engine) {
+  function govChainFor(engine, currentEdge) {
     const sizes = [512, 448, 384, 320, 256, 224], ppSizes = [512, 448, 384, 320], ch = [];
     const gate = window.VS && window.VS.MatteQualityQualification;
+    const automatic = !!(window.VS && window.VS.MatteEngines &&
+      window.VS.MatteEngines.isAutomaticDefault && window.VS.MatteEngines.isAutomaticDefault());
+    // A qualification identity includes the exact input/output resolution. An
+    // automatically promoted experimental route must therefore stay on the
+    // resolution that was actually qualified. Its governor may move to another
+    // registered route (which is checked again on initialization), or to the
+    // established MODNet baseline, but may not silently resize the same model
+    // into an unqualified pipeline. Explicit BETA selections retain their
+    // user-requested adaptive resolution ladder.
+    const activeExperimentalEdges = automatic && engine !== 'modnet'
+      ? [Math.max(1, Number(currentEdge) || 320)]
+      : ppSizes;
     const registered = (id) => !!(gate && typeof gate.registered === 'function' && gate.registered(id).eligible);
     // The active manually-selected BETA route may adapt its own resolution.
     // Cross-engine degradation is allowed only to a route with a registered
     // human-video quality decision; the established MODNet baseline remains
     // the explicit safe fallback. Runtime identity is checked again on swap.
     if (engine === 'genesis-hybrid-tam') {
-      ch.push({ engine: 'genesis-hybrid-tam', edges: ppSizes });
+      ch.push({ engine: 'genesis-hybrid-tam', edges: activeExperimentalEdges });
       if (registered('genesis-hybrid')) ch.push({ engine: 'genesis-hybrid', edges: [320] });
       if (registered('ppmatting-v2')) ch.push({ engine: 'ppmatting-v2', edges: [320] });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'genesis-hybrid') {
-      ch.push({ engine: 'genesis-hybrid', edges: ppSizes });
+      ch.push({ engine: 'genesis-hybrid', edges: activeExperimentalEdges });
       if (registered('ppmatting-v2')) ch.push({ engine: 'ppmatting-v2', edges: [320] });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'ppmatting-v2') {
-      ch.push({ engine: 'ppmatting-v2', edges: ppSizes });
+      ch.push({ engine: 'ppmatting-v2', edges: activeExperimentalEdges });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'edgetam') {
-      ch.push({ engine: 'edgetam', edges: ppSizes });
+      ch.push({ engine: 'edgetam', edges: activeExperimentalEdges });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
     if (engine === 'ppmatting-hrnet') {
-      ch.push({ engine: 'ppmatting-hrnet', edges: ppSizes });
+      ch.push({ engine: 'ppmatting-hrnet', edges: activeExperimentalEdges });
       ch.push({ engine: 'modnet', edges: sizes });
       return ch;
     }
@@ -2602,7 +2614,7 @@
       const sv = JSON.parse(localStorage.getItem('vs_gov_last') || 'null');
       if (sv && sv.engine === eng && sv.edge > 0 && sv.edge < (segProvider.longEdge | 0) && Date.now() - sv.at < 6 * 3600 * 1000) { segProvider.longEdge = sv.edge; resetSegCache(); }
     } catch (e) {}
-    governor = G.create({ chain: govChainFor(eng), startEngine: eng, startEdge: segProvider.longEdge | 0, now: performance.now() });
+    governor = G.create({ chain: govChainFor(eng, segProvider.longEdge | 0), startEngine: eng, startEdge: segProvider.longEdge | 0, now: performance.now() });
     govProvider = segProvider; govLight = false;
     return governor;
   }
@@ -2623,7 +2635,7 @@
     // When the emergency light model is active, recovery must retry the
     // originally selected advanced engine—not an unrelated plain MODNet tier.
     const startEdge = /^(ppmatting|genesis-hybrid)/.test(preferred) ? 320 : 224;
-    governor = G.create({ chain: govChainFor(preferred), startEngine: preferred, startEdge, now: performance.now() });
+    governor = G.create({ chain: govChainFor(preferred, startEdge), startEngine: preferred, startEdge, now: performance.now() });
     governor.applied({ emergency: true, rungIndex: -1, type: 'emergency' }, performance.now());
     govProvider = segProvider; govLight = true;
   }
