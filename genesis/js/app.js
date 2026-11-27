@@ -1885,47 +1885,70 @@
   };
   window.VS.pairReset = function () { pairLog.length = 0; };
 
+  let segmentationFramePool = null;
+  function getSegmentationFramePool() {
+    if (segmentationFramePool) return segmentationFramePool;
+    const api = window.VS && window.VS.SegmentationFramePool;
+    if (!api || typeof api.create !== 'function') throw new Error('Segmentation frame pool is unavailable');
+    segmentationFramePool = api.create({ maxFree: 1, maxPixels: 1920 * 1080 });
+    return segmentationFramePool;
+  }
+
   function captureSegmentationFrame(video) {
     const width = video && video.videoWidth, height = video && video.videoHeight;
     if (!(width > 0 && height > 0)) throw new Error('Camera frame has no dimensions');
-    const frame = document.createElement('canvas');
-    frame.width = width; frame.height = height;
-    const ctx = frame.getContext('2d');
-    if (!ctx) throw new Error('Could not create a camera-frame snapshot');
-    ctx.drawImage(video, 0, 0, width, height);
-
-    const capturedAtMs = performance.now();
-    const frameId = ++segmentationFrameSequence;
-    let sourceVideoId = '', sourceStreamId = '';
+    const pool = getSegmentationFramePool();
+    const frame = pool.acquire(width, height);
     try {
-      const tracks = stream && typeof stream.getVideoTracks === 'function' ? stream.getVideoTracks() : [];
-      sourceVideoId = tracks[0] && tracks[0].id ? String(tracks[0].id) : '';
-      sourceStreamId = stream && stream.id ? String(stream.id) : '';
-    } catch (e) { /* metadata is diagnostic; the immutable pixels remain usable */ }
-    let orientationDegrees = null;
-    try {
-      if (typeof screen !== 'undefined' && screen.orientation && Number.isFinite(screen.orientation.angle)) {
-        orientationDegrees = screen.orientation.angle;
-      } else if (typeof window.orientation === 'number') orientationDegrees = window.orientation;
-    } catch (e) { /* orientation is optional on older browsers */ }
-    const packet = Object.freeze({
-      frameId, sourceTimestampMs: capturedAtMs, capturedAtMs, width, height,
-      orientationDegrees, sourceVideoId, sourceStreamId,
-      providerGeneration: segProviderGeneration
-    });
+      const ctx = frame.getContext('2d');
+      if (!ctx) throw new Error('Could not create a camera-frame snapshot');
+      ctx.drawImage(video, 0, 0, width, height);
 
-    // Model input, tracker and refiners can read the same immutable frame packet.
-    Object.defineProperties(frame, {
-      videoWidth: { configurable: true, value: width },
-      videoHeight: { configurable: true, value: height },
-      __vsSegmentationFrame: { configurable: true, value: true },
-      __vsSegmentationFramePacket: { configurable: false, enumerable: false, writable: false, value: packet }
-    });
-    return frame;
+      const capturedAtMs = performance.now();
+      const frameId = ++segmentationFrameSequence;
+      let sourceVideoId = '', sourceStreamId = '';
+      try {
+        const tracks = stream && typeof stream.getVideoTracks === 'function' ? stream.getVideoTracks() : [];
+        sourceVideoId = tracks[0] && tracks[0].id ? String(tracks[0].id) : '';
+        sourceStreamId = stream && stream.id ? String(stream.id) : '';
+      } catch (e) { /* metadata is diagnostic; the immutable pixels remain usable */ }
+      let orientationDegrees = null;
+      try {
+        if (typeof screen !== 'undefined' && screen.orientation && Number.isFinite(screen.orientation.angle)) {
+          orientationDegrees = screen.orientation.angle;
+        } else if (typeof window.orientation === 'number') orientationDegrees = window.orientation;
+      } catch (e) { /* orientation is optional on older browsers */ }
+      const packet = Object.freeze({
+        frameId, sourceTimestampMs: capturedAtMs, capturedAtMs, width, height,
+        orientationDegrees, sourceVideoId, sourceStreamId,
+        providerGeneration: segProviderGeneration
+      });
+
+      // The packet is immutable; the property itself is replaceable only after
+      // every lease for this canvas has been released and the canvas is reused.
+      Object.defineProperties(frame, {
+        videoWidth: { configurable: true, value: width },
+        videoHeight: { configurable: true, value: height },
+        __vsSegmentationFrame: { configurable: true, value: true },
+        __vsSegmentationFramePacket: { configurable: true, enumerable: false, writable: false, value: packet }
+      });
+      return frame;
+    } catch (error) {
+      releaseSegmentationFrameNow(frame);
+      throw error;
+    }
   }
 
   function releaseSegmentationFrameNow(frame) {
-    try { frame.width = 1; frame.height = 1; } catch (e) { /* best-effort release */ }
+    try {
+      delete frame.videoWidth;
+      delete frame.videoHeight;
+      delete frame.__vsSegmentationFrame;
+      delete frame.__vsSegmentationFramePacket;
+      getSegmentationFramePool().release(frame);
+    } catch (e) {
+      try { frame.width = 1; frame.height = 1; } catch (ignored) { /* best effort release */ }
+    }
   }
 
   function releaseSegmentationFrame(frame) {
