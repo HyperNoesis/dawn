@@ -46,4 +46,12 @@ assert.strictEqual(P.canRestoreSavedGovernorRung('genesis-hybrid', true), false)
 assert.strictEqual(P.canRestoreSavedGovernorRung('ppmatting-v2', true), false);
 assert.strictEqual(P.canRestoreSavedGovernorRung('modnet', true), true);
 assert.strictEqual(P.canRestoreSavedGovernorRung('genesis-hybrid-tam', false), true);
+assert.strictEqual(P.requiresRuntimeQualification('genesis-hybrid-tam', 'genesis-hybrid-tam', true), true,
+  'automatic same-engine restarts must revalidate the exact runtime identity');
+assert.strictEqual(P.requiresRuntimeQualification('genesis-hybrid-tam', 'genesis-hybrid-tam', false), false,
+  'explicit BETA same-engine restarts remain user-directed');
+assert.strictEqual(P.requiresRuntimeQualification('genesis-hybrid', 'genesis-hybrid-tam', false), true,
+  'cross-engine transitions always require an exact identity check');
+assert.strictEqual(P.requiresRuntimeQualification('modnet', 'genesis-hybrid-tam', true), false,
+  'the established MODNet baseline is not an experimental qualification route');
 console.log('matte-engine-policy: all assertions passed');
