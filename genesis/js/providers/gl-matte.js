@@ -150,7 +150,10 @@ void main() {
     }
   }
 
-  float aRaw = sum / wsum;
+  // Matting networks already estimate fractional pixel coverage. Use a
+  // plain bilinear sample of that alpha rather than re-guiding it with the
+  // camera image; guided upsampling is reserved for coarse semantic masks.
+  float aRaw = uPreserveAlpha > 0.5 ? texture(uMask, t).r : sum / wsum;
 
   // Local interior (F) and exterior (B) colours, only near the mask edge.
   float mAvg = swm / max(sw, 0.0001);
@@ -180,7 +183,7 @@ void main() {
   vec3 Bv = Bn / max(Bw, 0.0001);
 
   // colour snap: alpha from the position of the pixel colour on the F-B line
-  if (nearEdge && uSnap > 0.0 && Fw > 0.1 && Bw > 0.1) {
+  if (uPreserveAlpha < 0.5 && nearEdge && uSnap > 0.0 && Fw > 0.1 && Bw > 0.1) {
     vec3 dFB = Fv - Bv;
     float L2 = dot(dFB, dFB);
     vec3 cq = textureLod(uGuide, t, max(0.0, uLod - 2.0)).rgb;   // lightly blurred pixel: sensor noise must not move alpha
@@ -194,7 +197,7 @@ void main() {
   float a = aRaw;
 
   // C. clean-plate assist: only in uncertain zone, never on confident person pixels
-  if (uHavePlate > 0.5) {
+  if (uPreserveAlpha < 0.5 && uHavePlate > 0.5) {
     float diff = length(c0 - texture(uPlate, t).rgb);
     float pl2 = smoothstep(0.06, 0.18, diff);
     float uncertain = 1.0 - smoothstep(0.80, 0.98, a);
