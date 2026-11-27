@@ -37,4 +37,13 @@ assert(P.scriptsFor('ppmatting-v2').includes('js/providers/ppmatting-provider.js
 assert(!P.scriptsFor('ppmatting-v2').includes('js/providers/birefnet-provider.js'));
 assert(!P.scriptsFor('ppmatting-v2').includes('js/providers/edgetam-provider.js'));
 assert.strictEqual(P.resolve('not-an-engine', {}).ok, false);
+
+// A remembered performance rung is not evidence for a changed experimental
+// pipeline. Automatic experimental routes stay on the exact qualified size;
+// explicit BETA selections and the established MODNet baseline may adapt.
+assert.strictEqual(P.canRestoreSavedGovernorRung('genesis-hybrid-tam', true), false);
+assert.strictEqual(P.canRestoreSavedGovernorRung('genesis-hybrid', true), false);
+assert.strictEqual(P.canRestoreSavedGovernorRung('ppmatting-v2', true), false);
+assert.strictEqual(P.canRestoreSavedGovernorRung('modnet', true), true);
+assert.strictEqual(P.canRestoreSavedGovernorRung('genesis-hybrid-tam', false), true);
 console.log('matte-engine-policy: all assertions passed');
