@@ -3,7 +3,7 @@ global.window = globalThis;
 globalThis.VS = globalThis.VS || {};
 
 const assert = require('assert');
-const Provider = require('../../js/providers/modnet-provider.js');
+require('../../js/providers/modnet-provider.js');
 const Flight = require('../../js/providers/segmentation-flight.js').create();
 
 (async () => {
