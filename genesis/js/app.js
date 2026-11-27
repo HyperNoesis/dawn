@@ -764,15 +764,19 @@
   function pushMatte() {
     if (!(renderWorker || localCore)) return;
     const c = matteState.crisp;
+    const preserveAlpha = !(segProvider && window.VS.MediaPipeSegmentationProvider &&
+      segProvider instanceof window.VS.MediaPipeSegmentationProvider);
+    const configuredSnap = (function () { try { if (localStorage.getItem('vs_snap') === '0') return 0; } catch (e) {} const F = window.VS.Flags; return F ? F.get('colourSnap') : 0.8; })();
     const state = {
       mode: matteState.mode,
       radius: matteState.radius,
       edgeLo: 0.15 + 0.30 * c,
       edgeHi: 0.85 - 0.30 * c,
-      preserveAlpha: !(segProvider && window.VS.MediaPipeSegmentationProvider &&
-        segProvider instanceof window.VS.MediaPipeSegmentationProvider),
+      preserveAlpha,
       despill: matteState.despill,
-      colourSnap: (function () { try { if (localStorage.getItem('vs_snap') === '0') return 0; } catch (e) {} const F = window.VS.Flags; return F ? F.get('colourSnap') : 0.8; })(),   // v0.89 colour-line edge correction; kill switches: localStorage vs_snap=0 (this device) or flags.json colourSnap (everyone, v0.90)
+      // Colour-line snapping is a semantic-mask correction. Matting models
+      // already estimate alpha, so don't overwrite their fractional coverage.
+      colourSnap: preserveAlpha ? 0 : configuredSnap,
     };
     // Keep the exact live compositor settings beside the model-provider state
     // so a qualification fingerprint covers the final alpha treatment too.
