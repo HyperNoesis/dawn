@@ -178,7 +178,7 @@
           // This provider emits a fractional alpha matte regardless of the
           // previously active engine. Fingerprint the compositor mode it
           // requires, not a stale semantic-mask setting from the old provider.
-          studioMatte: Object.assign({}, V.currentMatteConfig || {}, { preserveAlpha: true })
+          studioMatte: Object.assign({}, V.currentMatteConfig || {}, { preserveAlpha: true, colourSnap: 0 })
         },
         runtime: {
           name: 'onnxruntime-web-ppmatting',
