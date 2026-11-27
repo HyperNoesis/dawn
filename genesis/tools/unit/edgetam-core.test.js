@@ -69,5 +69,22 @@ assert.strictEqual(C.gateIsSafe(1000, 900, -2), false, 'no object -> refuse'); a
   assert.strictEqual(r.iou, 0.9); assert.strictEqual(r.gate[0], 255); assert.strictEqual(r.obj, 4);
   assert.strictEqual(disposed.count, 10, 'all four input tensors and six encoder/decoder output tensors are disposed after extraction');
   assert.strictEqual(await C.refreshGate(ort, enc, dec, new Uint8ClampedArray(4), new Uint8Array(W * H), W, H), null);
+
+  // A worker/session promise that never resolves must hit the core watchdog,
+  // release its owned input tensor, and not wait for the outer provider timeout.
+  const hungDisposed = { count: 0 };
+  const hungOrt = { Tensor: class { constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; }
+    dispose() { hungDisposed.count++; } } };
+  const hungEnc = { run: () => new Promise(() => {}) };
+  const hungDec = { run: async () => ({}) };
+  const hungStarted = Date.now();
+  await assert.rejects(
+    C.refreshGate(hungOrt, hungEnc, hungDec, new Uint8ClampedArray(1024 * 1024 * 4), base, W, H),
+    /EdgeTAM encoder timed out after/
+  );
+  const hungElapsed = Date.now() - hungStarted;
+  assert.ok(hungElapsed >= C.INFERENCE_TIMEOUT_MS - 100 && hungElapsed < C.INFERENCE_TIMEOUT_MS + 1000,
+    'EdgeTAM core watchdog is bounded (' + hungElapsed + ' ms)');
+  assert.strictEqual(hungDisposed.count, 1, 'owned input tensor is disposed when encoder inference times out');
   console.log('edgetam-core: all assertions passed');
 })().catch((e) => { console.error(e); process.exit(1); });
