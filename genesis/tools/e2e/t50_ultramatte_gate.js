@@ -223,6 +223,10 @@ function withTimeout(promise, ms, label) {
       if (!V.GLMatte) throw new Error('Studio GLMatte edge/decontamination stage was not loaded');
       const edgeMatte = new V.GLMatte();
       if (!edgeMatte.ok) throw new Error('Studio GLMatte failed to initialize: ' + (edgeMatte.error || 'unknown'));
+      // UltraMatte is a true alpha-matting route: the Studio compositor must
+      // retain its fractional coverage instead of applying semantic-mask
+      // threshold tightening a second time.
+      edgeMatte.preserveAlpha = true;
       // Diagnostic-only A/B: widen the alpha transition while keeping every
       // other renderer parameter identical. Do not change Studio defaults until
       // labelled-reference scores and the existing edge suite agree.
@@ -242,6 +246,7 @@ function withTimeout(promise, ms, label) {
       // same high-resolution threshold profile and temporal filtering.
       const noSnapMatte = new V.GLMatte();
       if (!noSnapMatte.ok) throw new Error('No-snap A/B GLMatte failed to initialize: ' + (noSnapMatte.error || 'unknown'));
+      noSnapMatte.preserveAlpha = true;
       noSnapMatte.colourSnap = 0;
       const tInit = performance.now();
       await Promise.race([
@@ -500,6 +505,7 @@ function withTimeout(promise, ms, label) {
         },
         renderMatte: {
           active: !!edgeMatte.ok,
+          preserveAlpha: !!edgeMatte.preserveAlpha,
           error: edgeMatte.error || null,
           effectiveEdgeThresholds: V.GLMatte.resolveEdgeThresholds(512, 384, edgeMatte.edgeLo, edgeMatte.edgeHi, edgeMatte.edgeProfile),
           edgeThresholdExperiment: {
