@@ -326,18 +326,58 @@ class MODNetWorkerProvider extends MODNetSegmentationProvider {
       return !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
     } catch (e) { return true; }
   }
-  _send(msg, transfer) {
+  _send(msg, transfer, timeoutMs) {
     return new Promise((resolve, reject) => {
-      const id = ++this._seq; this._pending.set(id, { resolve, reject });
-      try { this._worker.postMessage(Object.assign({ id }, msg), transfer || []); } catch (e) { this._pending.delete(id); reject(e); }
+      const id = ++this._seq;
+      const limit = Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? timeoutMs
+        : (msg.type === 'init' ? 45000 : (msg.type === 'profile-get' ? 5000 : 15000));
+      const timer = setTimeout(() => {
+        const pending = this._pending.get(id);
+        if (!pending) return;
+        this._pending.delete(id);
+        const error = new Error('MODNet worker ' + msg.type + ' request timed out after ' + limit + ' ms');
+        error.code = 'WORKER_REQUEST_TIMEOUT';
+        pending.reject(error);
+        // A worker that stopped answering is not reusable. Terminate it and
+        // settle every queued request so no flight lease or caller stays busy.
+        const worker = this._worker;
+        this._worker = null;
+        this._ready = false;
+        for (const other of this._pending.values()) {
+          clearTimeout(other.timer);
+          try { other.reject(error); } catch (e) { /* continue settling */ }
+        }
+        this._pending.clear();
+        try { if (worker) worker.terminate(); } catch (e) { /* already stopped */ }
+      }, limit);
+      this._pending.set(id, { resolve, reject, timer });
+      try {
+        if (!this._worker) throw new Error('MODNet worker is not available');
+        this._worker.postMessage(Object.assign({ id }, msg), transfer || []);
+      } catch (e) {
+        clearTimeout(timer);
+        this._pending.delete(id);
+        reject(e);
+      }
     });
   }
   /** Start the worker script (relative path) and wire replies. Returns the base URL. */
   _startWorker(rel) {
     const base = new URL('.', document.baseURI).href;
     this._worker = new Worker(new URL(rel, base).href);
-    this._worker.onmessage = (ev) => { const m = ev.data, p = this._pending.get(m.id); if (!p) return; this._pending.delete(m.id); m.type === 'error' ? p.reject(new Error(m.message)) : p.resolve(m); };
-    this._worker.onerror = (ev) => { const err = new Error('worker crashed: ' + (ev && ev.message || 'unknown')); for (const p of this._pending.values()) p.reject(err); this._pending.clear(); };
+    this._worker.onmessage = (ev) => {
+      const m = ev.data, p = this._pending.get(m.id);
+      if (!p) return;
+      this._pending.delete(m.id); clearTimeout(p.timer);
+      m.type === 'error' ? p.reject(new Error(m.message)) : p.resolve(m);
+    };
+    this._worker.onerror = (ev) => {
+      const err = new Error('worker crashed: ' + (ev && ev.message || 'unknown'));
+      err.code = 'WORKER_CRASH';
+      for (const p of this._pending.values()) { clearTimeout(p.timer); p.reject(err); }
+      this._pending.clear(); this._ready = false;
+    };
     return base;
   }
   /** Boot the worker with N threads; if a multi-thread start fails for any reason, start again with 1 (so threads can never make a phone worse than before). */
@@ -385,6 +425,7 @@ class MODNetWorkerProvider extends MODNetSegmentationProvider {
     const error = new Error('MODNet worker provider disposed before pending operations completed');
     error.code = 'PROVIDER_DISPOSED';
     for (const pending of this._pending.values()) {
+      clearTimeout(pending.timer);
       try { pending.reject(error); } catch (e) { /* continue rejecting remaining work */ }
     }
     this._pending.clear();
