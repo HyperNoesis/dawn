@@ -138,14 +138,14 @@ The CI artifact `genesis-segmentation-gate-report` was downloaded and inspected.
 | UltraMatte segmentation P75 | 602 ms |
 | UltraMatte segmentation P95 / max | 2,790 ms |
 | Estimated mask updates/s at P75 | 1.66 |
-| Raw synthetic alpha MAE | 0.00456 |
-| Final Studio synthetic alpha MAE | 0.00433 |
-| Raw transition-band MAE | 0.18079 |
-| Final Studio transition-band MAE | 0.34012 |
-| Raw / final foreground IoU | 0.98449 / 0.98340 |
+| Raw synthetic alpha MAE | 0.00456 at 512×384 (native provider resolution) |
+| Final Studio synthetic alpha MAE | 0.00433 at 640×480 (output resolution) |
+| Raw transition-band MAE | 0.18079 at 512×384 (native provider resolution) |
+| Final Studio transition-band MAE | 0.34012 at 640×480 (output resolution) |
+| Raw / final foreground IoU | 0.98449 / 0.98340 at different resolutions |
 | Separate generic camera-gate sample rate | 3.47 FPS |
 
-The transition-band MAE is computed on fixture pixels whose reference alpha is between 8 and 247, normalised by 255; foreground IoU uses a threshold of 127. The diagnostic edge parameter experiments gave 0.30514 and 0.27887 transition-band MAE, but they are synthetic A/B measurements only and were not promoted to production settings.
+**Important benchmark correction (27 November):** the historical raw-provider metrics above were scored at 512×384, while the final Studio metrics were scored at 640×480. Those pairs are not a valid like-for-like comparison and must not be used to conclude that the compositor worsens alpha edges. The current t50_ultramatte_gate.js now reports raw native-resolution quality separately, then resizes the raw provider mask to the exact final output dimensions and compares that result against the final Studio alpha at the same dimensions. The corrected run is pending; no new compositor-regression conclusion is claimed yet. Transition-band MAE is computed on reference-alpha pixels between 8 and 247, normalised by 255; foreground IoU uses a threshold of 127.
 
 The UltraMatte test uses `tools/e2e/fixtures/gt_alpha_640x480.png`, explicitly described by the test as synthetic labelled fixture only. Its output shows a generated cartoon presenter. It cannot establish natural hair, transparent cloth, fingers, occlusion, backlight or multi-person quality.
 
@@ -241,3 +241,34 @@ The new Playwright test verified all 17 tabs, visible panel activation, ARIA rel
 7. PR #7 remains a draft, open and unmerged. No deployment, paid service activation, signing or production release was performed.
 
 **Release decision remains unchanged: NOT PRODUCTION-READY.** The runtime identity integration is fixed and tested; the evidence-based quality decision is still BLOCKED.
+
+
+## Additional execution hardening — 27 November 2026
+
+### Runtime identity and adaptive promotion
+- The qualification identity now includes EdgeTAM's effective ONNX Runtime WASM thread count and proxy mode. ort-loader.js explicitly configures the effective thread count (including the single-thread non-isolated fallback) so the identity is not based on an implicit runtime default.
+- Automatic experimental routes now revalidate their exact identity even on a same-engine governor restart. Cross-engine governor transitions continue to require identity checks. Automatic mode also refuses to restore a saved experimental resolution rung that could bypass the qualified rung.
+- The provider-generation and quality-gate regression suites cover the automatic restart, cross-engine, explicit-BETA and baseline cases.
+
+### Frame ownership and lifecycle
+- Removed every live-video fallback from segmentation inference and candidate benchmarking when immutable frame capture fails. A failed asynchronous snapshot invalidates the cached matte and frame identity, then passes the camera through until a fresh valid mask is available.
+- Added a bounded frame snapshot canvas pool (one reusable canvas up to 1080p). The person-image decode holds its own frame lease, so a canvas cannot be recycled while either inference or bitmap decoding still reads it.
+- Added tests for pool reuse, maximum retained canvases, oversized-canvas release, double release, simultaneous frame isolation, and snapshot-failure behavior.
+- Worker request timeouts and provider disposal reject pending work and release associated frame leases instead of leaving promises and buffers indefinitely pending.
+
+### Alpha pipeline and measurement
+- The compositor preserves fractional alpha for matting providers; the semantic MediaPipe mask keeps its separate thresholding behavior. Provider swaps update the compositor state, and the qualification identity includes the alpha-preservation configuration.
+- The synthetic matte benchmark now separates native provider-resolution alpha from raw alpha resized to final output resolution. Raw-versus-final compositor metrics are compared only at the same dimensions.
+- The corrected benchmark run is not yet complete, so no new edge-quality conclusion is claimed.
+
+### Offline shell and Studio verification
+- Bumped the service-worker shell cache to genesis-shell-v147.
+- Added all provider JavaScript files and all local script/stylesheet dependencies referenced by studio.html to the precache manifest. The shell manifest contains 258 assets; a repository-tree audit found no missing paths.
+- Added a regression test that checks every provider JS file, every local Studio script/link dependency, and every shell-manifest path exists in the repository.
+- Strengthened the Studio shell smoke test to require exactly one active panel and zero visible inactive panels after each tab selection, in addition to ARIA, keyboard and responsive checks.
+- A static CSS inventory of genesis/css/genesis-system.css found 2,278 rule blocks, 1,797 unique selectors, 302 selectors repeated across the cascade, 710 !important occurrences, 105 media-query blocks and 308 custom properties. studio.html contains 214 inline style attributes and no inline event-handler attributes. This is an inventory, not a dead-code verdict: duplicate selectors and inline styles may be intentional/dynamic. Broad CSS deletion remains blocked until dependency mapping and screenshot diffs are available.
+
+### Current-head validation snapshot
+- Full segmentation workflow run 45959480952 passed all steps on head 50032dc84628080cce23677f288c73c3858bb565, including provider/pure-logic tests, Studio shell smoke, camera/model/motion/matte-edge browser gates, export/API regressions and deployable-site build.
+- The newer head 33c198db59454394ba2075d8ba31ff6b39125322 includes the same-resolution benchmark correction. Its provider/pure-logic unit suite and strengthened Studio shell smoke have passed; the camera/model/motion/matte-edge browser gate is still running at the time of this report update. Do not treat that newer head as fully green until the workflow completes.
+- The current branch remains PR #7, open and draft. No merge, production deploy, signed release, paid activation or physical-device validation has been performed.
