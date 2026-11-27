@@ -36,17 +36,25 @@ assert.ok(WorkerProvider, 'worker provider is exported for the browser runtime')
 
   let successTerminated = false;
   const success = Object.create(WorkerProvider.prototype);
+  const successWorker = {
+    postMessage(message) {
+      setTimeout(() => successWorker.onmessage({ data: { id: message.id, type: 'result', value: 7 } }), 5);
+    },
+    terminate() { successTerminated = true; }
+  };
   Object.assign(success, {
     _seq: 0,
     _pending: new Map(),
     _ready: true,
-    _worker: {
-      postMessage(message) {
-        setTimeout(() => success._worker.onmessage({ data: { id: message.id, type: 'result', value: 7 } }), 5);
-      },
-      terminate() { successTerminated = true; }
-    }
+    _worker: successWorker
   });
+  successWorker.onmessage = (event) => {
+    const pending = success._pending.get(event.data.id);
+    if (!pending) return;
+    success._pending.delete(event.data.id);
+    clearTimeout(pending.timer);
+    pending.resolve(event.data);
+  };
   const result = await success._send({ type: 'run' }, [], 100);
   assert.strictEqual(result.value, 7);
   assert.strictEqual(success._pending.size, 0);
