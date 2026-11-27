@@ -51,7 +51,10 @@
   // promotes the strongest route that initializes and meets this device's
   // measured frame-time budget. Weak devices keep the safe matte; no device is
   // forced to run the heaviest model just to satisfy a default setting.
-  function defaultEngine() { return 'modnet'; }
+  function ultraDefaultOn() { return !!V.Flags && V.Flags.get('ultraDefault') === 1; }
+  // v1.01: owner decision. With flag ultraDefault=1 the default is Genesis UltraMatte (an explicit, always-honoured route: no benchmark gate, no silent engine swap).
+  // The qualification registry still lists it as experimental; this is a product default, not a quality approval.
+  function defaultEngine() { return ultraDefaultOn() ? 'genesis-hybrid-tam' : 'modnet'; }
 
   function isAutomaticDefault() {
     try {
@@ -60,6 +63,7 @@
       // Before the new picker existed, users could explicitly choose RVM,
       // MODNet or the light mode. Preserve those choices unless they select
       // Automatic in the new picker; a missing legacy key means first-run Auto.
+      if (ultraDefaultOn()) return saved === 'auto' && (!legacy || legacy === 'auto');   // only when the person picked Automatic themselves
       return (!saved || saved === 'auto') && (!legacy || legacy === 'auto');
     } catch (e) { return true; }
   }
