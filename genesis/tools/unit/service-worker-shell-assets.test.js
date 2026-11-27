@@ -10,6 +10,10 @@ const block = sw.match(/const SHELL_ASSETS\s*=\s*\[([\s\S]*?)\];/);
 assert.ok(block, 'service worker must declare a shell asset manifest');
 const assets = new Set([...block[1].matchAll(/'([^']+)'/g)].map((m) => m[1]));
 
+for (const asset of assets) {
+  assert.ok(fs.existsSync(path.join(root, asset)), 'service worker shell asset must exist in the repository: ' + asset);
+}
+
 for (const file of fs.readdirSync(path.join(root, 'js/providers')).filter((name) => name.endsWith('.js'))) {
   const asset = 'js/providers/' + file;
   assert.ok(assets.has(asset), 'provider module must be precached for offline Studio: ' + asset);
