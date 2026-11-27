@@ -381,6 +381,19 @@ function withTimeout(promise, ms, label) {
         ctx.drawImage(gtImage, 0, 0, canvas.width, canvas.height);
         const gtMaskRgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const rawQuality = scoreAlpha(rgba, 3, gtMaskRgba, 0, canvas.width, canvas.height);
+        // Compare raw provider alpha and final Studio alpha at identical output
+        // dimensions. Keep native model-resolution quality separate; comparing
+        // its edge MAE directly with the 640x480 compositor is invalid.
+        const rawOutputCanvas = document.createElement('canvas');
+        rawOutputCanvas.width = renderedForeground.width;
+        rawOutputCanvas.height = renderedForeground.height;
+        const rawOutputCtx = rawOutputCanvas.getContext('2d', { willReadFrequently: true });
+        if (!rawOutputCtx) throw new Error('Could not create same-resolution raw-alpha comparison canvas');
+        rawOutputCtx.imageSmoothingEnabled = true;
+        rawOutputCtx.drawImage(mask, 0, 0, rawOutputCanvas.width, rawOutputCanvas.height);
+        const rawOutputPixels = rawOutputCtx.getImageData(0, 0, rawOutputCanvas.width, rawOutputCanvas.height).data;
+        const rawOutputQuality = scoreAlpha(rawOutputPixels, 3, gtFullRgba, 0,
+          rawOutputCanvas.width, rawOutputCanvas.height);
         let foreground = 0, soft = 0, alphaSum = 0, invalid = 0;
         for (let i = 0; i < rgba.length; i += 4) {
           const a = rgba[i + 3];
@@ -437,8 +450,9 @@ function withTimeout(promise, ms, label) {
             outputHeight: renderedForeground.height
           },
           syntheticGroundTruth: {
-            rawMatte: rawQuality,
-            studioMatte: renderedQuality,
+            rawMatteNativeResolution: rawQuality,
+            rawMatteAtOutputResolution: rawOutputQuality,
+            studioMatteAtOutputResolution: renderedQuality,
             edgeThresholdExperiment: {
               parameters: { edgeLo: 0.15, edgeHi: 0.85 },
               studioMatte: softQuality
