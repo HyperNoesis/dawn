@@ -107,6 +107,7 @@ uniform int uRadius;        // 1 = 3x3 taps, 2 = 5x5 taps
 uniform float uSigmaR;      // colour similarity; lower = edges follow image detail harder
 uniform float uLo;
 uniform float uHi;
+uniform float uPreserveAlpha; // model matting already carries soft alpha; do not harden it like a semantic mask
 uniform float uDespill;     // 0..1 edge colour decontamination
 uniform float uSnap;        // 0..1 colour-line alpha correction at the mask edge
 uniform float uPlateStrength;
@@ -200,7 +201,10 @@ void main() {
     a *= mix(1.0, pl2, uPlateStrength * uncertain);
   }
 
-  a = smoothstep(uLo, uHi, a);
+  // Semantic masks benefit from edge tightening. Alpha-matting models have
+  // already estimated fractional coverage; applying smoothstep again destroys
+  // hair/fabric transition values and measurably worsens boundary error.
+  a = uPreserveAlpha > 0.5 ? clamp(a, 0.0, 1.0) : smoothstep(uLo, uHi, a);
 
   // Edge colour decontamination. A rim pixel is C = aTrue*F + (1-aTrue)*B; we want F. aTrue is close to aRaw, not to the tightened a.
   vec3 fg = c0;
@@ -228,6 +232,7 @@ void main() {
       this.edgeLo = 0.30;
       this.edgeHi = 0.70;
       this.edgeProfile = 'auto';
+      this.preserveAlpha = false; // true for MODNet/RVM/PP-Matting/BiRefNet alpha mattes
       this.despill = 0.6;
       this.smoothBase = 0.45;   // weight on the new frame when nothing moves
       this.smoothAdapt = 2.0;   // motion passes through faster
@@ -257,7 +262,7 @@ void main() {
         this._progUp = this._program(VERT, FRAG_UP);
         this._uS = this._uniforms(this._progSmooth, ['uNew', 'uPrev', 'uMaskSize', 'uBase', 'uAdapt', 'uReset']);
         this._uU = this._uniforms(this._progUp, ['uGuide', 'uMask', 'uPlate', 'uRes', 'uMaskSize', 'uLod', 'uRadius',
-          'uSigmaR', 'uSnap', 'uLo', 'uHi', 'uDespill', 'uPlateStrength', 'uHavePlate']);
+          'uSigmaR', 'uSnap', 'uLo', 'uHi', 'uPreserveAlpha', 'uDespill', 'uPlateStrength', 'uHavePlate']);
 
         this._texGuide = this._tex(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR);
         this._texMaskIn = this._tex(gl.LINEAR, gl.LINEAR);
@@ -411,6 +416,7 @@ void main() {
       const edgeThresholds = resolveEdgeThresholds(mw, mh, this.edgeLo, this.edgeHi, this.edgeProfile);
       gl.uniform1f(this._uU.uLo, edgeThresholds.edgeLo);
       gl.uniform1f(this._uU.uHi, edgeThresholds.edgeHi);
+      gl.uniform1f(this._uU.uPreserveAlpha, this.preserveAlpha ? 1.0 : 0.0);
       gl.uniform1f(this._uU.uDespill, this.despill);
       gl.uniform1f(this._uU.uPlateStrength, this.plateStrength);
       gl.uniform1f(this._uU.uHavePlate, this._havePlate ? 1.0 : 0.0);
