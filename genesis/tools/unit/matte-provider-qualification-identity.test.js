@@ -42,6 +42,12 @@ globalThis.fetch = async (path) => {
     initNote: ''
   });
   const ppIdentity = await pp.getQualificationIdentity();
+  assert.strictEqual(globalThis.VS.currentMatteConfig.preserveAlpha, undefined,
+    'the prior compositor state intentionally has no provider-specific alpha mode');
+  globalThis.VS.currentMatteConfig = Object.freeze(Object.assign({}, globalThis.VS.currentMatteConfig, { preserveAlpha: false }));
+  const afterSemanticMaskIdentity = await pp.getQualificationIdentity();
+  assert.strictEqual(afterSemanticMaskIdentity.postprocessHash, ppIdentity.postprocessHash,
+    'PP-Matting identity must fingerprint its required alpha-preserving compositor mode, not inherit the previous semantic-mask setting');
   assert.strictEqual(Identity.validHash(ppIdentity.modelSha256), true);
   assert.strictEqual(Identity.validHash(ppIdentity.preprocessHash), true);
   assert.strictEqual(Identity.validHash(ppIdentity.postprocessHash), true);
