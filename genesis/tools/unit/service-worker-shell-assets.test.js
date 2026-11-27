@@ -19,7 +19,10 @@ const localRefs = [];
 for (const match of studio.matchAll(/<(script|link)\b[^>]*>/gi)) {
   const tag = match[0];
   const attr = match[1].toLowerCase() === 'script' ? 'src' : 'href';
-  const value = tag.match(new RegExp('\\b' + attr + '\\s*=\\s*["\\']([^"\\']+)["\\']', 'i'))?.[1];
+  const valueMatch = attr === 'src'
+    ? tag.match(/\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)')/i)
+    : tag.match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i);
+  const value = valueMatch && (valueMatch[1] || valueMatch[2]);
   if (!value || /^(?:https?:|data:|#|\/\/)/i.test(value)) continue;
   localRefs.push(value.replace(/^\//, '').split('?')[0]);
 }
