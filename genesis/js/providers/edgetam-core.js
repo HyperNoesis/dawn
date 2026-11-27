@@ -131,6 +131,14 @@
   /** base alpha (any size) is resampled nearest to the gate size by the caller; here both are the same size. */
   function applyGate(alpha, gate) { const out = new Uint8Array(alpha.length); for (let i = 0; i < out.length; i++) out[i] = (alpha[i] * gate[i] / 255 + 0.5) | 0; return out; }
 
+  /** Fraction of the base matte's foreground (alpha >= thr) that survives the CURRENT gate. Cheap enough to run every frame:
+   *  a gate from an earlier frame (previous subject position, a camera switch, a scene cut) must never keep deleting a new subject. */
+  function keptFraction(base, keep, thr) {
+    const t = thr == null ? 128 : thr; let b = 0, k = 0;
+    for (let i = 0; i < base.length; i++) if (base[i] >= t) { b++; if (keep[i]) k++; }
+    return b ? k / b : 1;
+  }
+
   /** Refuse a gate that would delete most of the base matte or that EdgeTAM says holds no object. */
   function gateIsSafe(baseArea, keptArea, objectScore) {
     if (objectScore != null && objectScore < 0) return false;
@@ -162,7 +170,7 @@
     return { gate, iou: iou[k], obj: o[on[2]] ? o[on[2]].data[0] : null, bbox: bb };
   }
 
-  const api = { SIZE, MASK, toPixelValues, bboxFromAlpha, promptFromBox, pickBest, gateFromLogits, softGate, componentGate, applyGate, gateIsSafe, refreshGate };
+  const api = { SIZE, MASK, toPixelValues, bboxFromAlpha, promptFromBox, pickBest, gateFromLogits, softGate, componentGate, applyGate, gateIsSafe, keptFraction, refreshGate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.VS = root.VS || {};
   root.VS.EdgeTAMCore = api;

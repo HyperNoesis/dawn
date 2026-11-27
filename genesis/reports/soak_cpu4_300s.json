@@ -1,0 +1,167 @@
+{
+ "res": {
+  "soakSec": 300,
+  "cpuThrottle": 4,
+  "wallSec": 303,
+  "samples": 20,
+  "fpsMin": 3,
+  "fpsMedian": 6,
+  "heapStartMB": 22,
+  "heapEndMB": 19,
+  "heapMaxMB": 24,
+  "heapGrowthMB": 7,
+  "frozenSamples": 0,
+  "file": {
+   "bytes": 22135536,
+   "type": "video/webm;codecs=vp9,opus",
+   "videoDur": 302.852,
+   "w": 480,
+   "h": 270,
+   "audioDur": 302.33997732426303,
+   "audioRms": 0.06585716848385886
+  },
+  "pageErrors": 0
+ },
+ "samples": [
+  {
+   "t": 28,
+   "fps": 9,
+   "heapMB": 22,
+   "camFrames": 476,
+   "stats": "FPS: 9 | Frame latency: 331.3 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Light: ok"
+  },
+  {
+   "t": 43,
+   "fps": 10,
+   "heapMB": 18,
+   "camFrames": 778,
+   "stats": "FPS: 10 | Frame latency: 176.6 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Light: ok"
+  },
+  {
+   "t": 58,
+   "fps": 3,
+   "heapMB": 20,
+   "camFrames": 1082,
+   "stats": "FPS: 3 | Frame latency: 778.3 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Light: ok"
+  },
+  {
+   "t": 73,
+   "fps": 6,
+   "heapMB": 14,
+   "camFrames": 1382,
+   "stats": "FPS: 6 | Frame latency: 317.1 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 88,
+   "fps": 5,
+   "heapMB": 20,
+   "camFrames": 1681,
+   "stats": "FPS: 5 | Frame latency: 370.4 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 103,
+   "fps": 7,
+   "heapMB": 18,
+   "camFrames": 1983,
+   "stats": "FPS: 7 | Frame latency: 178.6 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 118,
+   "fps": 8,
+   "heapMB": 12,
+   "camFrames": 2287,
+   "stats": "FPS: 8 | Frame latency: 207.8 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 133,
+   "fps": 5,
+   "heapMB": 22,
+   "camFrames": 2588,
+   "stats": "FPS: 5 | Frame latency: 352.0 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 149,
+   "fps": 7,
+   "heapMB": 13,
+   "camFrames": 2890,
+   "stats": "FPS: 7 | Frame latency: 315.2 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 164,
+   "fps": 8,
+   "heapMB": 23,
+   "camFrames": 3193,
+   "stats": "FPS: 8 | Frame latency: 166.7 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 179,
+   "fps": 7,
+   "heapMB": 16,
+   "camFrames": 3495,
+   "stats": "FPS: 7 | Frame latency: 198.5 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 194,
+   "fps": 6,
+   "heapMB": 24,
+   "camFrames": 3798,
+   "stats": "FPS: 6 | Frame latency: 287.2 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 209,
+   "fps": 6,
+   "heapMB": 22,
+   "camFrames": 4099,
+   "stats": "FPS: 6 | Frame latency: 299.6 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 224,
+   "fps": 6,
+   "heapMB": 14,
+   "camFrames": 4400,
+   "stats": "FPS: 6 | Frame latency: 325.5 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 239,
+   "fps": 7,
+   "heapMB": 21,
+   "camFrames": 4702,
+   "stats": "FPS: 7 | Frame latency: 190.5 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 254,
+   "fps": 4,
+   "heapMB": 22,
+   "camFrames": 5005,
+   "stats": "FPS: 4 | Frame latency: 429.1 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 269,
+   "fps": 6,
+   "heapMB": 13,
+   "camFrames": 5309,
+   "stats": "FPS: 6 | Frame latency: 397.8 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 285,
+   "fps": 6,
+   "heapMB": 21,
+   "camFrames": 5611,
+   "stats": "FPS: 6 | Frame latency: 318.1 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 300,
+   "fps": 6,
+   "heapMB": 12,
+   "camFrames": 5912,
+   "stats": "FPS: 6 | Frame latency: 181.2 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  },
+  {
+   "t": 315,
+   "fps": 7,
+   "heapMB": 19,
+   "camFrames": 6215,
+   "stats": "FPS: 7 | Frame latency: 311.0 ms | Provider: MediaPipe Selfie Segmentation · legacy local | Low-light boost: active | FAST: lite pipeline | Mask refresh: 1 in 2 frames | Light: ok"
+  }
+ ]
+}

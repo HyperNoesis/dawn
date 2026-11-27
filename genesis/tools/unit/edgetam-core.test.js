@@ -59,3 +59,16 @@ assert.strictEqual(C.gateIsSafe(1000, 900, -2), false, 'no object -> refuse'); a
   assert.strictEqual(await C.refreshGate(ort, enc, dec, new Uint8ClampedArray(4), new Uint8Array(W * H), W, H), null);
   console.log('edgetam-core: all assertions passed');
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// --- stale-gate safety (found by the real-photo benchmark: a gate from the previous subject deleted the new one entirely)
+{
+  const C = require('../../js/providers/edgetam-core.js');
+  const base = new Uint8Array(100).fill(0); for (let i = 20; i < 60; i++) base[i] = 255;      // 40 foreground pixels
+  const keepNone = new Uint8Array(100), keepAll = new Uint8Array(100).fill(255), keepHalf = new Uint8Array(100); for (let i = 20; i < 40; i++) keepHalf[i] = 255;
+  const assert = require('assert');
+  assert.strictEqual(C.keptFraction(base, keepNone, 128), 0, 'gate on the wrong place keeps nothing');
+  assert.strictEqual(C.keptFraction(base, keepAll, 128), 1);
+  assert.strictEqual(C.keptFraction(base, keepHalf, 128), 0.5);
+  assert.strictEqual(C.keptFraction(new Uint8Array(100), keepNone, 128), 1, 'empty base matte: nothing to protect');
+  console.log('edgetam-core: stale-gate keptFraction assertions passed');
+}

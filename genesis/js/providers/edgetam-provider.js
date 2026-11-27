@@ -193,6 +193,9 @@
       if (own.outCanvas.width !== w || own.outCanvas.height !== h) { own.outCanvas.width = w; own.outCanvas.height = h; }
       const baseAlpha = alphaAtGate(mask);
       const keep = C().componentGate(baseAlpha, own.gate, G, G, 128, o.minOverlap);
+      // The stored gate was made for an earlier frame. If it would now delete most of THIS frame's subject (camera switch,
+      // scene cut, fast move), drop it, ask for a fresh one next frame and show the ungated matte instead of an empty one.
+      if (C().keptFraction(baseAlpha, keep, 128) < 0.5) { own.gate = null; own.gateAge = o.refreshEvery; own.staleDrops = (own.staleDrops || 0) + 1; return mask; }
       const soft = C().softGate(keep, G, G, o.keepDilate, o.feather), d = own.gateImg.data;
       for (let i = 0, j = 0; i < soft.length; i++, j += 4) { d[j] = d[j + 1] = d[j + 2] = 255; d[j + 3] = soft[i]; }
       own.gateCtx.putImageData(own.gateImg, 0, 0);
@@ -217,6 +220,7 @@
         if (first || (due && !own.busy)) { const p = refresh(video, grid); if (first) await p; }
         if (!own.gate) return false;
         const keep = C().componentGate(grid, own.gate, G, G, 128, o.minOverlap);
+        if (C().keptFraction(grid, keep, 128) < 0.5) { own.gate = null; own.gateAge = o.refreshEvery; own.staleDrops = (own.staleDrops || 0) + 1; own.frame = 0; return false; }   // stale gate: re-seed next frame
         const soft = C().softGate(keep, G, G, o.keepDilate, o.feather);
         const nativeSoft = unfitAlpha(soft, w, h, G);
         for (let i = 0; i < alpha.length; i++) alpha[i] = (alpha[i] * nativeSoft[i] / 255 + 0.5) | 0;
@@ -256,6 +260,7 @@
         }
         return own.gate ? Object.assign({}, res, { segmentationMask: compose(res.segmentationMask) }) : res;
       },
+      resetTemporal() { own.gate = null; own.frame = 0; own.gateAge = 0; return base.resetTemporal && base.resetTemporal(); },   // new subject/camera: no gate carries over
       dispose() {
         try { own.enc && own.enc.release && own.enc.release(); own.dec && own.dec.release && own.dec.release(); } catch (e) { /* ignore */ }
         own.enc = own.dec = null; own.sourceCanvas = own.frameCanvas = null; own.sourceCtx = own.frameCtx = null;
@@ -273,7 +278,7 @@
           status: own.status, error: own.gateError, gateActive: !!own.gate,
           refreshEvery: o.refreshEvery, modelId: own.modelId,
           runtime: own.usingWebGPU ? 'webgpu-encoder+wasm-decoder' : (own.modelId ? 'wasm' : null),
-          precisionFallback: own.precisionFallback, info: own.info
+          precisionFallback: own.precisionFallback, info: own.info, staleGateDrops: own.staleDrops || 0
         };
       }
     };
