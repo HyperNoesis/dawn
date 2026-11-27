@@ -248,8 +248,22 @@ class MODNetSegmentationProvider {
       chw[size + i] = data[i * 4 + 1] / 127.5 - 1;
       chw[2 * size + i] = data[i * 4 + 2] / 127.5 - 1;
     }
-    const out = await this.session.run({ [this._inputName]: new ort.Tensor('float32', chw, [1, 3, mh, mw]) });
-    return out[this._outputName] || out[Object.keys(out)[0]];
+    const input = new ort.Tensor('float32', chw, [1, 3, mh, mw]);
+    const owned = new Set();
+    if (input && typeof input.dispose === 'function') owned.add(input);
+    let out = null;
+    try {
+      out = await this.session.run({ [this._inputName]: input });
+      if (out && typeof out === 'object') Object.keys(out).forEach((key) => {
+        if (out[key] && typeof out[key].dispose === 'function') owned.add(out[key]);
+      });
+      const tensor = out[this._outputName] || out[Object.keys(out)[0]];
+      if (!tensor || !tensor.data) throw new Error('MODNet did not return an alpha tensor');
+      // Copy out of ORT-owned WASM/GPU memory before disposing its tensor.
+      return { dims: tensor.dims, data: Float32Array.from(tensor.data) };
+    } finally {
+      owned.forEach((tensor) => { try { tensor && tensor.dispose && tensor.dispose(); } catch (e) { /* release remaining tensors */ } });
+    }
   }
 
   async segment(videoElement) {
