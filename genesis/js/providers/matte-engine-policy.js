@@ -57,7 +57,15 @@
     return spec ? spec.scripts.slice() : [];
   }
 
-  const api = { SPECS, getSpec, resolve, scriptsFor };
+  // Saved governor rungs describe past device performance, not image-quality
+  // evidence. Automatic experimental routes must retain their exact qualified
+  // resolution; the established MODNet baseline and explicit BETA routes may
+  // restore a prior performance rung.
+  function canRestoreSavedGovernorRung(engine, automatic) {
+    return !(automatic && engine !== 'modnet');
+  }
+
+  const api = { SPECS, getSpec, resolve, scriptsFor, canRestoreSavedGovernorRung };
   root.VS = root.VS || {};
   root.VS.MatteEnginePolicy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
