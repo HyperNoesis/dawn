@@ -10,6 +10,7 @@ require('../../js/providers/modnet-provider.js');
     constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; }
     dispose() { disposed++; }
   }
+  global.ort = { Tensor: FakeTensor };
   const output = new FakeTensor('float32', new Float32Array(32 * 32).fill(0.25), [1, 1, 32, 32]);
   const provider = Object.create(global.VS.MODNetSegmentationProvider.prototype);
   Object.assign(provider, {
