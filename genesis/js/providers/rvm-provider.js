@@ -167,7 +167,7 @@ class RVMSegmentationProvider {
   _resetRecurrentState() {
     // A size/orientation change invalidates the old recurrent tensors. Release
     // them before replacing the state with fresh zero placeholders.
-    (this._rec || []).forEach(disposeTensor);
+    new Set(this._rec || []).forEach(disposeTensor);
     const zero = () => new ort.Tensor('float32', new Float32Array([0]), [1, 1, 1, 1]);
     this._rec = [zero(), zero(), zero(), zero()];
   }
@@ -275,14 +275,14 @@ class RVMSegmentationProvider {
       });
       // Old recurrent states are safe to release only after the model has
       // completed successfully and the replacement state is installed.
-      if (committed) previousState.forEach(disposeTensor);
+      if (committed) previousState.forEach((tensor) => { if (!nextState.includes(tensor)) disposeTensor(tensor); });
     }
   }
 
   dispose() {
     releaseSession(this.session);
     this.session = null;
-    (this._rec || []).forEach(disposeTensor);
+    new Set(this._rec || []).forEach(disposeTensor);
     this._rec = null;
   }
 }
