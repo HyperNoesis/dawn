@@ -20,9 +20,9 @@ assert.match(app, /if \(!maskSource\) maskSource = passCanvas/,
   'a missing trustworthy matte must pass the camera through instead of retaining a stale silhouette');
 assert.match(app, /const staleMask = cachedMaskBitmap;[\s\S]{0,220}cachedMaskBitmap = null;[\s\S]{0,100}cachedMaskFramePacket = null/,
   'a failed async snapshot must invalidate the previous matte and its frame identity');
-assert.match(studio, /js\\/providers\\/segmentation-frame-pool\\.js/,
+assert.match(studio, /js\/providers\/segmentation-frame-pool\.js/,
   'the bounded snapshot pool must load before app runtime');
-assert.match(app, /segmentationFlight\\.run\\(\\{\\}, initialSegFrame/,
+assert.match(app, /segmentationFlight\.run\(\{\}, initialSegFrame/,
   'person bitmap decoding must hold its own source-frame lease');
 
 console.log('segmentation-frame-fail-closed: no mutable-video inference fallback');
