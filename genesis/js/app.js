@@ -2143,7 +2143,15 @@
     let inferenceSnapshot = initialSegFrame;
     const sampleFrame = camFrames();
     const personSource = initialSegFrame || els.video;
-    const personP = createImageBitmap(personSource, crop.sx, crop.sy, crop.sw, crop.sh, { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' });
+    // The person-image decode is a second consumer of the immutable frame.
+    // Give it its own lease so an early error/return cannot recycle the canvas
+    // while createImageBitmap is still reading it.
+    const personP = initialSegFrame
+      ? segmentationFlight.run({}, initialSegFrame, () =>
+          createImageBitmap(personSource, crop.sx, crop.sy, crop.sw, crop.sh,
+            { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' }))
+      : createImageBitmap(personSource, crop.sx, crop.sy, crop.sw, crop.sh,
+          { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' });
     personP.catch(() => {});                                   // a failure is handled where it is awaited below; never an unhandled rejection
     const dropPerson = () => {
       personP.then((b) => b.close()).catch(() => {});
