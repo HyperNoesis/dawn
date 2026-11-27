@@ -165,6 +165,19 @@
         own.gateError = String((e && e.message) || e);
       }
     }
+    const TRACKER_INFERENCE_TIMEOUT_MS = 4000;
+    function withTimeout(promise, ms, label) {
+      let timer;
+      const timeout = new Promise((resolve, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error((label || 'EdgeTAM inference') + ' timed out after ' + ms + ' ms');
+          error.code = 'EDGETAM_INFERENCE_TIMEOUT';
+          reject(error);
+        }, ms);
+      });
+      return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timer));
+    }
+
     async function refresh(video, baseAlpha) {
       if (own.busy || own.status !== 'ready') return;
       own.busy = true;
@@ -183,7 +196,11 @@
         own.frameCtx.fillRect(0, 0, 1024, 1024);
         own.frameCtx.drawImage(video, 0, 0, rect.width, rect.height);
         const rgba = own.frameCtx.getImageData(0, 0, 1024, 1024).data;
-        const r = await C().refreshGate(own.ortRef, own.enc, own.dec, rgba, baseAlpha, G, G);
+        const r = await withTimeout(
+          C().refreshGate(own.ortRef, own.enc, own.dec, rgba, baseAlpha, G, G),
+          TRACKER_INFERENCE_TIMEOUT_MS,
+          'EdgeTAM tracker inference'
+        );
         if (!r) { own.gate = null; return; }
         const grown = C().softGate(r.gate, G, G, o.dilate, 0);          // the SAME mask that is used every frame, so the safety check matches reality
         const keep = C().componentGate(baseAlpha, grown, G, G, 128, o.minOverlap);
@@ -193,7 +210,14 @@
         own.info = { iou: r.iou, obj: r.obj, gateFrac: gateFg / r.gate.length, baseArea, kept, safe, box: [r.bbox.x0, r.bbox.y0, r.bbox.x1, r.bbox.y1] };
         own.gate = safe ? grown : null;
         own.gateAge = 0;
-      } catch (e) { own.gateError = String((e && e.message) || e); own.gate = null; }
+      } catch (e) {
+        own.gateError = String((e && e.message) || e);
+        own.gate = null;
+        // A timed-out ORT run cannot be cancelled reliably. Disable this tracker
+        // instance and fall back to the base matte so a late result can never
+        // install a stale gate or leave the camera waiting on an unbounded run.
+        if (e && e.code === 'EDGETAM_INFERENCE_TIMEOUT') own.status = 'failed';
+      }
       finally { own.busy = false; }
     }
 
