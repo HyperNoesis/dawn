@@ -2617,7 +2617,10 @@
       // A saved governor rung is only a performance preference, not quality
       // evidence. Never let it rewrite the exact resolution of an automatically
       // promoted experimental provider after that provider passed identity checks.
-      const exactQualifiedRoute = automatic && eng !== 'modnet';
+      const policy = window.VS.MatteEnginePolicy;
+      const exactQualifiedRoute = policy && typeof policy.canRestoreSavedGovernorRung === 'function'
+        ? !policy.canRestoreSavedGovernorRung(eng, automatic)
+        : (automatic && eng !== 'modnet');
       if (!exactQualifiedRoute && sv && sv.engine === eng && sv.edge > 0 &&
           sv.edge < (segProvider.longEdge | 0) && Date.now() - sv.at < 6 * 3600 * 1000) {
         segProvider.longEdge = sv.edge;
