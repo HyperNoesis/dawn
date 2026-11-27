@@ -66,25 +66,51 @@ async function makeGcIo(h, w) {
 async function runGc(m, chw) {
   const g = gc; if (m.w !== g.w || m.h !== g.h) throw new Error('graph capture size mismatch ' + m.w + 'x' + m.h + ' vs ' + g.w + 'x' + g.h);
   g.device.queue.writeBuffer(g.inBuf, 0, chw);
-  await session.run({ [inName]: g.inT }, { [outName]: g.outT });
-  const enc = g.device.createCommandEncoder(); enc.copyBufferToBuffer(g.outBuf, 0, g.readBuf, 0, g.outBytes); g.device.queue.submit([enc.finish()]);
-  await g.readBuf.mapAsync(GPUMapMode.READ);
-  const pha = new Float32Array(g.readBuf.getMappedRange().slice(0)); g.readBuf.unmap();
-  return { dims: [1, 1, g.h, g.w], data: pha };
+  const outputs = await session.run({ [inName]: g.inT }, { [outName]: g.outT });
+  try {
+    const enc = g.device.createCommandEncoder(); enc.copyBufferToBuffer(g.outBuf, 0, g.readBuf, 0, g.outBytes); g.device.queue.submit([enc.finish()]);
+    await g.readBuf.mapAsync(GPUMapMode.READ);
+    const pha = new Float32Array(g.readBuf.getMappedRange().slice(0)); g.readBuf.unmap();
+    return { dims: [1, 1, g.h, g.w], data: pha };
+  } finally {
+    // Graph-capture input/output tensors are persistent views over the owned
+    // GPU buffers. Release only transient output wrappers returned by ORT.
+    if (outputs && typeof outputs === 'object') Object.keys(outputs).forEach((key) => {
+      const value = outputs[key];
+      if (value && value !== g.inT && value !== g.outT) {
+        try { value.dispose && value.dispose(); } catch (e) { /* best-effort */ }
+      }
+    });
+  }
 }
 
 async function run(m) {
   const w = m.w, h = m.h, size = w * h, data = new Uint8ClampedArray(m.rgba);
   const chw = new Float32Array(3 * size);
   for (let i = 0; i < size; i++) { chw[i] = data[i * 4] / 127.5 - 1; chw[size + i] = data[i * 4 + 1] / 127.5 - 1; chw[2 * size + i] = data[i * 4 + 2] / 127.5 - 1; }
-  let t;
-  if (gc) t = await runGc(m, chw);
-  else { const out = await session.run({ [inName]: new ort.Tensor('float32', chw, [1, 3, h, w]) }); t = out[outName] || out[Object.keys(out)[0]]; }
-  const dims = t.dims || [1, 1, h, w], oh = dims[dims.length - 2], ow = dims[dims.length - 1];
-  const pha = t.data, alpha = new Uint8Array(ow * oh);
-  for (let i = 0; i < alpha.length; i++) { const v = pha[i]; alpha[i] = v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0; }
-  try { if (self.VS && self.VS.MaskClean) self.VS.MaskClean.clean(alpha, ow, oh); } catch (e) { /* cleanup is optional */ }
-  return { w: ow, h: oh, alpha };
+  const owned = new Set();
+  try {
+    let t;
+    if (gc) t = await runGc(m, chw);
+    else {
+      const input = new ort.Tensor('float32', chw, [1, 3, h, w]);
+      if (input && typeof input.dispose === 'function') owned.add(input);
+      const out = await session.run({ [inName]: input });
+      if (out && typeof out === 'object') Object.keys(out).forEach((key) => {
+        if (out[key] && typeof out[key].dispose === 'function') owned.add(out[key]);
+      });
+      t = out[outName] || out[Object.keys(out)[0]];
+    }
+    if (!t || !t.data) throw new Error('MODNet did not return an alpha tensor');
+    const dims = t.dims || [1, 1, h, w], oh = dims[dims.length - 2], ow = dims[dims.length - 1];
+    if (ow !== w || oh !== h || t.data.length < ow * oh) throw new Error('MODNet alpha output shape is invalid');
+    const pha = t.data, alpha = new Uint8Array(ow * oh);
+    for (let i = 0; i < alpha.length; i++) { const v = pha[i]; alpha[i] = v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0; }
+    try { if (self.VS && self.VS.MaskClean) self.VS.MaskClean.clean(alpha, ow, oh); } catch (e) { /* cleanup is optional */ }
+    return { w: ow, h: oh, alpha };
+  } finally {
+    owned.forEach((tensor) => { try { tensor && tensor.dispose && tensor.dispose(); } catch (e) { /* release remaining tensors */ } });
+  }
 }
 
 self.onmessage = async (ev) => {
