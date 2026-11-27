@@ -230,7 +230,7 @@
         // instance and fall back to the base matte so a late result can never
         // install a stale gate or leave the camera waiting on an unbounded run.
         if (e && e.code === 'EDGETAM_INFERENCE_TIMEOUT') {
-          own.status = 'failed';
+          if (own.status !== 'idle') own.status = 'failed';
           releaseSessions();
         }
       }
