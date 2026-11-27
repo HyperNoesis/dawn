@@ -77,6 +77,7 @@ globalThis.fetch = async (path) => {
   // Exercise the EdgeTAM proxy using a CPU-only mock ORT session. The identity
   // must include the selected fp32 checkpoint bytes and its encoder/decoder route.
   globalThis.ort = {
+    env: { wasm: { numThreads: 1, proxy: false } },
     InferenceSession: {
       create: async () => ({ release() {} })
     }
@@ -131,6 +132,12 @@ globalThis.fetch = async (path) => {
   assert.notStrictEqual(ultraIdentity.modelSha256, hybridIdentity.modelSha256);
   assert.notStrictEqual(ultraIdentity.preprocessHash, hybridIdentity.preprocessHash);
   assert.notStrictEqual(ultraIdentity.postprocessHash, hybridIdentity.postprocessHash);
+  const oneThreadRuntime = ultraIdentity.runtimeBackend;
+  globalThis.ort.env.wasm.numThreads = 2;
+  const twoThreadIdentity = await ultra.getQualificationIdentity();
+  assert.notStrictEqual(twoThreadIdentity.runtimeBackend, oneThreadRuntime,
+    'changing EdgeTAM WASM thread configuration must invalidate the exact runtime identity');
+  globalThis.ort.env.wasm.numThreads = 1;
   // A separate instance must capture CDN fallback during initialization;
   // changing the global after an instance is ready must not rewrite its history.
   runtimeSource = 'cdn';
