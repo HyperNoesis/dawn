@@ -3,108 +3,201 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Genesis, your own virtual studio</title>
-<meta name="description" content="Choose a room, see yourself in it, and record. Free to try.">
+<title>Genesis. Great video. Made easy.</title>
+<meta name="description" content="A virtual video studio for creators, educators and teams. Choose a room, see yourself in it, and record.">
 <meta name="theme-color" content="#0F1114">
 <link rel="icon" href="assets/genesis-logo-atelier.png"><link rel="manifest" href="manifest.json">
-<link rel="preload" href="assets/fonts/Lora-Variable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/SpaceGrotesk-Variable.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="assets/landing/person.webp" as="image">
-<link rel="stylesheet" href="css/landing-stage.css">
+<link rel="modulepreload" href="vendor/three/three.module.min.js">
+<link rel="preload" href="assets/hero-vr.jpg" as="image" fetchpriority="high">
 <script>document.documentElement.classList.add('js')</script>
+<style>
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:300 700;font-display:swap;src:url("assets/fonts/SpaceGrotesk-Variable.woff2") format("woff2")}
+:root{--ink:#0F1114;--ink2:#191C20;--panel:#23272B;--line:rgba(244,240,232,.14);--txt:#F4F0E8;--mut:#B9B3A9;--key:#D6AD70;--key2:#E8C690;--on-key:#17130D;
+--f:'Space Grotesk',system-ui,sans-serif;--ease:cubic-bezier(.2,.7,.2,1);color-scheme:dark;box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:72px}
+body{margin:0;background:var(--ink);color:var(--txt);font:400 17px/1.6 var(--f);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit}img{max-width:100%;display:block}
+.w{width:min(1240px,100% - 48px);margin-inline:auto}
+:focus-visible{outline:2px solid var(--key);outline-offset:3px;border-radius:8px}
+.skip{position:absolute;left:-9999px;top:8px;background:var(--key);color:var(--on-key);padding:10px 16px;border-radius:10px;z-index:100;font-weight:600}.skip:focus{left:12px}
+
+/* the 3D world sits behind everything */
+#gl{position:fixed;inset:0;width:100vw;height:100vh;height:100lvh;z-index:0;display:block;opacity:0;transition:opacity 1.4s ease;pointer-events:none}
+.gl-ready #gl{opacity:1}
+.fb{display:none}
+.nogl #gl{display:none}
+.nogl .fb{display:block;position:absolute;right:0;top:0;width:min(60vw,820px);height:100svh;object-fit:cover;object-position:70% 20%;opacity:.7;z-index:-1;-webkit-mask-image:linear-gradient(90deg,transparent,#000 50%);mask-image:linear-gradient(90deg,transparent,#000 50%)}
+main,footer,.top{position:relative;z-index:2}
+.prog{position:fixed;top:0;left:0;right:0;height:2px;z-index:40;background:var(--key);transform-origin:0 50%;transform:scaleX(var(--p,0));pointer-events:none}
+.vig{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(120% 90% at 50% 50%,transparent 55%,rgba(15,17,20,.75))}
+
+/* header */
+.top{position:fixed;inset:0 0 auto 0;z-index:30;border-bottom:1px solid transparent;transition:background .3s,border-color .3s,backdrop-filter .3s}
+.top.s{background:rgba(15,17,20,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-color:var(--line)}
+.top .w{display:flex;align-items:center;justify-content:space-between;height:72px;gap:16px}
+.brand{display:flex;gap:10px;align-items:center;text-decoration:none;font:600 22px/1 var(--f);letter-spacing:-.01em}
+.brand img{width:28px;height:30px;object-fit:contain}
+.nav{display:flex;gap:32px;font-size:14px;color:var(--mut)}
+.nav a{text-decoration:none;transition:color .2s}.nav a:hover{color:var(--txt)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:54px;padding:0 32px;border-radius:999px;font:600 16px var(--f);text-decoration:none;border:0;cursor:pointer;transition:transform .25s var(--ease),box-shadow .25s,background .2s}
+.btn-p{background:var(--key);color:var(--on-key);box-shadow:0 16px 44px -14px rgba(214,173,112,.75)}
+.btn-p:hover{background:var(--key2);box-shadow:0 22px 52px -14px rgba(214,173,112,.9)}
+.btn-p svg{transition:transform .25s var(--ease)}.btn-p:hover svg{transform:translateX(4px)}
+.top .btn{min-height:42px;padding:0 20px;font-size:14px}
+
+/* sections */
+.sec{min-height:100vh;min-height:100svh;display:flex;flex-direction:column;justify-content:center;padding:96px 0 64px;position:relative}
+h1{font:600 clamp(54px,8.4vw,132px)/.93 var(--f);letter-spacing:-.05em;margin:0 0 28px;max-width:6.6em;text-shadow:0 8px 60px rgba(0,0,0,.6)}
+h1 em{font-style:normal;color:var(--key)}
+h2{font:600 clamp(36px,5.2vw,76px)/.98 var(--f);letter-spacing:-.04em;margin:0 0 14px;max-width:13ch;text-wrap:balance;text-shadow:0 6px 40px rgba(0,0,0,.6)}
+.lead{font-size:clamp(18px,1.6vw,22px);color:#d8d2c7;max-width:30ch;margin:0 0 34px;line-height:1.5;text-shadow:0 2px 24px rgba(0,0,0,.7)}
+.sub{color:#d8d2c7;max-width:40ch;margin:0;font-size:18px;text-shadow:0 2px 24px rgba(0,0,0,.7)}
+.cta{display:flex;flex-wrap:wrap;align-items:center;gap:14px 28px}
+.more{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:500;padding:12px 0;border-bottom:1px solid var(--line);transition:border-color .2s,color .2s}
+.more:hover{border-color:var(--key);color:var(--key)}
+.cue{position:absolute;left:50%;bottom:28px;translate:-50% 0;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--mut)}
+.cue i{width:1px;height:42px;background:linear-gradient(var(--key),transparent);animation:cue 2s ease-in-out infinite;transform-origin:top}
+@keyframes cue{0%{transform:scaleY(0)}50%{transform:scaleY(1)}100%{transform:scaleY(1);opacity:0}}
+.in{animation:up 1s var(--ease) both}.d1{animation-delay:.15s}.d2{animation-delay:.3s}.d3{animation-delay:.45s}
+@keyframes up{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
+.rv{transition:opacity .9s var(--ease),transform .9s var(--ease)}
+.js .rv:not(.on){opacity:0;transform:translateY(30px)}
+
+/* rooms: the 3D picker */
+.sec-rooms{justify-content:space-between;gap:12px}
+#stage{flex:1;min-height:340px;margin:0 -24px;touch-action:pan-y;cursor:grab;outline:none;-webkit-tap-highlight-color:transparent}
+#stage:active{cursor:grabbing}
+.pick{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:20px 32px}
+.pick h3{font:600 clamp(28px,3.4vw,44px)/1 var(--f);letter-spacing:-.03em;margin:0 0 6px}
+.pick p{margin:0;color:#d8d2c7;max-width:34ch;font-size:16px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+.chip{font:500 14px var(--f);color:var(--txt);background:rgba(15,17,20,.6);border:1px solid var(--line);border-radius:999px;padding:9px 16px;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:background .2s,border-color .2s,color .2s}
+.chip:hover{border-color:rgba(214,173,112,.6)}
+.chip[aria-pressed="true"]{background:var(--key);color:var(--on-key);border-color:var(--key)}
+.hint{font-size:13px;color:var(--mut);letter-spacing:.04em;margin:0 0 6px}
+
+/* steps + features */
+.sec-how{justify-content:space-between}
+.glass{background:rgba(15,17,20,.58);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:22px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:0;padding:0;list-style:none}
+.steps li{padding:26px 28px 28px}
+.n{display:block;font:600 56px/1 var(--f);letter-spacing:-.05em;color:transparent;-webkit-text-stroke:1px var(--key);margin-bottom:14px}
+h3{font:600 24px/1.1 var(--f);letter-spacing:-.025em;margin:0 0 8px}
+.steps p,.feat p{color:var(--mut);margin:0;font-size:16px}
+.feat{list-style:none;margin:30px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:700px}
+.feat li{padding:20px 22px}
+.feat h3{font-size:20px}
+.sec-close{align-items:center;text-align:center;justify-content:flex-end;padding-bottom:110px}
+.sec-close h2{max-width:15ch;margin:0 auto 32px;font-size:clamp(40px,6.4vw,96px)}
+.sec-close p{color:var(--mut);margin:20px 0 0;font-size:15px}
+footer{border-top:1px solid var(--line);padding:30px 0;font-size:14px;color:var(--mut);background:var(--ink)}
+footer .w{display:flex;flex-wrap:wrap;gap:16px 32px;justify-content:space-between;align-items:center}
+footer nav{display:flex;gap:26px}footer a{text-decoration:none}footer a:hover{color:var(--txt)}
+
+@media(max-width:900px){
+ .nav{display:none}
+ .sec{padding:84px 0 40px}
+ #hero{justify-content:flex-end;padding-bottom:56px}
+ #hero .lead,#hero h1{max-width:100%}
+ h1{font-size:clamp(46px,14vw,76px);margin-bottom:18px}
+ .lead{margin-bottom:24px}
+ #stage{margin:0 -24px;min-height:44vh}
+ .steps{grid-template-columns:1fr}
+ .steps li{padding:18px 22px}.n{font-size:40px;margin-bottom:6px}
+ .feat{grid-template-columns:1fr;margin-top:18px}
+ .feat li{padding:14px 18px}
+ .sec-how{justify-content:flex-start;gap:20px}
+ .sec-feat{justify-content:flex-end}
+ .chips{flex-wrap:nowrap;overflow-x:auto;margin-inline:-24px;padding-inline:24px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+ .chip{white-space:nowrap}
+}
+@media(prefers-reduced-motion:reduce){
+ *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+ .js .rv:not(.on){opacity:1;transform:none}
+}
+</style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
+<div class="prog" id="prog" aria-hidden="true"></div>
+<canvas id="gl" aria-hidden="true"></canvas>
+<img class="fb" src="assets/hero-vr.jpg" alt="" width="736" height="977" aria-hidden="true">
+<div class="vig" aria-hidden="true"></div>
+
 <header class="top" id="top"><div class="w">
 <a class="brand" href="landing.html" aria-label="Genesis home"><img src="assets/genesis-logo-atelier.png" alt="" width="28" height="30">Genesis</a>
-<nav class="nav glass" aria-label="Page"><a href="#rooms">Rooms</a><a href="#how">How it works</a><a href="#features">What you get</a></nav>
-<div class="act"><a class="lnk" href="auth.html">Sign in</a><a class="btn btn-p" href="studio.html?guest=1">Open Studio</a></div>
+<nav class="nav" aria-label="Page"><a href="#rooms">Rooms</a><a href="#how">How it works</a><a href="#features">What you get</a></nav>
+<a class="btn btn-p" href="studio.html?guest=1">Explore Genesis</a>
 </div></header>
 
 <main id="main">
-<section class="hero" aria-labelledby="t">
-<div class="stage3d">
-<canvas id="hero3d" role="img" aria-label="A person in a headset surrounded by studio rooms. Drag sideways to turn the rooms."></canvas>
-<img class="fallback" src="assets/landing/person.webp" alt="" width="736" height="977">
+<section class="sec" id="hero" aria-labelledby="t"><div class="w"><div>
+<h1 id="t" class="in">Great video. <em>Made easy.</em></h1>
+<p class="lead in d1">A virtual video studio for creators, educators and teams.</p>
+<div class="cta in d2">
+<a class="btn btn-p" href="studio.html?guest=1">Explore Genesis <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+<a class="more" href="#rooms">See the rooms</a>
 </div>
-<div class="w hero-in">
-<h1 id="t">Step into your own studio</h1>
-<p class="lead">Choose a room, see yourself in it, and record.</p>
-<div class="cta">
-<a class="btn btn-p" href="studio.html?guest=1">Open Studio <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
-<a class="btn btn-g glass" href="#rooms">Try a room</a>
-</div>
-<p class="free">Free to try</p>
-</div>
-<div class="picker glass" id="picker" hidden>
-<button type="button" id="prev" aria-label="Previous room"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
-<a id="pickLink" href="studio.html?guest=1"><span>Open Studio in</span><b id="pickName">Podcast</b></a>
-<button type="button" id="next" aria-label="Next room"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
-</div>
-<p class="hint" id="hint" hidden>Drag to turn the rooms</p>
+</div></div>
+<div class="cue" aria-hidden="true">Scroll<i></i></div>
 </section>
 
-<section class="sec try" id="rooms" aria-labelledby="h-rooms"><div class="w">
-<h2 id="h-rooms">Try a room on.</h2>
-<p class="sub">Choose a room and put your name on screen. This is a preview with a sample picture. In Studio it is your camera.</p>
-<div class="screenwrap" id="tilt">
-<div class="screen" id="screen">
-<img class="bg on" id="bgA" alt="" width="1280" height="720" loading="lazy">
-<img class="bg" id="bgB" alt="" width="1280" height="720">
-<img class="me" src="assets/landing/person.webp" alt="Sample presenter placed in the chosen room" width="736" height="977" loading="lazy">
-<div class="third" aria-hidden="true"><b id="thirdName">Your name</b><span id="thirdRoom">Podcast</span></div>
-<i class="glare" aria-hidden="true"></i>
+<section class="sec sec-rooms" id="rooms" aria-labelledby="h-rooms"><div class="w">
+<h2 id="h-rooms" class="rv">Pick your room.</h2>
+<p class="sub rv">Six studios to start. Drag to turn the stage, then open one.</p>
 </div>
+<div id="stage" tabindex="0" role="group" aria-label="Room stage. Use the left and right arrow keys, or the buttons below, to change room."></div>
+<div class="w pick">
+<div><p class="hint">Drag to spin &middot; tap a room to select it</p><div class="chips" id="roomChips" role="group" aria-label="Rooms"></div>
+<h3 id="roomName" aria-live="polite"></h3><p id="roomDesc"></p></div>
+<a class="btn btn-p" id="roomOpen" href="studio.html?guest=1">Explore Genesis</a>
 </div>
-<div class="controls">
-<label class="namebox glass"><span>Your name</span><input id="nameIn" type="text" maxlength="28" placeholder="Type it here" autocomplete="off"></label>
-<a class="btn btn-p" id="tryOpen" href="studio.html?guest=1">Open Studio</a>
-</div>
-<div class="thumbs" id="thumbs" role="group" aria-label="Rooms"></div>
-</div></section>
+</section>
 
-<section class="sec" id="how" aria-labelledby="h-how"><div class="w">
-<h2 id="h-how">Three steps. Then you are on.</h2>
-<div class="story">
-<div class="visual" aria-hidden="true">
-<div class="mon" id="mon" data-step="1">
-<img class="room" src="assets/environments/scene-premium-podcast.jpg" alt="" width="1280" height="720" loading="lazy">
-<img class="who" src="assets/landing/person.webp" alt="" width="736" height="977" loading="lazy">
-<div class="strip"><img src="assets/landing/room-podcast.webp" alt="" width="640" height="360" loading="lazy"><img src="assets/landing/room-talkshow.webp" alt="" width="640" height="360" loading="lazy"><img src="assets/landing/room-classroom.webp" alt="" width="640" height="360" loading="lazy"><img src="assets/landing/room-library.webp" alt="" width="640" height="360" loading="lazy"></div>
-<div class="frame"><i></i><i></i><i></i><i></i></div>
-<div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-<div class="tally"><b></b>Recording <span id="time">00:00</span></div>
-</div>
-<p class="note">Illustration of the steps, not a screenshot.</p>
-</div>
-<ol class="beats">
-<li class="on"><span class="n" aria-hidden="true">1</span><h3>Pick a room</h3><p>Choose from the library, or bring your own picture.</p></li>
-<li><span class="n" aria-hidden="true">2</span><h3>Find your frame</h3><p>Start your camera, check your light and sound, and step in.</p></li>
-<li><span class="n" aria-hidden="true">3</span><h3>Record</h3><p>Hit record. A safety copy is kept as you go. Going live is in beta.</p></li>
-</ol>
-</div></div></section>
+<section class="sec sec-how" id="how" aria-labelledby="h-how"><div class="w">
+<h2 id="h-how" class="rv">Three steps. Then you are on.</h2>
+<p class="sub rv">No setup to wade through.</p></div>
+<div class="w"><ol class="steps">
+<li class="glass rv"><span class="n" aria-hidden="true">1</span><h3>Pick a room</h3><p>Choose from the library, or bring your own picture.</p></li>
+<li class="glass rv" style="transition-delay:.12s"><span class="n" aria-hidden="true">2</span><h3>Find your frame</h3><p>Start your camera, check your light and sound, and step in.</p></li>
+<li class="glass rv" style="transition-delay:.24s"><span class="n" aria-hidden="true">3</span><h3>Record</h3><p>Hit record. A safety copy is kept as you go. Going live is in beta.</p></li>
+</ol></div>
+</section>
 
-<section class="sec" id="features" aria-labelledby="h-feat"><div class="w">
-<h2 id="h-feat">Everything for the show.</h2>
+<section class="sec sec-feat" id="features" aria-labelledby="h-feat"><div class="w">
+<h2 id="h-feat" class="rv">Everything for the show.</h2>
+<p class="sub rv">Rooms, graphics, sound and a second camera, all in one place.</p>
 <ul class="feat">
-<li class="glass wide" style="--img:url('../assets/landing/room-podcast.webp')"><h3>Your name on screen</h3><p>Lower thirds, tickers, countdowns, scoreboards and QR codes in your colours.</p></li>
-<li class="glass"><h3>Run the show</h3><p>One Next button moves graphics, scene and teleprompter, even from a second phone.</p></li>
-<li class="glass"><h3>Clean sound</h3><p>Voice polish, optional noise removal, and music that dips when you talk.</p></li>
-<li class="glass"><h3>Safe recording</h3><p>A safety copy is kept as you record.</p></li>
-<li class="glass"><h3>A second camera</h3><p>Scan a code and another phone becomes a new angle.</p></li>
+<li class="glass rv"><h3>Rooms</h3><p>Newsroom, podcast, classroom, office, library and more.</p></li>
+<li class="glass rv" style="transition-delay:.08s"><h3>Your name on screen</h3><p>Lower thirds, tickers, countdowns and QR codes in your colours.</p></li>
+<li class="glass rv" style="transition-delay:.16s"><h3>Run the show</h3><p>One Next button moves graphics, scene and teleprompter, even from a second phone.</p></li>
+<li class="glass rv" style="transition-delay:.24s"><h3>Clean sound</h3><p>Voice polish, optional noise removal, and music that dips when you talk.</p></li>
+<li class="glass rv" style="transition-delay:.32s"><h3>Safe recording</h3><p>A safety copy is kept as you record.</p></li>
+<li class="glass rv" style="transition-delay:.4s"><h3>A second camera</h3><p>Scan a code and another phone becomes a new angle.</p></li>
 </ul>
 </div></section>
 
-<section class="close" aria-labelledby="h-end"><div class="w">
-<div class="coin"><canvas id="coin" role="img" aria-label="Genesis logo. Drag to spin."></canvas></div>
-<h2 id="h-end">Your studio is ready when you are</h2>
-<a class="btn btn-p" href="studio.html?guest=1">Open Studio <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
-<p>Free to try.</p>
+<section class="sec sec-close" id="close" aria-labelledby="h-end"><div class="w">
+<h2 id="h-end" class="rv">Your studio is ready when you are.</h2>
+<a class="btn btn-p rv" href="studio.html?guest=1">Explore Genesis <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+<p class="rv">Free to try.</p>
 </div></section>
 </main>
 
 <footer><div class="w"><a class="brand" href="landing.html"><img src="assets/genesis-logo-atelier.png" alt="" width="28" height="30">Genesis</a><nav aria-label="Footer"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="auth.html">Sign in</a></nav><span>Genesis by Rejuvini</span></div></footer>
-<script type="module" src="js/landing-page.js"></script>
-<script>if('serviceWorker' in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});</script>
+
+<script>
+(function(){
+var els=[].slice.call(document.querySelectorAll('.rv'));
+if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('on');io.unobserve(e.target)}})},{rootMargin:'0px 0px -6% 0px',threshold:.06});els.forEach(function(el){io.observe(el)})}
+else els.forEach(function(el){el.classList.add('on')});
+var top=document.getElementById('top'),bar=document.getElementById('prog');
+function sc(){top.classList.toggle('s',scrollY>40);var m=document.documentElement.scrollHeight-innerHeight;bar.style.setProperty('--p',m>0?(scrollY/m).toFixed(4):0)}sc();addEventListener('scroll',sc,{passive:true});
+if('serviceWorker' in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
+})();
+</script>
+<script type="module" src="js/landing3d.js"></script>
 </body>
 </html>

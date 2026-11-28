@@ -6,11 +6,10 @@
 
 // Bump on every deploy that touches js/*, css/*, or SHELL_ASSETS — this is
 // what forces an already-installed client to drop stale cached files.
-const SHELL_CACHE = 'genesis-shell-v159';
+const SHELL_CACHE = 'genesis-shell-v160';
 const RUNTIME_CACHE = 'genesis-runtime-v10';
 
 const SHELL_ASSETS = [
-  'assets/fonts/Lora-Variable.woff2', 'assets/fonts/OFL-Lora.txt', 'assets/landing/person.webp', 'assets/landing/room-podcast.webp', 'assets/landing/room-talkshow.webp', 'assets/landing/room-classroom.webp', 'assets/landing/room-library.webp', 'assets/landing/room-tech.webp', 'assets/landing/room-terrace.webp', 'assets/landing/room-stage.webp', 'assets/landing/room-living.webp', 'assets/landing/room-sports.webp', 'assets/landing/room-minimal.webp', 'css/landing-stage.css', 'js/landing-page.js', 'js/landing-3d.js', 'vendor/three/three.module.min.js', 'assets/genesis-logo-atelier.png',
   'assets/environments/brick-podcast-room.jpg', 'assets/environments/broadcast-wall.jpg', 'assets/environments/classroom.jpg', 'assets/environments/color-backdrop-studio.jpg',
   'assets/environments/concrete-studio.jpg', 'assets/environments/corporate-office.jpg', 'assets/environments/gear-room.jpg', 'assets/environments/interview-studio.jpg',
   'assets/environments/moody-blue-backdrop.jpg', 'assets/environments/newsroom.jpg', 'assets/environments/outdoor.jpg', 'assets/environments/podcast-studio.jpg',
@@ -50,7 +49,7 @@ const SHELL_ASSETS = [
   'js/error-boundary.js', 'js/face-fit-core.js', 'js/first-run.js', 'js/genesis-design.js',
   'js/gesture-control.js', 'js/golive-core.js', 'js/golive.js', 'js/grade-core.js',
   'js/grade-ui.js', 'js/graphics.js', 'js/hand-gesture-core.js', 'js/icons.js',
-  'js/iris.js', 'js/landing.js', 'js/legal.js', 'js/light-meter.js',
+  'js/iris.js', 'js/landing.js', 'js/landing3d.js', 'vendor/three/three.module.min.js', 'js/legal.js', 'js/light-meter.js',
   'js/loader.js', 'js/looks.js', 'js/multisource-core.js', 'js/multisource.js',
   'js/nav.js', 'js/net-status.js', 'js/ort-loader.js', 'js/projects-page.js',
   'js/prompter-core.js', 'js/prompter-remote.js', 'js/providers/auth-provider.js', 'js/providers/captions-provider.js',
