@@ -20,7 +20,7 @@ import modal
 APP_NAME = "genesis-export"
 GPU = os.environ.get("GENESIS_GPU", "L4")                      # L4 (24 GB) is plenty for BiRefNet 1024 fp16; set GENESIS_GPU=L40S for longer clips
 MAX_GPUS = int(os.environ.get("GENESIS_MAX_GPUS", "2"))        # hard cap on parallel GPU workers = hard cap on spend rate
-INCLUDE_REFERENCE = os.environ.get("GENESIS_INCLUDE_REFERENCE", "1") == "1"   # 0 = leave MatAnyone 2 (non-commercial) out of the image entirely
+INCLUDE_REFERENCE = os.environ.get("GENESIS_INCLUDE_REFERENCE", "0") == "1"   # opt in only for permitted reference evaluation
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 STUDIO_SRC = os.path.join(ROOT, "server", "studio-export")

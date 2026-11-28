@@ -45,12 +45,21 @@
     } catch (err) {
       // Real failure — replace the default message with the actual error.
       console.error('Genesis call.html failed to initialize:', err);
-      els.notConfigured.innerHTML = `
-        <div class="info-card" style="max-width:560px;">
-          <h3>Something went wrong loading this page</h3>
-          <p class="honesty-note text-danger" style="margin-top:0;">${(err && err.message) || String(err)}</p>
-          <p class="honesty-note">Try reloading in a private/incognito tab first — if that fixes it, an old cached version of this app was the cause. If it still fails there, open the browser console for the full error.</p>
-        </div>`;
+      els.notConfigured.textContent = '';
+      const card = document.createElement('div');
+      card.className = 'info-card';
+      card.style.maxWidth = '560px';
+      const heading = document.createElement('h3');
+      heading.textContent = 'Something went wrong loading this page';
+      const detail = document.createElement('p');
+      detail.className = 'honesty-note text-danger';
+      detail.style.marginTop = '0';
+      detail.textContent = String((err && err.message) || err || 'Unknown error').slice(0, 300);
+      const help = document.createElement('p');
+      help.className = 'honesty-note';
+      help.textContent = 'Try reloading in a private tab. If it still fails, contact support with the error shown above.';
+      card.append(heading, detail, help);
+      els.notConfigured.appendChild(card);
     }
   }
 
@@ -79,14 +88,49 @@
     ws.addEventListener('open', () => {
       ws.send(JSON.stringify({ type: 'join', room, name }));
     });
-    ws.addEventListener('message', (e) => handleSignal(JSON.parse(e.data)));
+    ws.addEventListener('message', (e) => {
+      try {
+        const message = JSON.parse(e.data);
+        if (!message || typeof message !== 'object' || Array.isArray(message)) return;
+        handleSignal(message).catch((error) => {
+          console.warn('Genesis call message could not be handled:', error);
+          els.status.textContent = 'A connection message could not be processed.';
+        });
+      } catch (_) { /* Ignore malformed signalling frames. */ }
+    });
     ws.addEventListener('close', () => {
-      if (!els.room.classList.contains('hidden')) els.status.textContent = 'Disconnected';
+      stopCallMedia();
+      els.room.classList.add('hidden');
+      els.joinScreen.classList.remove('hidden');
+      els.status.textContent = 'Disconnected. Camera and microphone stopped.';
+      if (els.joinBtn) els.joinBtn.disabled = false;
     });
     ws.addEventListener('error', () => {
       els.joinError.textContent = 'Could not reach the signaling server. Check signalingUrl in js/config.js and that the server is running.';
-      els.joinBtn.disabled = false;
+      stopCallMedia();
+      if (els.joinBtn) els.joinBtn.disabled = false;
+      try { ws && ws.close(); } catch (_) {}
     });
+  }
+
+  function stopCallMedia() {
+    for (const id of [...peers.keys()]) removePeer(id);
+    if (localStream) {
+      localStream.getTracks().forEach((track) => {
+        try { track.stop(); } catch (_) {}
+      });
+      localStream = null;
+    }
+    analysers.clear();
+    if (audioCtx) {
+      try { audioCtx.close().catch(() => {}); } catch (_) {}
+      audioCtx = null;
+    }
+    if (els.gallery) els.gallery.textContent = '';
+    micOn = true;
+    camOn = true;
+    if (els.micBtn) els.micBtn.setAttribute('aria-pressed', 'false');
+    if (els.camBtn) els.camBtn.setAttribute('aria-pressed', 'false');
   }
 
   async function handleSignal(msg) {
@@ -94,7 +138,7 @@
       case 'room-full':
         els.joinError.textContent = `This room already has the max of ${msg.max} people.`;
         els.joinBtn.disabled = false;
-        localStream.getTracks().forEach((t) => t.stop());
+        stopCallMedia();
         ws.close();
         return;
 
@@ -194,13 +238,23 @@
     const tile = document.createElement('div');
     tile.className = 'call-tile';
     tile.dataset.peerId = id;
-    tile.innerHTML = `
-      <video autoplay playsinline ${isLocal ? 'muted' : ''}></video>
-      <div class="call-tile-label"><span>${name}</span><span class="call-tile-state"></span></div>
-      <div class="call-tile-talking">${ic('mic', 12)} Talking</div>
-    `;
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    if (isLocal) video.muted = true;
+    const label = document.createElement('div');
+    label.className = 'call-tile-label';
+    const displayName = document.createElement('span');
+    displayName.textContent = String(name || 'Guest').slice(0, 40);
+    const state = document.createElement('span');
+    state.className = 'call-tile-state';
+    label.append(displayName, state);
+    const talking = document.createElement('div');
+    talking.className = 'call-tile-talking';
+    talking.innerHTML = ic('mic', 12) + ' Talking'; // fixed, locally generated icon markup only
+    tile.append(video, label, talking);
     els.gallery.appendChild(tile);
-    tile.querySelector('video').srcObject = stream;
+    video.srcObject = stream;
     setupTalkingDetector(tile, stream);
     return tile;
   }
@@ -249,8 +303,7 @@
   });
 
   els.endBtn?.addEventListener('click', () => {
-    for (const id of [...peers.keys()]) removePeer(id);
-    localStream?.getTracks().forEach((t) => t.stop());
+    stopCallMedia();
     ws?.close();
     window.location.href = 'home.html';
   });

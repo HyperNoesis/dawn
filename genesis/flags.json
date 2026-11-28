@@ -1,5 +1,6 @@
 {
   "colourSnap": 0.8,
   "ppmattingBeta": 1,
-  "promotePPMatting": 0
+  "promotePPMatting": 0,
+  "ultraDefault": 1
 }

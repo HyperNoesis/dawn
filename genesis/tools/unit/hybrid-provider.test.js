@@ -1,14 +1,18 @@
 // Smoke test of GenesisHybridProvider with a fake parent provider, fake canvas and fake model worker (no browser).
 const assert = require('assert');
 global.window = global; global.VS = {};
-global.localStorage = { getItem: () => null };
+let hybridEnabled = null;
+global.localStorage = { getItem: (key) => key === 'vs_hy' ? hybridEnabled : null };
 const PC = require('../../js/providers/ppmatting-core.js'); VS.PPMattingCore = PC;
 require('../../js/providers/band-refine-core.js');
 const W = 1280, H = 720, CW = 320, CH = 192;
 function coarseMatte() { const a = new Uint8Array(CW * CH); for (let y = 20; y < 180; y++) for (let x = 100; x < 220; x++) a[y * CW + x] = (x < 106 || x > 213) ? 128 : 255; return a; }
-let sends = [], mode = 'good';
+let sends = [], mode = 'good', frameLuma = 100;
 class Parent {
-  constructor() {} static isSupported() { return true; }
+  // Match the real MODNet/PP parent: _rect is a full-frame object even when
+  // ROI cropping is disabled. Hybrid must not mistake this for an active crop.
+  constructor() { this._rect = { sx: 0, sy: 0, sw: W, sh: H }; }
+  static isSupported() { return true; }
   async segment(video) {
     global.__parentFrameId = video.frameId;
     await Promise.resolve(); // model worker completes after the live video has advanced
@@ -39,7 +43,7 @@ global.document = { createElement: () => {
     },
     putImageData() {},
     createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
-    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(100) })
+    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(frameLuma) })
   });
   return canvas;
 } };
@@ -47,6 +51,12 @@ global.performance = { now: () => Date.now() };
 require('../../js/providers/hybrid-provider.js');
 (async () => {
   const P = new VS.GenesisHybridProvider(), video = { videoWidth: W, videoHeight: H, frameId: 0 };
+  const immutableInput = { width: W, height: H, videoWidth: W, videoHeight: H, __vsSegmentationFrame: true };
+  assert.strictEqual(P._snapshotFrame(immutableInput), immutableInput,
+    'the app-owned immutable source canvas is reused without a second full-frame copy');
+  const liveInput = { videoWidth: W, videoHeight: H };
+  assert.notStrictEqual(P._snapshotFrame(liveInput), liveInput,
+    'live video inputs still receive an owned snapshot before asynchronous inference');
   const r1 = await P.segment(video);
   const firstTileFrames = global.__tileFrameIds.splice(0);
   assert.ok(r1.segmentationMask && r1.segmentationMask.width >= 192, 'hybrid canvas returned ' + JSON.stringify(P.hy));
@@ -56,6 +66,14 @@ require('../../js/providers/hybrid-provider.js');
   assert.ok(sends.every(([w, h]) => w === 192 && h === 192 && w % 32 === 0), 'tile inputs are 192x192 (multiple of 32)');
   assert.strictEqual(P.hy.errors, 0, P.hy.lastError);
   assert.ok(P.hy.refined > 0 && P.hy.rejected === 0, 'faithful tiles are accepted: ' + JSON.stringify(P.hy));
+  assert.ok(P.hy.budget > 0, 'full-frame _rect must not disable the independent tile budget: ' + JSON.stringify(P.hy));
+  // A real ROI crop is intentionally fail-closed until tile coordinates can
+  // be proven to match the parent provider's cropped coordinate system.
+  const cropped = new VS.GenesisHybridProvider();
+  cropped._rect = { sx: 80, sy: 40, sw: W - 160, sh: H - 80 };
+  const croppedResult = await cropped.segment(video);
+  assert.strictEqual(cropped.hy.tiles, 0, 'ROI-cropped input must not enter full-frame tile refinement');
+  assert.strictEqual(croppedResult.segmentationMask.tag, 'parent', 'cropped path safely preserves parent matte');
   const n1 = sends.length; await P.segment(video);
   const secondTileFrames = global.__tileFrameIds.splice(0);
   assert.ok(secondTileFrames.every((id) => id === global.__parentFrameId), 'second-pass tile inputs stay paired with the second coarse frame');
@@ -65,10 +83,16 @@ require('../../js/providers/hybrid-provider.js');
     const blobParent = Parent.prototype.segment;
     Parent.prototype.segment = async function (video) { global.__parentFrameId = video.frameId; await Promise.resolve(); video.frameId++; const a = coarseMatte(); for (let y = 150; y < 190; y++) for (let x = 10; x < 60; x++) a[y * CW + x] = x % 2 ? 128 : 255; this.lastRaw = a; this.lastRefined = null; this.lastSize = [CW, CH]; this.lastGuard = null; return { segmentationMask: { tag: 'parent' } }; };
     const plain = new VS.GenesisHybridProvider(); await plain.segment(video);
-    const tr = new VS.GenesisHybridProvider(); let called = 0;
-    tr.setTrackerHook({ ready: () => true, async step(v, alpha, w, h) { called++; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < w * 0.25) alpha[y * w + x] = 0; return true; } });
+    const tr = new VS.GenesisHybridProvider(); let called = 0, trackerFrameId = null;
+    tr.setTrackerHook({ ready: () => true, async step(v, alpha, w, h) {
+      called++; trackerFrameId = v.frameId;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < w * 0.25) alpha[y * w + x] = 0;
+      return true;
+    } });
     await tr.segment(video);
     assert.ok(called === 1 && tr.hy.tracked === true, 'tracker hook ran and reported tracked');
+    assert.strictEqual(trackerFrameId, global.__parentFrameId, 'EdgeTAM tracker must receive the exact pre-inference frame snapshot used by the coarse matte');
+    assert.notStrictEqual(trackerFrameId, video.frameId, 'EdgeTAM must not read the advanced live camera frame');
     assert.ok(tr.hy.tiles < plain.hy.tiles, 'stray blob removed before the band: tiles ' + plain.hy.tiles + ' -> ' + tr.hy.tiles);
     const bad = new VS.GenesisHybridProvider(); bad.setTrackerHook({ ready: () => true, async step() { throw new Error('tam down'); } });
     const rb = await bad.segment(video); assert.ok(rb.segmentationMask.width >= 192 && bad.hy.tracked === false && bad.hy.errors === 0, 'a failing tracker never breaks the hybrid');
@@ -77,9 +101,38 @@ require('../../js/providers/hybrid-provider.js');
   // bad model output (all zero) must be rejected and never crash
   mode = 'bad'; const Q = new VS.GenesisHybridProvider(); await Q.segment(video);
   assert.ok(Q.hy.rejected > 0 || Q.hy.budget === 0, 'garbage tile rejected: ' + JSON.stringify(Q.hy));
+  assert.ok(Q.hy.attempted <= Q.hy.budget, 'rejected model runs still consume the per-frame inference budget: ' + JSON.stringify(Q.hy));
+  assert.strictEqual(Q.hy.attempted, Q.hy.refined + Q.hy.rejected,
+    'every attempted tile is accounted for as accepted or rejected');
+  const firstBadKeys = Q.hy.rejected;
+  assert.ok(firstBadKeys > 0, 'the deliberately invalid model output records rejected tiles');
+  await Q.segment(video);
+  assert.ok(Q.hy.deferred > 0, 'unchanged rejected tiles are cooled down so other edges can use the budget');
+  assert.ok(Q.hy.attempted <= Q.hy.budget, 'cooldown does not bypass the inference budget');
+  frameLuma = 160; // a materially changed local image signature must bypass the cooldown
+  await Q.segment(video);
+  assert.ok(Q.hy.attempted > 0, 'meaningful source changes immediately reopen rejected tiles');
+  frameLuma = 100;
   // a throwing worker 3x switches the hybrid stage off and falls back to the parent matte
   const T = new VS.GenesisHybridProvider(); T._send = async () => { throw new Error('boom'); };
   let last; for (let i = 0; i < 4; i++) last = await T.segment(video);
   assert.ok(T.hy.off && last.segmentationMask.tag === 'parent', 'falls back to parent after repeated errors');
+  // Even when Hybrid detail is disabled or its circuit-breaker is open,
+  // EdgeTAM's outer wrapper still needs the paired source frame for fallback.
+  for (const scenario of [
+    { name: 'Hybrid detail disabled', enabled: '0', off: false },
+    { name: 'Hybrid circuit breaker open', enabled: null, off: true }
+  ]) {
+    hybridEnabled = scenario.enabled;
+    const fallback = new VS.GenesisHybridProvider();
+    fallback.hy.off = scenario.off;
+    fallback.setTrackerHook({ ready: () => true, async step() { return true; } });
+    const sourceFrameId = video.frameId;
+    await fallback.segment(video);
+    assert.ok(fallback._hyLastFrame, scenario.name + ' must preserve a source snapshot for EdgeTAM fallback');
+    assert.strictEqual(fallback._hyLastFrame.frameId, sourceFrameId, scenario.name + ' snapshot is paired with base inference');
+    assert.notStrictEqual(fallback._hyLastFrame.frameId, video.frameId, scenario.name + ' must not fall back to the advanced live frame');
+  }
+  hybridEnabled = null;
   console.log('hybrid-provider: all assertions passed (' + JSON.stringify(P.hy) + ')');
 })().catch((e) => { console.error(e); process.exit(1); });

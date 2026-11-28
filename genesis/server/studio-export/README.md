@@ -1,7 +1,7 @@
 # Studio Export (v0.82)
 Best-quality person matting for a recorded clip, made to look like the person is **in** the scene. Runs on a GPU machine (your own box, Colab, Kaggle, a rented GPU), not in the browser or on a phone.
 
-Default engine (`--engine clean`, every part is MIT / Apache / BSD, safe to sell):
+Default engine (`--engine clean`, BiRefNet code/weights are labelled MIT; this does not settle all dataset-rights or commercial-clearance questions):
 BiRefNet-matting alpha on every frame -> optical-flow temporal fusion (forward + backward, `temporal.py`) -> scene integration (`scene_integrate.py`: foreground colour estimation, colour-cast match, light wrap from the scene, cast shadow, grain match) -> video.
 
 Reference engine (`--engine matanyone2`): the v0.81 pipeline, kept so you can **measure** the clean engine against it (compare the flicker numbers on the same clip). MatAnyone 2 is under the NTU S-Lab non-commercial licence: do not use its output in a paid service without written permission. See docs/MODEL_DECISION_v0_82.md.

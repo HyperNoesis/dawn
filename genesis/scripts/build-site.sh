@@ -32,6 +32,17 @@ if(missing.length){console.error('MISSING for the service worker: '+missing.join
 node scripts/fetch-models.js --only edgetam,edgetam-fp32,birefnet-lite,ppmatting-v2 --dest www/models || echo "optional engine weights not available (EdgeTAM/BiRefNet will fall back to MODNet)"
 rm -f www/models/*.part
 cp _headers www/_headers            # read by Cloudflare Pages and Netlify (GitHub Pages ignores it, which is fine)
+# Licence gate (NEXT.md directive 3): RVM weights are GPL-3.0. Distributable builds exclude them (and the picker option) unless
+# GENESIS_INCLUDE_GPL=1 is set deliberately, e.g. for a personal build. Source and tests stay in the repository.
+if [ "${GENESIS_INCLUDE_GPL:-0}" != "1" ]; then
+  rm -f www/models/rvm_*.onnx
+  node -e "
+const fs=require('fs');let h=fs.readFileSync('www/studio.html','utf8');
+h=h.replace(/\\s*<option value=\"rvm\">[^<]*<\\/option>/,'');
+h=h.replace('<head>','<head>\\n<script>window.VS_NO_GPL=true;</script>');
+fs.writeFileSync('www/studio.html',h);"
+  echo "GPL-free build: RVM weights and picker option removed"
+fi
 rm -f www/*.txt                   # internal notes at the repo root are not part of the website
 touch www/.nojekyll                 # GitHub Pages: serve every file as is
 [ -f www/vendor/mediapipe/tasks/wasm/vision_wasm_internal.wasm ] && echo "cutout engine bundled locally" || echo "WARNING: cutout engine NOT bundled (CDN fallback)"

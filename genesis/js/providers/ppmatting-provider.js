@@ -76,9 +76,21 @@
       const t0 = performance.now();
       const r = await this._send({ type: 'run', w, h, rgba: rgba.buffer.slice(0) });
       const ms = performance.now() - t0, a = new Uint8Array(r.alpha);
-      const ok = r.w === w && r.h === h && a.length === w * h;
-      this.selfCheck = { ms: Math.round(ms), ok };
-      if (!ok) throw new Error(this.title + ' self-check failed: unexpected output size ' + r.w + 'x' + r.h);
+      const dimensionsOk = r.w === w && r.h === h && a.length === w * h;
+      const alphaCoverage = V.PPMattingCore.coverage(a);
+      // This synthetic geometric pattern is deliberately NOT a person. Some
+      // valid matting models correctly return almost-transparent alpha for it,
+      // so coverage is diagnostic only here. Reject broken tensor dimensions
+      // at startup; the real-camera release gate below checks that a human-like
+      // frame produces a non-empty, non-full mask and that Hybrid actually
+      // executes tile refinement.
+      const syntheticCoveragePlausible = alphaCoverage > 0.001 && alphaCoverage < 0.999;
+      const ok = dimensionsOk;
+      this.selfCheck = {
+        ms: Math.round(ms), ok, alphaCoverage: +alphaCoverage.toFixed(5),
+        dimensionsOk, syntheticCoveragePlausible
+      };
+      if (!dimensionsOk) throw new Error(this.title + ' self-check failed: unexpected output size ' + r.w + 'x' + r.h);
     }
 
     async segment(video) {

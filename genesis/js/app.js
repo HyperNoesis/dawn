@@ -1,5 +1,6 @@
 (async function () {
-  // Shared Genesis runtime namespace; async engine-upgrade and diagnostics paths use V.
+  // Shared Genesis runtime namespace. Several async engine-upgrade and diagnostics paths
+  // use V; keeping it bound at bootstrap prevents ReferenceError during live upgrades.
   const V = window.VS;
   const ic = window.VS.icon;
 
@@ -23,22 +24,35 @@
   const MODEL_LOAD_TIMEOUT_MS = 15000;
   // ---- Model choice + one-time device speed test ----
   const MODNET_LOAD_TIMEOUT_MS = 45000;   // the model is bundled now; this only matters for the web version's first load
-  const MODNET_MAX_MS = 100;              // slower than this per mask -> use the lighter model (was 70: too strict, a phone at 72-100 ms still beats the light model's blocky edges; the fps ladder steps down if the picture gets choppy). localStorage vs_max_ms overrides.
+  const MODNET_MAX_MS = 100;              // baseline per-mask budget; runtime measurements decide promotion.
+  const MAX_ASYNC_MASK_MS = 150;          // cap async mask age to reduce stale edges during motion.
   // v0.98 QUALITY FIRST (default on): the good model never gives way to the weak one. MODNet is the live engine at a 256 px floor; when a phone is slow the
   // mask is refreshed less often (stride) instead. The weak MediaPipe engine is only used if MODNet cannot load at all. localStorage vs_quality_first = 0 restores the old ladder.
   function qualityFirst() {   // v0.98: phones no longer start on MODNet (1.2 s/frame on a Mali-G52 = 2 FPS). Explicit '1'/'0' still wins; otherwise only desktops default to quality-first.
     try { const v = localStorage.getItem('vs_quality_first'); if (v === '1') return true; if (v === '0') return false; } catch (e) {}
     const ua = navigator.userAgent || '';
     const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
-    return !mobile;
+    // A desktop user-agent does not imply a capable device (cloud runners,
+    // Chromebooks, older tablets and low-memory PCs can be more constrained
+    // than a modern phone). Respect the same conservative hardware tier that
+    // the FAST preset uses before making MODNet the immediate baseline.
+    let constrained = false;
+    try {
+      const P = window.VS && window.VS.PerfProfile;
+      constrained = !!(P && P.detect && P.detect(navigator).tier === 'low');
+    } catch (e) {}
+    return !mobile && !constrained;
   }
   const QF_EDGE = 256;
   function maxMs() {
-    try { const v = +localStorage.getItem('vs_max_ms'); if (v >= 20 && v <= 2000) return v; } catch (e) {}
-    // v0.80: a camera that only delivers 10-15 fps (dim room, auto exposure) gives the model more time per mask before it counts as "too slow" (a mask is only needed once per camera frame).
-    let cam = 0; try { cam = camRate || window.__camFps || 0; } catch (e) { cam = window.__camFps || 0; }   // camRate is declared further down: the try guards its first use
+    let override = 0;
+    try { override = +localStorage.getItem('vs_max_ms') || 0; } catch (e) {}
+    let cam = 0; try { cam = camRate || window.__camFps || 0; } catch (e) { cam = window.__camFps || 0; }
     const base = cam > 0 && cam < 24 ? Math.min(150, Math.max(MODNET_MAX_MS, Math.round((1000 / cam) * 1.4))) : MODNET_MAX_MS;
-    return asyncSegOn() ? base * 3 : base;   // v0.93: segmentation runs off the render path, so the model may take ~3 frames per mask
+    const budget = override >= 20 && override <= 2000 ? override : base;
+    // Async inference may reuse a mask, but adaptive promotion must not accept
+    // a route that refreshes so slowly that ordinary motion visibly outruns it.
+    return asyncSegOn() ? Math.min(budget, MAX_ASYNC_MASK_MS) : budget;
   }
   // v0.93 decoupled pipeline: draw every camera frame at once with the LATEST mask; segment asynchronously (<= ~6 masks/s). localStorage vs_async_seg=0 turns it off.
   function asyncSegOn() { try { return localStorage.getItem('vs_async_seg') !== '0'; } catch (e) { return true; } }
@@ -48,10 +62,10 @@
   function readBench() {
     try {
       const b = JSON.parse(localStorage.getItem(BENCH_KEY) || 'null');
-      return b && b.v === 4 && b.key === deviceKey() ? b : null;   // v3 = per-engine results (rvmMs / modnetMs); older results are ignored
+      return b && b.v === 5 && b.key === deviceKey() ? b : null;   // v3 = per-engine results (rvmMs / modnetMs); older results are ignored
     } catch (e) { return null; }
   }
-  function writeBench(b) { try { localStorage.setItem(BENCH_KEY, JSON.stringify(Object.assign({ v: 4, key: deviceKey(), at: Date.now() }, b))); } catch (e) {} }
+  function writeBench(b) { try { localStorage.setItem(BENCH_KEY, JSON.stringify(Object.assign({ v: 5, key: deviceKey(), at: Date.now() }, b))); } catch (e) {} }
   function showBenchNote(text) { if (els.modelBenchNote) els.modelBenchNote.textContent = text; }
   // v0.88: while the cutout engine loads (the first visit downloads about 19 MB) show a real message on the stage, not a black rectangle.
   let loadOverlayTimer = null, loadOverlayEl = null;
@@ -91,30 +105,82 @@
     return (V.MODNetWorkerProvider && V.MODNetWorkerProvider.isSupported()) ? new V.MODNetWorkerProvider() : new V.MODNetSegmentationProvider();
   }
   let upgrading = false;
-  let benchBusy = false;       // true while a speed test runs: the live loop pauses so the test measures the model, not a fight with the camera/renderer for the CPU (measured: 4-10x slower otherwise)
+  let benchBusy = false;       // true while a candidate is measured: skip competing baseline inference when a cached mask exists, but keep camera rendering live
   let ladderRetries = 0;       // automatic second looks after a runtime step-down to the light model (max 2 per camera session)
   let upgradeRetried = false;  // one automatic re-test per camera session after a slow verdict
   /** Load MODNet while the camera is already live; swap it in only if this device runs it fast enough. */
-  /** Which live matting engines may be tried, best first. vs_live_engine: 'auto' (default) = RVM then MODNet; 'rvm' | 'modnet' = only that one; 'light' = never upgrade. */
+  function legacyLivePreference() {
+    let v = 'auto';
+    try { v = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) { /* default */ }
+    // GPL-free distribution build (window.VS_NO_GPL set by scripts/build-site.sh): RVM weights are not shipped, so a saved 'rvm' choice means MODNet.
+    if (v === 'rvm' && window.VS_NO_GPL) v = 'modnet';
+    return v;
+  }
+
+  /** Which live matting engines may be tried, best first. Legacy explicit rvm/modnet/light choices remain honoured; otherwise Automatic benchmarks the advanced local routes. */
   function upgradeCandidates() {
-    const V = window.VS; let pref = 'auto'; try { pref = localStorage.getItem('vs_live_engine') || 'auto'; } catch (e) {}
+    const V = window.VS, livePref = legacyLivePreference();
     const list = [];
-    if (pref === 'light') return list;
-    // An explicitly chosen advanced matte engine outranks automatic RVM probing.
-    // Otherwise a background upgrade could silently replace the user's choice.
-    const custom = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
-    if (pref === 'auto' && custom && custom !== 'modnet') {
-      const item = (V.MatteEngines.visibleEngines() || []).find((e) => e[0] === custom);
-      list.push({ name: item ? item[1] : custom, key: custom, make: makeModnet });
+    if (livePref === 'light') return list;
+
+    const matte = V.MatteEngines;
+    const selected = matte && matte.pref ? matte.pref() : 'modnet';
+    const automatic = !!(matte && typeof matte.isAutomaticDefault === 'function' && matte.isAutomaticDefault());
+    if ((livePref === 'auto' || automatic) && matte && (automatic || selected !== 'modnet')) {
+      const visible = new Map((matte.visibleEngines() || []).map((item) => [item[0], item[1]]));
+      // Automatic mode first serves the safe live fallback, then benchmarks
+      // UltraMatte -> Hybrid -> PP-MattingV2 in the background. MODNet is added
+      // as a candidate only when the live fallback is the lighter MediaPipe
+      // route; do not benchmark the same MODNet instance twice on desktops.
+      const baseIsModnet = !!(segProvider && /MODNet/.test(segProvider.label || ''));
+      let keys = automatic
+        ? ['genesis-hybrid-tam', 'genesis-hybrid', 'ppmatting-v2'].concat(baseIsModnet ? [] : ['modnet'])
+        : [selected];
+      // Quality gate: timing never proves quality. In Automatic mode only quality-qualified routes (or routes the user
+      // explicitly opted into as experimental) may be promoted; an explicit user selection is always honoured.
+      if (automatic && V.EngineQualification) {
+        let allowExp = false; try { allowExp = localStorage.getItem('vs_auto_experimental') === '1'; } catch (e) {}
+        const gate = V.EngineQualification.filterAuto(keys, { allowExperimental: allowExp });
+        if (gate.skipped.length) segLogPush('qualification-skip', { skipped: gate.skipped.map((x) => x.key), experimentalOptIn: allowExp });
+        keys = gate.allowed;
+      }
+      for (const key of keys) {
+        if (key !== 'modnet' && !visible.has(key)) continue;
+        const name = visible.get(key) || (key === 'modnet' ? 'MODNet' : key);
+        list.push({
+          name,
+          key,
+          prepare: () => matte.ensureEngine(key),
+          make: () => matte.createProvider(key)
+        });
+      }
       return list;
     }
-    if ((pref === 'auto' || pref === 'rvm') && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
-    if ((pref === 'auto' || pref === 'modnet') && V.MODNetSegmentationProvider) list.push({ name: 'MODNet', key: 'modnet', make: makeModnet });
+
+    // RVM is not an automatic default: its live browser package has a different
+    // distribution licence and hardware profile. Use it only when explicitly
+    // selected in the model menu.
+    if (livePref === 'rvm' && V.RVMWorkerProvider && V.RVMWorkerProvider.isSupported()) {
+      list.push({ name: 'RVM', key: 'rvm', make: () => new V.RVMWorkerProvider() });
+    } else if ((livePref === 'auto' || livePref === 'modnet') && V.MODNetSegmentationProvider) {
+      list.push({ name: 'MODNet', key: 'modnet', make: makeModnet });
+    }
     return list;
   }
+  function canProbeAdaptiveUpgrade(provider) {
+    if (!provider) return false;
+    const legacy = legacyLivePreference();
+    // Never bypass an older explicit RVM or "light" preference by treating a
+    // temporary MediaPipe fallback as permission to try unrelated engines.
+    if (legacy === 'rvm' || legacy === 'light') return false;
+    if (window.VS.MediaPipeSegmentationProvider && provider instanceof window.VS.MediaPipeSegmentationProvider) return true;
+    const matte = window.VS.MatteEngines;
+    return !!(matte && matte.isAutomaticDefault && matte.isAutomaticDefault() && /MODNet/.test(provider.label || ''));
+  }
+
   /** True when an earlier speed test on this device already showed EVERY candidate is too slow (so we do not re-download and re-test on each start). */
   function benchSaysSlow(b, cands) { return !!b && window.VS.PerfProfile.benchFresh(b) && cands.length > 0 && (b.clearlySlow === true || cands.every((c) => typeof b[c.key + 'Ms'] === 'number' && b[c.key + 'Ms'] > maxMs() * 1.4)); }   // v0.80: only a CLEARLY slow verdict (1.4x over budget) skips the upgrade next time; a borderline one is re-measured
-  /** Load the best live matting engine while the camera is already live; swap it in only if this device runs it fast enough. Tries RVM, then MODNet. */
+  /** Promote the strongest eligible local route only after it initializes and meets this device's measured live budget: UltraMatte -> Hybrid -> PP-MattingV2. Keep the current matte live while candidates are prepared and measured. */
   async function backgroundUpgrade(quality, sessionToken) {
     if (upgrading) return;
     upgrading = true;
@@ -125,24 +191,30 @@
       const cands = upgradeCandidates();
       for (let ci = 0; ci < cands.length; ci++) {
         const c = cands[ci], isLast = ci === cands.length - 1;
-        if (results.clearlySlow) continue;   // v0.98: a lighter model was already >3x over budget; the heavier ones cannot fit, so do not freeze the preview testing them
         try {
-          showBenchNote('Live now on the light model. Loading the high-quality model (' + c.name + ') in the background...');
+          showBenchNote('Live preview is running. Preparing the best matting route this device can sustain (' + c.name + ')...');
+          if (c.prepare) {
+            const prepared = await withTimeout(c.prepare(), 45000, c.name + ' dependency loading timed out after 45 seconds');
+            if (!prepared || !prepared.ok) throw new Error((prepared && prepared.error) || 'Matting engine dependencies are unavailable');
+          }
           cand = c.make();
           cand.lowLightBoost = lowLightBoostEnabled;
           cand.onProgress = (p) => showBenchNote('Loading high-quality model: ' + Math.round(p * 100) + '%');
-          await cand.initialize(quality);
+          await withTimeout(cand.initialize(quality), 45000, c.name + ' model initialization timed out after 45 seconds');
+          if (V.MatteEngines && typeof V.MatteEngines.validateProvider === 'function') {
+            V.MatteEngines.validateProvider(c.key, cand);
+          }
           if (stale()) { cand.dispose?.(); cand = null; return; }
           showBenchNote('Testing speed on this device (' + c.name + ')...');
           benchBusy = true;
-          // One bad reading must never decide a phone's model. Rules: 3 warm-up frames, lower-quartile timing, and when the result is too slow we
+          // One bad reading must never decide a phone's model. Rules: 3 warm-up frames, conservative P75 timing, and when the result is too slow we
           // (1) try again with ONE thread (extra threads can lose to the camera and renderer on phones), (2) wait for things to settle and measure once more.
           const measureLadder = async () => {
             // v0.98: phones start the test at <=320 px (a 448 px test costs ~800 ms/frame on a Mali-G52 and freezes the preview for ~10 s) and the ladder JUMPS to the
             // size predicted to fit the budget (cost ~ edge^2) instead of walking every step. Each skipped step was 8 slow frames of frozen preview.
             const mobileTest = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
             if (mobileTest && typeof cand.longEdge === 'number' && cand.longEdge > 320) cand.longEdge = 320;
-            let m = await timeProvider(cand, 6, 3, 600), edge = cand.longEdge;
+            let m = await timeProvider(cand, 8, 3, 800), edge = cand.longEdge;
             const steps = [448, 384, 320, 256, 224].filter((e) => e < edge);
             let i = 0;
             if (m > maxMs() && steps.length) {
@@ -155,7 +227,7 @@
               if (stale()) return null;
               showBenchNote('Too slow at ' + edge + ' px (' + Math.round(m) + ' ms). Trying ' + c.name + ' at ' + e + ' px...');
               cand.longEdge = e; edge = e;
-              m = await timeProvider(cand, 5, 3, 600);
+              m = await timeProvider(cand, 8, 3, 800);
             }
             return { ms: m, edge };
           };
@@ -166,28 +238,38 @@
           if (!clearlySlow && ms > maxMs() && cand.threads > 1) {
             showBenchNote(c.name + ' needs ' + Math.round(ms) + ' ms with ' + cand.threads + ' threads. Checking with 1 thread...');
             const edge = cand.longEdge; try { cand.dispose?.(); } catch (e0) {} cand = c.make(); cand.lowLightBoost = lowLightBoostEnabled;
-            await cand.initialize(quality, { threads: 1 }); cand.longEdge = edge;
+            await withTimeout(cand.initialize(quality, { threads: 1 }), 45000, c.name + ' single-thread initialization timed out after 45 seconds'); cand.longEdge = edge;
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
-            const one = await timeProvider(cand, 6, 3, 600);
+            const one = await timeProvider(cand, 8, 3, 800);
             if (one < ms) { ms = one; results.threads = 1; }
           }
           if (!clearlySlow && ms > maxMs()) {
             showBenchNote(c.name + ' measured ' + Math.round(ms) + ' ms. Measuring once more when the camera has settled...');
             await new Promise((r) => setTimeout(r, 1500));
             if (stale()) { benchBusy = false; cand.dispose?.(); cand = null; return; }
-            const again = await timeProvider(cand, 6, 2, 600);
+            const again = await timeProvider(cand, 8, 3, 800);
             if (again < ms) ms = again;
           }
           benchBusy = false;
-          results[c.key + 'Ms'] = Math.round(ms); results.edge = usedEdge; if (clearlySlow) { results.clearlySlow = true; upgradeRetried = true; }
+          results[c.key + 'Ms'] = Math.round(ms); results.edge = usedEdge;
+          // A single route being much too slow must not suppress the next,
+          // simpler candidate in the automatic quality-first chain.
+          if (clearlySlow && cands.length === 1) { results.clearlySlow = true; upgradeRetried = true; }
           segLogPush('bench', { engine: c.key, ms: Math.round(ms), edge: usedEdge, budget: maxMs(), gpu: !!cand.usingWebGPU });
           if (stale()) { cand.dispose?.(); cand = null; return; }
           if (ms <= maxMs()) {
             results.engine = c.key; writeBench(results);
             const old = segProvider;
             segProvider = cand; cand = null;
-            if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, null);
-            resetSegCache();
+            const automaticMode = !!(V.MatteEngines && V.MatteEngines.isAutomaticDefault && V.MatteEngines.isAutomaticDefault());
+            const storedEngine = V.MatteEngines && V.MatteEngines.pref ? V.MatteEngines.pref() : 'modnet';
+            const legacyEngine = legacyLivePreference();
+            const selectedEngine = storedEngine === 'modnet' && (legacyEngine === 'rvm' || legacyEngine === 'modnet') ? legacyEngine : storedEngine;
+            const fallbackReason = !automaticMode && c.key !== selectedEngine
+              ? 'The explicitly selected ' + selectedEngine + ' route did not meet this device’s measured live budget. Genesis selected ' + c.key + ' at ' + usedEdge + ' px as the measured fallback.'
+              : null;
+            if (V.MatteEngines && V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, fallbackReason);
+            resetSegCache("engine-switch");
             rendererSend({ type: 'setMatte', state: {} });
             updateStudioChrome();
             updateCostInfo();
@@ -195,14 +277,21 @@
             showBenchNote('High-quality matting is active (' + c.name + ', ' + usedEdge + ' px, ' + Math.round(ms) + ' ms per mask' + (segProvider.threads > 1 ? ', ' + segProvider.threads + ' threads' : '') + ').');
             return;
           }
-          showBenchNote((isLast || clearlySlow) ? 'Staying on the light model: even the smallest ' + c.name + ' size needs ' + Math.round(ms) + ' ms per mask here.'
-                               : c.name + ' needs ' + Math.round(ms) + ' ms per mask here, which is too slow. Trying the next model...');
+          showBenchNote(isLast
+            ? 'No advanced route met this device’s live budget. Keeping the safe live fallback; Diagnostics records each measured route.'
+            : c.name + ' needs ' + Math.round(ms) + ' ms per mask here. Trying the next matting route...');
           if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
             V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' measured ' + Math.round(ms) + ' ms per mask, above this device\'s live budget of ' + Math.round(maxMs()) + ' ms. MediaPipe remains active for this session.');
           }
           cand.dispose?.(); cand = null;
         } catch (e) {
-          showBenchNote('High-quality model unavailable (' + c.name + ': ' + (e && e.message ? e.message : e) + '). ' + (isLast ? 'Staying on the light model.' : 'Trying the next model...'));
+          // A timed-out candidate must not leave the safe baseline's inference
+          // paused while the next route is downloading or initialising.
+          benchBusy = false;
+          const failure = c.name + ': ' + String(e && e.message || e);
+          results.routeFailures = results.routeFailures || [];
+          results.routeFailures.push(failure);
+          showBenchNote('High-quality model unavailable (' + failure + '). ' + (isLast ? 'Keeping the safest available live route.' : 'Trying the next matting route...'));
           if (V.MatteEngines && V.MatteEngines.pref && V.MatteEngines.pref() === c.key && c.key !== 'rvm') {
             V.MatteEngines.reportActive(segProvider, 'Selected engine ' + c.name + ' could not initialise or meet the performance budget: ' + (e && e.message ? e.message : e));
           }
@@ -210,23 +299,56 @@
           cand = null;
         }
       }
-      if (!stale() && running && segProvider instanceof window.VS.MediaPipeSegmentationProvider) govAdoptLight();   // v0.96: the governor keeps probing back up (with back-off) instead of staying light for the whole session
-      if (Object.keys(results).length) writeBench(results);   // every candidate was too slow: remember it (for 6 h only) so the next start skips the download
-      if (!upgradeRetried && !stale() && running) { upgradeRetried = true; setTimeout(() => { if (running && sessionToken === loopToken && !upgrading && segProvider instanceof window.VS.MediaPipeSegmentationProvider) backgroundUpgrade(quality, sessionToken); }, 45000); }   // second look once the camera loop has settled
+      if (!stale() && running && segProvider instanceof window.VS.MediaPipeSegmentationProvider) govAdoptLight();   // keep probing back up from the light fallback with exponential back-off
+      const adaptiveMode = !!(V.MatteEngines && V.MatteEngines.isAutomaticDefault && V.MatteEngines.isAutomaticDefault());
+      if (!stale() && running && adaptiveMode && cands.length) {
+        const attempts = cands.map((candidate) => {
+          const ms = results[candidate.key + 'Ms'];
+          const failure = (results.routeFailures || []).find((entry) => entry.indexOf(candidate.name + ':') === 0);
+          return candidate.name + ': ' + (typeof ms === 'number' ? Math.round(ms) + ' ms/mask' : (failure || 'unavailable'));
+        }).join('; ');
+        const baseline = segProvider && (segProvider.current || segProvider.label) || 'safe local provider';
+        const reason = 'Automatic mode tested its advanced routes but none met this device’s live performance or startup requirements (' + attempts + '). Keeping ' + baseline + ' active rather than forcing a slideshow.';
+        if (V.MatteEngines.reportActive) V.MatteEngines.reportActive(segProvider, reason);
+        showBenchNote(reason);
+      }
+      if (Object.keys(results).length) writeBench(results);   // remember per-route timings for this device and code version
+      if (!upgradeRetried && !stale() && running) { upgradeRetried = true; setTimeout(() => { if (running && sessionToken === loopToken && !upgrading && canProbeAdaptiveUpgrade(segProvider)) backgroundUpgrade(quality, sessionToken); }, 45000); }   // second look once the camera loop has settled
     } finally {
       try { cand && cand.dispose && cand.dispose(); } catch (e3) {}
       benchBusy = false; upgrading = false;
     }
   }
-  /** Per-frame time (ms) of a provider on the live camera after warm-up: lower quartile, so a hitch cannot fake a slow phone. */
+  /** Per-frame time (ms) of a provider on the live camera after warm-up: conservative P75, so rare fast frames cannot mask a slow route. */
   async function timeProvider(provider, frames = 10, warmup = 3, abortAboveMs = 0) {
     const times = [];
     const roiWas = provider.useRoi; provider.useRoi = false;   // v0.80: measure one fixed input shape (the crop keeps the same pixel cost)
     if (provider.usingWebGPU) warmup = Math.max(warmup, 8);     // v0.80: WebGPU compiles its shaders on the first runs; those are not the model's speed
     try {
     for (let i = 0; i < warmup + frames; i++) {
-      const t0 = performance.now();
-      await provider.segment(els.video);
+      // A broken worker or backend must not pin Automatic mode in "testing"
+      // forever. The candidate is disposed by its caller after this timeout.
+      const timeoutMs = Math.max(1500, Math.min(12000, maxMs() * 8));
+      let timeoutHandle = null, sourceFrame = null;
+      try { sourceFrame = captureSegmentationFrame(els.video); }
+      catch (snapshotError) { sourceFrame = els.video; } // safe legacy fallback when canvas allocation is unavailable
+      const t0 = performance.now(); // match live timing: exclude snapshot setup, measure provider inference only
+      // Candidate probes use the same immutable frame and per-provider flight
+      // guard as foreground inference. A timeout must not destroy the frame or
+      // let the next candidate call overlap a still-running stateful provider.
+      const inference = segmentationFlight.run(provider, sourceFrame, () => provider.segment(sourceFrame));
+      inference.catch(() => {}); // the timeout can win while a worker rejects later
+      try {
+        await Promise.race([
+          inference,
+          new Promise((_, reject) => {
+            timeoutHandle = setTimeout(() => reject(new Error('Matting inference timed out after ' + Math.round(timeoutMs) + ' ms')), timeoutMs);
+          })
+        ]);
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        if (sourceFrame && sourceFrame !== els.video) releaseSegmentationFrame(sourceFrame);
+      }
       const dt = performance.now() - t0;
       if (i >= warmup) times.push(dt);
       // Never freeze the UI: let taps/paint run between frames, and stop early only when the device is clearly far too slow on TWO measured frames in a row.
@@ -234,7 +356,9 @@
       if (abortAboveMs && i >= warmup + 1 && dt > abortAboveMs && times.length >= 2 && times[times.length - 2] > abortAboveMs) break;
     }
     } finally { provider.useRoi = roiWas; }
-    return window.VS.PerfProfile.lowQuartile(times);
+    return window.VS.PerfProfile.measuredFrameMs
+      ? window.VS.PerfProfile.measuredFrameMs(times)
+      : window.VS.PerfProfile.lowQuartile(times);
   }
   /** v0.80: a short log of WHY the engine changed (numbers included), shown in Diagnostics and copyable: VS.segLog. */
   function segLogPush(ev, extra) {
@@ -625,6 +749,7 @@
   // localStorage-persisted data) and sent over once per id.
   const sentCustomEnvIds = new Set();
   async function pushEnvironment(id) {
+    if (id) { try { localStorage.setItem('vs_last_env', id); } catch (e) { /* private mode: scene simply is not remembered */ } }   // returning users get their scene back
     if (!(renderWorker || localCore) || !id) return;
     if (envProvider.customImages.has(id) && !sentCustomEnvIds.has(id)) {
       try {
@@ -658,9 +783,12 @@
   let segStride = 1;               // mask refresh rate: 1 = every frame; 2 = every other frame (FAST-only fallback)
   let strideTick = 0;
   let prevRender = null; // v0.46: promise of the render currently in flight
+  const frameGate = window.VS.FrameEpoch ? window.VS.FrameEpoch.create() : null;   // rejects late/foreign async mattes (frame identity)
   let asyncSegBusy = false, asyncSegPromise = null, asyncSegLastAt = 0, asyncSegDone = 0, asyncSegMinGap = 150;
   let cachedMaskBitmap = null;     // last full-size mask, reused while async inference is in flight
   const maskMotion = window.VS.MaskMotion ? new window.VS.MaskMotion.MaskMotion() : null;
+  // Tracks timed-out inference jobs so snapshots remain valid until the underlying provider truly settles.
+  const segmentationFlight = window.VS.SegmentationFlight.create();
   let segMsEma = 0;                // smoothed wall-clock cost of one segmentation call, ms
   let loopToken = 0;               // bumped on every start/stop: a superseded processLoop iteration exits instead of racing the new loop
   let perfBannerShown = false;     // true only while the degrade banner is showing a PERFORMANCE message (not camera-lost / crash)
@@ -795,8 +923,9 @@
       card.innerHTML = `
         <div class="env-thumb" style="${envProvider.getPreviewStyle(env.id)}"></div>
         <div class="env-body">
-          <div class="env-name">${env.name}</div>
+          <div class="env-name"></div>
         </div>`;
+      card.querySelector('.env-name').textContent = String(env.name || 'Custom environment');
       card.addEventListener('click', () => {
         els.envSelect.value = env.id;
         els.envMiniGrid.querySelectorAll('.env-card').forEach(c => c.classList.remove('selected'));
@@ -840,20 +969,19 @@
       // takes over for every return visit.
       const seenExplainer = localStorage.getItem('vs_seen_camera_explainer');
       if (!seenExplainer) {
-        els.overlayTitle.textContent = 'Before your camera turns on';
-        els.overlaySub.textContent = 'This is your space, not a broadcast. Nothing leaves your browser unless you choose to hit Record or Go Live.';
+        els.overlayTitle.textContent = '';
+        els.overlaySub.textContent = '';
       } else {
-        els.overlayTitle.textContent = 'Ready when you are';
-        els.overlaySub.textContent = 'Start your camera to preview the studio composite live. Nothing is recorded until you hit Record.' +
-          (autoPickedFast && els.qualitySelect.value === 'fast' ? ' FAST mode was pre-selected for this device.' : '');
+        els.overlayTitle.textContent = '';
+        els.overlaySub.textContent = '';
       }
       els.startBtn.style.display = 'inline-flex';
       els.startBtn.disabled = false;
       els.startBtn.textContent = 'Start Camera';
       if (els.previewEnvLink) els.previewEnvLink.style.display = 'inline-block';
     } else if (state === 'preparing') {
-      els.overlayTitle.textContent = opts.message || 'Preparing your studio...';
-      els.overlaySub.textContent = 'Getting your camera and local segmentation model ready. This only takes a moment.';
+      els.overlayTitle.textContent = opts.message || 'Starting...';
+      els.overlaySub.textContent = '';
       els.startBtn.style.display = 'none';
       if (els.previewEnvLink) els.previewEnvLink.style.display = 'none';
     } else if (state === 'error') {
@@ -1022,6 +1150,9 @@
 
     els.video.srcObject = stream;
     await els.video.play();
+    // A new stream may have the same dimensions as the previous camera. The
+    // GPU compositor must still forget the previous subject/camera history.
+    rendererSend({ type: 'setMatte', state: {} });
     try {
       const vt = stream.getVideoTracks()[0];
       let st = vt.getSettings ? vt.getSettings() : {};
@@ -1116,6 +1247,9 @@
         loadTimeout,
         `Timed out after ${loadTimeout / 1000}s loading the high-quality model — your connection may be slow.`
       );
+      if (VSNS.MatteEngines && typeof VSNS.MatteEngines.validateProvider === 'function') {
+        VSNS.MatteEngines.validateProvider(matteChoice, segProvider);
+      }
       // Quality-first sizing was introduced for MODNet's expensive live path.
       // Do not apply that legacy clamp to PP-MattingV2, RVM or Genesis Hybrid:
       // each provider owns its own trained resolution ladder.
@@ -1126,14 +1260,22 @@
       updateStudioChrome();
       if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, null);
     } catch (err) {
-      if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(null, 'Selected engine initialisation failed: ' + (err && err.message ? err.message : err));
-      // RVM needs onnxruntime-web + (ideally) WebGPU/WASM support. If that
-      // genuinely fails to load (offline first run, ancient browser, CDN
-      // blocked, or just too slow — see withTimeout above), fall back to the
-      // MediaPipe model rather than leaving the person with no camera at
-      // all — but say so honestly, never silently, and if MediaPipe ALSO
-      // fails or times out, surface that real error.
-      if (!(window.VS.MediaPipeSegmentationProvider && segProvider instanceof window.VS.MediaPipeSegmentationProvider) && window.VS.MediaPipeSegmentationProvider) {
+      const edgeOnlyFailure = VSNS.MatteEngines && typeof VSNS.MatteEngines.hasUsableMatteFallback === 'function' &&
+        VSNS.MatteEngines.hasUsableMatteFallback(matteChoice, segProvider);
+      if (edgeOnlyFailure) {
+        // The base MODNet/Hybrid provider finished initialising; only the
+        // optional EdgeTAM cleanup failed. Keep the soft matte instead of
+        // replacing it with the much coarser emergency semantic mask.
+        const reason = 'EdgeTAM is unavailable; continuing with ' +
+          (segProvider.hy ? 'Genesis Hybrid' : 'the base matting provider') +
+          ' without subject-gate cleanup. ' + (err && err.message ? err.message : err);
+        if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(segProvider, reason);
+        showBenchNote(reason);
+      } else {
+        if (VSNS.MatteEngines && VSNS.MatteEngines.reportActive) VSNS.MatteEngines.reportActive(null, 'Selected engine initialisation failed: ' + (err && err.message ? err.message : err));
+        // A genuinely unavailable base model still uses the emergency local
+        // provider rather than leaving the person with no camera.
+        if (!(window.VS.MediaPipeSegmentationProvider && segProvider instanceof window.VS.MediaPipeSegmentationProvider) && window.VS.MediaPipeSegmentationProvider) {
         console.warn('Segmentation model failed to initialize, falling back to MediaPipe:', err.message);
         if (els.previewHint) els.previewHint.textContent = 'Camera on · switching to a lighter model';
         segProvider.dispose?.();
@@ -1152,9 +1294,10 @@
           modelFailedKeepCamera(fallbackErr.message);
           return;
         }
-      } else {
-        modelFailedKeepCamera(err.message);
-        return;
+        } else {
+          modelFailedKeepCamera(err.message);
+          return;
+        }
       }
     }
 
@@ -1181,8 +1324,7 @@
     upgradeRetried = false; ladderRetries = 0;
     let tryModnet = true; try { tryModnet = localStorage.getItem('vs_try_modnet') !== '0'; } catch (e) {}   // Prompt 1: default ON; the bench (<=70 ms/mask) and the ladder keep weak phones on the light model
     const upCands = upgradeCandidates();
-    if (tryModnet && pref === 'auto' && upCands.length && VSNS.MediaPipeSegmentationProvider &&
-        segProvider instanceof VSNS.MediaPipeSegmentationProvider &&
+    if (tryModnet && pref === 'auto' && upCands.length && canProbeAdaptiveUpgrade(segProvider) &&
         !benchSaysSlow(knownBench, upCands)) {
       backgroundUpgrade(quality, loopToken);
     } else if (tryModnet && pref === 'auto' && benchSaysSlow(knownBench, upCands)) {
@@ -1248,12 +1390,19 @@
     }
   });
 
-  function resetSegCache() {
+  function resetSegCache(reason) {
+    if (frameGate) frameGate.bump(reason || 'cache-reset');   // any inference still in flight belongs to a previous state
     if (cachedMaskBitmap) { cachedMaskBitmap.close(); cachedMaskBitmap = null; }
     if (maskMotion) maskMotion.reset();
     strideTick = 0;
     segMsEma = 0;
   }
+
+  // Tab hidden/shown: frames captured before a background gap are not the frames shown after it. Invalidate any
+  // in-flight inference and the cached matte so the first visible frame after resume uses a fresh, paired mask.
+  document.addEventListener('visibilitychange', () => {
+    try { if (document.visibilityState === 'visible' && running) resetSegCache('tab-resume'); } catch (e) { /* never break the page for a hygiene step */ }
+  });
 
   let pipeFailCount = 0;
 
@@ -1679,14 +1828,23 @@
     // the existing ONNX provider contract without changing the underlying frame.
     Object.defineProperties(frame, {
       videoWidth: { configurable: true, value: width },
-      videoHeight: { configurable: true, value: height }
+      videoHeight: { configurable: true, value: height },
+      // Providers may safely reuse this per-inference immutable source instead
+      // of copying the entire camera frame into another scratch canvas.
+      __vsSegmentationFrame: { configurable: true, value: true }
     });
     return frame;
   }
 
+  function releaseSegmentationFrameNow(frame) {
+    try { frame.width = 1; frame.height = 1; } catch (e) { /* best-effort release */ }
+  }
+
   function releaseSegmentationFrame(frame) {
     if (!frame) return;
-    try { frame.width = 1; frame.height = 1; } catch (e) { /* best-effort release */ }
+    // A watchdog timeout ends the UI wait, not necessarily the worker's use
+    // of this canvas. Defer shrinking it until every provider job releases it.
+    segmentationFlight.releaseFrame(frame, releaseSegmentationFrameNow);
   }
 
   function maskMotionEnabled() {
@@ -1774,19 +1932,26 @@
   }
 
   function startAsyncSeg(token) {
+    // A timed-out provider remains quarantined until its underlying promise
+    // settles or the governor swaps it out; do not enqueue work on it.
+    if (segmentationFlight.isBusy(segProvider)) return;
     asyncSegBusy = true; asyncSegLastAt = performance.now();
     const t0 = asyncSegLastAt;
     let sourceFrame = null;
     try { sourceFrame = captureSegmentationFrame(els.video); }
     catch (e) { if (maskMotion) maskMotion.reset(); }
+    const geomNow = () => ({ width: videoNativeW || 0, height: videoNativeH || 0, orientation: (screen.orientation && screen.orientation.angle) || 0 });
+    const ticket = frameGate ? frameGate.begin({ loopToken: token, provider: segProvider, geometry: geomNow(), now: t0 }) : null;
+    const stillCurrent = () => !frameGate || frameGate.accept(ticket, { loopToken: loopToken, provider: segProvider, geometry: geomNow() }).ok;
     asyncSegPromise = Promise.resolve().then(() => segWithWatchdog(segProvider, sourceFrame || els.video)).then(async (r) => {
       if (token !== loopToken || !r || !r.segmentationMask) return;
+      if (!stillCurrent()) return;        // provider/orientation/epoch changed while the worker was busy: drop, never display
       const ms = performance.now() - t0;
       segMsEma = segMsEma ? segMsEma * 0.8 + ms * 0.2 : ms;
       lastMaskSize = (r.segmentationMask.width || '?') + 'x' + (r.segmentationMask.height || '?');
       try { publishSegmentationPreview(sourceFrame || els.video, r.segmentationMask); } catch (previewError) { /* diagnostics only */ }
       const fresh = await createImageBitmap(r.segmentationMask);
-      if (token !== loopToken) { fresh.close(); return; }
+      if (token !== loopToken || (frameGate && ticket && ticket.epoch !== frameGate.stats().epoch)) { fresh.close(); return; }   // reset during the bitmap copy
       seedMaskMotion(fresh, sourceFrame, t0);
       const old = cachedMaskBitmap; cachedMaskBitmap = fresh; asyncSegDone++;
       if (old) setTimeout(() => { try { old.close(); } catch (e) {} }, 400);
@@ -1799,7 +1964,7 @@
 
   async function processLoop() {
     if (!running) return;
-    if (checkPaused || benchBusy) { scheduleNext(); return; }   // Studio Check or the model speed test owns the CPU/GPU while it measures (the picture holds its last frame for a few seconds)
+    if (checkPaused) { scheduleNext(); return; }   // Studio Check owns the CPU/GPU; a background model benchmark must never freeze the camera/render loop
     if (!renderHealthy) return; // worker crashed fatally — stop hammering a dead worker; see 'fatal' handler above for why this can't self-recover
     const myLoop = loopToken;
     const frameStart = performance.now();
@@ -1842,13 +2007,29 @@
       runInference = false;   // never wait for the model here: reuse the latest mask on this fresh camera frame
       if (!asyncSegBusy && performance.now() - asyncSegLastAt >= asyncSegMinGap && !benchBusy) startAsyncSeg(myLoop);
     } else if (segStride > 1 && cachedMaskBitmap) runInference = (strideTick++ % segStride) === 0;
+    // A candidate benchmark is isolated from baseline inference once a usable
+    // mask exists, but the render loop continues. MaskMotion keeps that cached
+    // matte aligned briefly; after its age/confidence limits, composition
+    // passes through the live camera instead of freezing an old preview.
+    if (benchBusy && cachedMaskBitmap) runInference = false;
     if (runInference && asyncSegBusy && asyncSegPromise) { try { await asyncSegPromise; } catch (e) {} }   // first mask / after a cache reset: never run two inferences at once
 
     let results = null, maskFrame = null;
     if (runInference) {
+      if (segmentationFlight.isBusy(segProvider)) {
+        // The previous call exceeded its watchdog. Keep the last rendered
+        // frame rather than corrupting a still-in-use snapshot or overlapping
+        // stateful temporal/tile inference on the same provider.
+        dropPerson();
+        scheduleNext();
+        return;
+      }
       const segStart = performance.now(); maskFrame = camFrames();
+      const syncProvider = segProvider, syncEpoch = frameGate ? frameGate.stats().epoch : 0;
       try {
         results = await segWithWatchdog(segProvider, inferenceSnapshot || els.video);
+        // The engine was swapped / cache reset while this call was pending: its mask belongs to a previous state.
+        if (syncProvider !== segProvider || (frameGate && frameGate.stats().epoch !== syncEpoch)) results = null;
       } catch (err) {
         dropPerson();
         if (myLoop !== loopToken) return; // stopped/restarted while waiting — whoever restarted owns the loop now
@@ -1889,20 +2070,29 @@
         try {
           const aligned = maskMotion.advance(els.video, frameStart);
           if (aligned) {
-            const motionStatus = maskMotion.getMetrics().status;
-            // Never composite a stale subject mask over a different scene or
-            // after a long capture gap. Briefly pass through the real camera
-            // until the next model result reseeds the matte.
-            if (motionStatus === 'stale-mask' || motionStatus === 'scene-cut' || motionStatus === 'frame-gap') {
-              maskSource = passCanvas;
-            } else {
-              maskSource = aligned;
-            }
+            const motion = maskMotion.getMetrics();
+            const policy = window.VS.MaskMotion.compositionPolicy(motion.status, motion.reason);
+            // Warp only when motion is reliable. On low confidence hold the
+            // last model matte unchanged; after a scene cut, stale result or
+            // capture gap, pass through the real camera until a fresh matte
+            // is delivered. Unknown states fail closed rather than reusing a
+            // silhouette whose frame relationship is no longer trustworthy.
+            if (policy === 'warp') maskSource = aligned;
+            else if (policy === 'hold') maskSource = cachedMaskBitmap;
+            else maskSource = passCanvas;
+          } else {
+            // No valid source/motion pair exists. Do not reuse a potentially
+            // stale cached silhouette while the propagation stage is enabled.
+            maskSource = passCanvas;
           }
-        } catch (e) { /* keep the last good cached matte */ }
+        } catch (e) {
+          maskSource = passCanvas;
+          if (window.VS.logError) window.VS.logError('Mask motion alignment skipped safely: ' + (e && e.message ? e.message : e));
+        }
       }
       if (!maskSource) { dropPerson(); scheduleNext(); return; }
     } else {
+      if (!results || !results.segmentationMask) { dropPerson(); scheduleNext(); return; }   // result discarded (stale provider/epoch) or empty: render the next frame instead of throwing
       maskSource = results.segmentationMask;
     }
 
@@ -2178,7 +2368,8 @@
     const l = (p && p.label) || '';
     // A hybrid's performance rungs must rebuild the same hybrid pipeline.
     // The EdgeTAM proxy forwards the base provider's hybrid/tracker properties.
-    if (p && p.hy && /Genesis UltraMatte/.test(l) && p.trackerHook) return 'genesis-hybrid-tam';
+    const edgeStatus = p && p.edgetam;
+    if (p && p.hy && /Genesis UltraMatte/.test(l) && p.trackerHook && edgeStatus && edgeStatus.status === 'ready') return 'genesis-hybrid-tam';
     if (p && p.hy) return 'genesis-hybrid';
     if (p && p.edgetam) return 'edgetam';
     if (/PP-Matting/.test(l)) return /HRNet/.test(l) ? 'ppmatting-hrnet' : 'ppmatting-v2';
@@ -2187,13 +2378,59 @@
     return null;
   }
   function govChainFor(engine) {
-    const sizes = [512, 448, 384, 320, 256, 224], ch = [];
-    if (engine === 'ppmatting-v2' || engine === 'ppmatting-hrnet' || engine === 'genesis-hybrid' || engine === 'genesis-hybrid-tam' || engine === 'edgetam') {
-      ch.push({ engine, edges: [512, 448, 384, 320] });   // PP models and hybrid tiers use the trained PP size range
+    const sizes = [512, 448, 384, 320, 256, 224], ppSizes = [512, 448, 384, 320], ch = [];
+    // Adaptive degradation order preserves the best remaining segmentation
+    // route at each measured step. UltraMatte sheds EdgeTAM first, then sparse
+    // tile refinement, then the PP model itself, and only then moves to MODNet.
+    // Simpler candidates enter at 320 px: this is the smallest normal PP-trained
+    // inference tier and avoids jumping to an unnecessarily expensive 512 px
+    // model merely because the engine boundary was crossed.
+    if (engine === 'genesis-hybrid-tam') {
+      ch.push({ engine: 'genesis-hybrid-tam', edges: ppSizes });
+      ch.push({ engine: 'genesis-hybrid', edges: [320] });
+      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
     }
-    if (engine === 'rvm') ch.push({ engine: 'rvm', edges: sizes });
-    else ch.push({ engine: 'modnet', edges: sizes });
+    if (engine === 'genesis-hybrid') {
+      ch.push({ engine: 'genesis-hybrid', edges: ppSizes });
+      ch.push({ engine: 'ppmatting-v2', edges: [320] });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'ppmatting-v2') {
+      ch.push({ engine: 'ppmatting-v2', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'edgetam') {
+      ch.push({ engine: 'edgetam', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'ppmatting-hrnet') {
+      ch.push({ engine: 'ppmatting-hrnet', edges: ppSizes });
+      ch.push({ engine: 'modnet', edges: sizes });
+      return ch;
+    }
+    if (engine === 'rvm') {
+      ch.push({ engine: 'rvm', edges: sizes });
+      return ch;
+    }
+    ch.push({ engine: 'modnet', edges: sizes });
     return ch;
+  }
+  function govEngineName(id) {
+    return ({
+      'genesis-hybrid-tam': 'Genesis UltraMatte',
+      'genesis-hybrid': 'Genesis Hybrid',
+      'ppmatting-v2': 'PP-MattingV2',
+      'ppmatting-hrnet': 'PP-Matting HRNet',
+      edgetam: 'MODNet + EdgeTAM',
+      modnet: 'MODNet',
+      rvm: 'RVM',
+      mediapipe: 'MediaPipe'
+    })[id] || String(id || 'matting');
   }
   function makeGovEngine(id) {
     const V = window.VS;
@@ -2228,9 +2465,13 @@
   function govAdoptLight() {
     const G = window.VS.QualityGovernor;
     if (!G || govOff() || !(segProvider instanceof window.VS.MediaPipeSegmentationProvider)) return;
-    let preferred = 'modnet';
-    if (els.modelSelect && els.modelSelect.value === 'rvm') preferred = 'rvm';
-    else if (window.VS.MatteEngines && window.VS.MatteEngines.pref) {
+    const legacy = legacyLivePreference();
+    if (legacy === 'light') return;
+    let preferred = legacy === 'rvm' ? 'rvm' : 'modnet';
+    if (els.modelSelect && els.modelSelect.value === 'rvm' && !window.VS_NO_GPL) preferred = 'rvm';
+    else if (window.VS.MatteEngines && window.VS.MatteEngines.isAutomaticDefault && window.VS.MatteEngines.isAutomaticDefault()) {
+      preferred = 'genesis-hybrid-tam';
+    } else if (window.VS.MatteEngines && window.VS.MatteEngines.pref) {
       const selected = window.VS.MatteEngines.pref();
       if (selected && selected !== 'modnet') preferred = selected;
     }
@@ -2246,7 +2487,8 @@
     const lim = segMsEma > 0 ? Math.max(4000, Math.min(15000, segMsEma * 12)) : 10000;
     let timer;
     const guard = new Promise((_, rej) => { timer = setTimeout(() => { if (!ladderSwapping && !upgrading && !benchBusy) govStalls++; rej(new Error('the matting engine did not answer within ' + Math.round(lim / 1000) + ' s')); }, lim); });
-    const run = p.segment(video); run.catch(() => {});
+    const run = segmentationFlight.run(p, video, () => p.segment(video));
+    run.catch(() => {});
     return Promise.race([run, guard]).finally(() => clearTimeout(timer));
   }
   async function govSwap(a, gv) {
@@ -2264,17 +2506,27 @@
       }
       // Prewarm OFF the frame path: the old engine keeps drawing while the new one loads, then the swap is one frame.
       let to; await Promise.race([cand.initialize(runningQuality), new Promise((_, rej) => { to = setTimeout(() => rej(new Error('timed out loading ' + a.engine)), 45000); })]).finally(() => clearTimeout(to));
+      if (!a.emergency && window.VS.MatteEngines && typeof window.VS.MatteEngines.validateProvider === 'function') {
+        window.VS.MatteEngines.validateProvider(a.engine, cand);
+      }
       if (!a.emergency) cand.longEdge = a.edge;
       if (!running || token !== loopToken) { cand.dispose?.(); cand = null; return; }
       const old = segProvider; segProvider = cand; cand = null;
       govProvider = segProvider; govLight = !!a.emergency;
-      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, a.emergency ? 'Performance governor switched to the lightweight MediaPipe fallback.' : null);
+      const selectedEngine = window.VS.MatteEngines && window.VS.MatteEngines.pref ? window.VS.MatteEngines.pref() : 'modnet';
+      const activeEngine = a.emergency ? 'mediapipe' : a.engine;
+      const governorReason = a.emergency
+        ? 'Every available matting tier exceeded this device’s measured performance floor. MediaPipe is temporarily active until the device recovers.'
+        : (activeEngine !== selectedEngine
+          ? 'Performance adaptation moved from ' + selectedEngine + ' to ' + activeEngine + ' to protect preview responsiveness.'
+          : null);
+      if (window.VS.MatteEngines && window.VS.MatteEngines.reportActive) window.VS.MatteEngines.reportActive(segProvider, governorReason);
       resetSegCache(); rendererSend({ type: 'setMatte', state: {} }); updateStudioChrome(); updateCostInfo();
       setTimeout(() => { try { old.dispose?.(); } catch (e) {} }, 1000);   // disposing a hung worker terminates it
       gv.applied(a, performance.now()); govSave(a);
       segLogPush('gov-applied', { type: a.type, engine: a.engine, edge: a.edge });
-      if (a.type === 'swap-engine' && !a.emergency && !a.up) showBenchNote('Matting now uses ' + (a.engine === 'modnet' ? 'MODNet' : a.engine === 'rvm' ? 'RVM' : 'PP-Matting') + ' at ' + a.edge + ' px to keep the picture smooth.');
-      else if (a.up && !a.emergency) showBenchNote('Matting is back on ' + (a.engine === 'modnet' ? 'MODNet' : a.engine === 'rvm' ? 'RVM' : 'PP-Matting') + ' at ' + a.edge + ' px.');
+      if (a.type === 'swap-engine' && !a.emergency && !a.up) showBenchNote('Matting now uses ' + govEngineName(a.engine) + ' at ' + a.edge + ' px to keep the picture smooth.');
+      else if (a.up && !a.emergency) showBenchNote('Matting is back on ' + govEngineName(a.engine) + ' at ' + a.edge + ' px.');
     } catch (e) {
       gv.failed(a, performance.now()); segLogPush('gov-failed', { type: a.type, engine: a.engine, why: String(e && e.message || e).slice(0, 80) });
       showBenchNote('Could not switch the matting engine (' + (e && e.message ? e.message : e) + '). Staying as is.');
@@ -2924,7 +3176,13 @@
 
   els.uploadBg.addEventListener('change', (e) => {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/i.test(file.type) || file.size <= 0 || file.size > 20 * 1024 * 1024) {
+      alert('Choose a PNG, JPEG or WebP image up to 20 MB.');
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = async () => {
       try {
@@ -2936,9 +3194,15 @@
         pushEnvironment(id);
       } catch (err) {
         alert(err.message);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
       }
     };
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      alert('Could not decode that image. Try a PNG, JPEG or WebP file.');
+    };
+    img.src = objectUrl;
   });
 
   els.genBtn.addEventListener('click', async () => {
@@ -2953,11 +3217,10 @@
       // error here instead of a confusing "tainted canvas" error later on save.
       // Swapping in a paid provider (Fal.ai/Replicate) later is a one-function change here.
       async function fetchGeneration(attempt) {
-        const key = (window.VS && window.VS.config && window.VS.config.pollinationsApiKey || '').trim();
         // Seed must fit Pollinations' documented range (0…2147483647 / int32) — Date.now()
         // alone is ~1.7 trillion and gets rejected as "Query parameter validation failed".
         const seed = (Date.now() + attempt) % 2147483647;
-        const params = `width=1280&height=720&seed=${seed}${key ? `&key=${encodeURIComponent(key)}` : ''}`;
+        const params = `width=1280&height=720&seed=${seed}`;
         const apiPrompt = (els.genSceneMode && els.genSceneMode.checked && SceneEng) ? SceneEng.scenePrompt(prompt) : prompt;
         const url = `https://gen.pollinations.ai/image/${encodeURIComponent(apiPrompt)}?${params}`;
         const controller = new AbortController();
@@ -2991,11 +3254,11 @@
           }
         } catch (_) { /* body already consumed or unreadable — fall back to status only */ }
         const reason = res.status === 401
-          ? `Pollinations.ai rejected the API key (HTTP 401)${serverMessage ? ': ' + serverMessage : ''}. Get a fresh key at enter.pollinations.ai/keys and paste it into js/config.js.`
+          ? `Pollinations.ai rejected the generation request (HTTP 401)${serverMessage ? ': ' + serverMessage : ''}.`
           : res.status === 402
-            ? `Pollinations.ai says this key is out of Pollen (HTTP 402)${serverMessage ? ': ' + serverMessage : ''}.`
+            ? `Pollinations.ai reported a quota or billing limit (HTTP 402)${serverMessage ? ': ' + serverMessage : ''}.`
             : res.status === 429
-              ? 'Pollinations.ai is rate-limiting (the free key allows about 1 generation per hour) — wait a bit and try again.'
+              ? 'Pollinations.ai is rate-limiting requests — wait a bit and try again.'
               : res.status >= 500
                 ? `Pollinations.ai's server had an error (HTTP ${res.status}) after a retry — this is on their end, try again shortly.`
                 : `Generation failed (HTTP ${res.status})${serverMessage ? ': ' + serverMessage : ''}. Try a different description.`;
@@ -3658,17 +3921,33 @@
   els.logoUploadTrigger.addEventListener('click', () => els.logoUpload.click());
   els.logoUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/i.test(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024) {
+      window.VS.reportError('Choose a PNG, JPEG or WebP logo up to 5 MB.');
+      return;
+    }
     const reader = new FileReader();
+    reader.onerror = () => window.VS.reportError('Could not read that logo file.');
     reader.onload = () => {
-      brandKit.logoDataUrl = reader.result;
-      els.logoFileLabel.textContent = 'Logo set (click to replace)';
-      logoImg = new Image();
-      logoImg.onload = pushLogoBitmap;
-      logoImg.src = brandKit.logoDataUrl;
-      els.watermarkToggle.checked = true;
-      brandKit.watermark = true;
-      pushWatermarkOn();
+      const candidate = new Image();
+      candidate.onerror = () => window.VS.reportError('Could not decode that logo image.');
+      candidate.onload = () => {
+        if (!candidate.naturalWidth || !candidate.naturalHeight ||
+            candidate.naturalWidth > 4096 || candidate.naturalHeight > 4096 ||
+            candidate.naturalWidth * candidate.naturalHeight > 16000000) {
+          window.VS.reportError('Logo dimensions must be no larger than 4096 px per edge and 16 megapixels total.');
+          return;
+        }
+        brandKit.logoDataUrl = reader.result;
+        els.logoFileLabel.textContent = 'Logo set (click to replace)';
+        logoImg = candidate;
+        pushLogoBitmap();
+        els.watermarkToggle.checked = true;
+        brandKit.watermark = true;
+        pushWatermarkOn();
+      };
+      candidate.src = reader.result;
     };
     reader.readAsDataURL(file);
   });
@@ -3697,42 +3976,95 @@
   // avoid pulling in a ~1MB library for users who never touch this path.
   // Pinned version on both script + worker URLs together — pdf.js requires
   // the worker build to match the main build exactly, or it breaks.
-  const PDFJS_VERSION = '3.11.174';
+  // PDF.js 6.5.438 includes fixes for CVE-2024-4367 and CVE-2026-16633.
+  // Use the maintained ESM build and never enable PDF JavaScript evaluation or XFA.
+  const PDFJS_VERSION = '6.5.438';
+  const PDFJS_BASE = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@' + PDFJS_VERSION;
+  const MAX_PDF_BYTES = 20 * 1024 * 1024;
+  const MAX_PDF_PAGES = 40;
+  const MAX_PDF_TOTAL_PIXELS = 24000000;
+  const MAX_PDF_PAGE_EDGE = 1800;
   let pdfjsLoadPromise = null;
   function ensurePdfJs() {
-    if (window.pdfjsLib) return Promise.resolve();
+    if (window.pdfjsLib && window.pdfjsLib.getDocument) return Promise.resolve(window.pdfjsLib);
     if (pdfjsLoadPromise) return pdfjsLoadPromise;
-    pdfjsLoadPromise = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/legacy/build/pdf.min.js`;
-      s.onload = () => {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/legacy/build/pdf.worker.min.js`;
-        resolve();
-      };
-      s.onerror = () => reject(new Error('Could not load the PDF renderer — check your network connection.'));
-      document.head.appendChild(s);
+    pdfjsLoadPromise = (async () => {
+      const lib = await import(PDFJS_BASE + '/build/pdf.mjs');
+      if (!lib || typeof lib.getDocument !== 'function' || !lib.GlobalWorkerOptions) {
+        throw new Error('The PDF renderer loaded an incompatible build.');
+      }
+      lib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + '/build/pdf.worker.mjs';
+      window.pdfjsLib = lib;
+      return lib;
+    })().catch((error) => {
+      pdfjsLoadPromise = null;
+      throw new Error('Could not load the secure PDF renderer: ' + (error && error.message || error));
     });
     return pdfjsLoadPromise;
   }
 
   async function renderPdfToSlides(file) {
-    await ensurePdfJs();
-    const buf = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-    const slides = [];
-    const thumbs = [];
-    const scratch = document.createElement('canvas');
-    const sctx = scratch.getContext('2d');
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const viewport = page.getViewport({ scale: 2 }); // 2x for a crisp inset, not full-res overkill
-      scratch.width = viewport.width;
-      scratch.height = viewport.height;
-      await page.render({ canvasContext: sctx, viewport }).promise;
-      thumbs.push(bitmapToThumbDataURL(scratch));
-      slides.push(await createImageBitmap(scratch));
+    if (!file || !Number.isFinite(file.size) || file.size <= 0 || file.size > MAX_PDF_BYTES) {
+      throw new Error('PDF must be between 1 byte and 20 MB.');
     }
-    return { slides, thumbs };
+    const buf = await file.arrayBuffer();
+    if (new TextDecoder().decode(buf.slice(0, 5)) !== '%PDF-') throw new Error('That file does not look like a valid PDF.');
+    const pdfjs = await ensurePdfJs();
+    const loading = pdfjs.getDocument({
+      data: buf,
+      isEvalSupported: false,
+      enableXfa: false,
+      useSystemFonts: true,
+      maxImageSize: 12000000,
+      stopAtErrors: true
+    });
+    let pdf = null;
+    try {
+      pdf = await loading.promise;
+      if (!pdf.numPages || pdf.numPages > MAX_PDF_PAGES) {
+        throw new Error('PDF contains too many pages. The limit is 40 pages per overlay.');
+      }
+      const slides = [], thumbs = [];
+      const scratch = document.createElement('canvas');
+      const sctx = scratch.getContext('2d', { alpha: false });
+      if (!sctx) throw new Error('This browser could not allocate a PDF rendering surface.');
+      let usedPixels = 0;
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const base = page.getViewport({ scale: 1 });
+        const pagePixels = Math.max(1, base.width * base.height);
+        const remaining = MAX_PDF_TOTAL_PIXELS - usedPixels;
+        if (remaining < 160000) {
+          page.cleanup();
+          throw new Error('PDF is too large to render safely on this device. Split it into smaller files.');
+        }
+        const scale = Math.min(1.5, MAX_PDF_PAGE_EDGE / Math.max(base.width, base.height), Math.sqrt(remaining / pagePixels));
+        if (!Number.isFinite(scale) || scale <= 0.05) {
+          page.cleanup();
+          throw new Error('A PDF page exceeds the safe rendering size.');
+        }
+        const viewport = page.getViewport({ scale });
+        scratch.width = Math.max(1, Math.ceil(viewport.width));
+        scratch.height = Math.max(1, Math.ceil(viewport.height));
+        const actualPixels = scratch.width * scratch.height;
+        if (usedPixels + actualPixels > MAX_PDF_TOTAL_PIXELS) {
+          page.cleanup();
+          throw new Error('PDF exceeds the total rendering memory budget.');
+        }
+        await page.render({ canvasContext: sctx, viewport, background: '#ffffff' }).promise;
+        thumbs.push(bitmapToThumbDataURL(scratch));
+        slides.push(await createImageBitmap(scratch));
+        usedPixels += actualPixels;
+        page.cleanup();
+      }
+      return { slides, thumbs };
+    } catch (error) {
+      if (pdf) { try { pdf.cleanup(); } catch (_) {} }
+      throw error;
+    } finally {
+      if (pdf) { try { await pdf.destroy(); } catch (_) {} }
+      else if (loading && typeof loading.destroy === 'function') { try { await loading.destroy(); } catch (_) {} }
+    }
   }
 
   function bitmapToThumbDataURL(source, maxW = 88) {
@@ -3761,7 +4093,7 @@
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
           <label class="toggle-row" style="margin:0;">
             <input type="checkbox" class="ov-toggle" checked>
-            <span>${ov.name}</span>
+            <span class="ov-name"></span>
           </label>
           <button type="button" class="btn ghost sm ov-remove" title="Remove overlay">Remove</button>
         </div>
@@ -3772,7 +4104,7 @@
           <button type="button" class="btn ghost sm ov-next" title="Next slide">▶</button>
         </div>
         ${ov.thumbs && ov.thumbs.length ? `
-        <div class="slide-filmstrip" role="listbox" aria-label="${ov.name} slides">
+        <div class="slide-filmstrip" role="listbox" aria-label="Slides">
           ${ov.thumbs.map((src, i) => `
             <button type="button" class="slide-thumb${i === ov.index ? ' active' : ''}" data-idx="${i}" role="option" aria-selected="${i === ov.index}">
               <img src="${src}" alt="Slide ${i + 1}">
@@ -3797,6 +4129,11 @@
     `).join('');
 
     els.overlayList.querySelectorAll('[data-overlay-id]').forEach((row) => {
+      const overlay = overlayList.find((item) => item.id === row.dataset.overlayId);
+      const nameNode = row.querySelector('.ov-name');
+      if (nameNode) nameNode.textContent = overlay ? String(overlay.name || 'Overlay') : 'Overlay';
+      const filmstrip = row.querySelector('.slide-filmstrip');
+      if (filmstrip) filmstrip.setAttribute('aria-label', 'Slides for ' + (overlay ? String(overlay.name || 'overlay') : 'overlay'));
       const id = row.dataset.overlayId;
       row.querySelector('.ov-toggle').addEventListener('change', (e) => {
         rendererSend({ type: 'setOverlayOn', id, on: e.target.checked });
@@ -4062,12 +4399,36 @@
     e.target.value = ''; // allow re-adding the same filename(s) later
     if (!files.length || overlayList.length >= MAX_OVERLAYS) return;
     try {
-      const loaded = await Promise.all(files.map((file) => new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => createImageBitmap(img).then((bmp) => resolve({ bmp, thumb: bitmapToThumbDataURL(img) }), reject);
-        img.onerror = () => reject(new Error('Could not load ' + file.name));
-        img.src = URL.createObjectURL(file);
-      })));
+      const MAX_IMAGE_FILE_BYTES = 20 * 1024 * 1024;
+      const MAX_IMAGE_TOTAL_PIXELS = 24000000;
+      if (files.length > 24) throw new Error('Choose no more than 24 images per deck.');
+      const loaded = [];
+      let totalPixels = 0;
+      for (const file of files) {
+        if (!file.type || !/^image\/(png|jpeg|webp|avif|gif)$/i.test(file.type)) {
+          throw new Error('Only PNG, JPEG, WebP, AVIF and GIF images are supported.');
+        }
+        if (file.size <= 0 || file.size > MAX_IMAGE_FILE_BYTES) throw new Error('Each image must be 20 MB or smaller.');
+        const src = URL.createObjectURL(file);
+        try {
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = () => reject(new Error('Could not decode an uploaded image.'));
+            img.src = src;
+          });
+          const pixels = img.naturalWidth * img.naturalHeight;
+          if (!img.naturalWidth || !img.naturalHeight || img.naturalWidth > 8192 || img.naturalHeight > 8192 ||
+              totalPixels + pixels > MAX_IMAGE_TOTAL_PIXELS) {
+            throw new Error('The selected images exceed the safe decoded-pixel budget (24 megapixels total).');
+          }
+          const bmp = await createImageBitmap(img);
+          totalPixels += pixels;
+          loaded.push({ bmp, thumb: bitmapToThumbDataURL(img) });
+        } finally {
+          URL.revokeObjectURL(src);
+        }
+      }
       const name = files.length > 1 ? `${files.length}-image deck` : files[0].name;
       addOverlayWithSlides(loaded.map((l) => l.bmp), name, loaded.map((l) => l.thumb));
     } catch (err) {
@@ -4204,11 +4565,13 @@
       const row = document.createElement('div');
       row.className = 'mini-row';
       row.innerHTML = `
-        <span>${t.name}</span>
+        <span class="template-name"></span>
         <span class="btn-row">
           <button class="btn ghost xs apply-tpl-btn" data-id="${t.id}">Apply</button>
           <button class="btn danger xs del-tpl-btn" data-id="${t.id}">Delete</button>
         </span>`;
+      const templateName = row.querySelector('.template-name');
+      if (templateName) templateName.textContent = String(t.name || 'Untitled template');
       els.templateList.appendChild(row);
     });
     els.templateList.querySelectorAll('.apply-tpl-btn').forEach(b => b.addEventListener('click', () => {
@@ -4242,7 +4605,7 @@
       // v0.13: the old banner lives inside the hidden Recordings tab, so after a crash nobody saw it. Show a top-of-screen notice too.
       const mins = draft.blob && draft.blob.size ? Math.max(1, Math.round(draft.blob.size / 1048576)) : 0;
       const html = `
-        <strong>Unsaved recording found</strong> from ${(draft.meta && draft.meta.savedAt) || 'a previous session'} (about ${mins} MB). It looks like the tab closed before you pressed Stop.
+        <strong>Unsaved recording found</strong> from <span class="draft-saved-at"></span> (about ${mins} MB). It looks like the tab closed before you pressed Stop.
         <div class="btn-row">
           <button class="btn primary xs recover-draft-btn" type="button" style="min-height:44px;">Recover to Projects</button>
           <button class="btn ghost xs discard-draft-btn" type="button" style="min-height:44px;">Discard</button>
@@ -4251,10 +4614,15 @@
       toast.id = 'draftToast'; toast.setAttribute('role', 'alert'); toast.className = 'recovery-banner';
       toast.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9998;max-width:min(94vw,440px);background:#2a2412;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.5);';
       toast.innerHTML = html;
+      const draftDateText = String((draft.meta && draft.meta.savedAt) || 'a previous session').slice(0, 80);
+      const dateNode = toast.querySelector('.draft-saved-at');
+      if (dateNode) dateNode.textContent = draftDateText;
       document.body.appendChild(toast);
       els.draftRecoveryBanner.style.display = 'block';
       els.draftRecoveryBanner.className = 'recovery-banner';
       els.draftRecoveryBanner.innerHTML = html.replace('class="btn primary xs recover-draft-btn"', 'class="btn primary xs recover-draft-btn" id="recoverDraftBtn"').replace('class="btn ghost xs discard-draft-btn"', 'class="btn ghost xs discard-draft-btn" id="discardDraftBtn"');
+      const bannerDateNode = els.draftRecoveryBanner.querySelector('.draft-saved-at');
+      if (bannerDateNode) bannerDateNode.textContent = draftDateText;
       const hideBoth = () => { toast.remove(); els.draftRecoveryBanner.style.display = 'none'; };
       const recover = async () => {
         await window.VS.storage.saveRecording(draft.blob, { ...draft.meta, title: 'Recovered recording', createdAt: new Date().toLocaleString() });
@@ -4292,6 +4660,10 @@
     } else if (requestedEnv) {
       els.envSelect.value = requestedEnv;
       renderEnvMiniGrid();
+    } else {
+      let last = null; try { last = localStorage.getItem('vs_last_env'); } catch (e) {}
+      // restore only an environment that still exists (custom ones are rehydrated above); never an unknown id
+      if (last && [...els.envSelect.options].some((o) => o.value === last)) { els.envSelect.value = last; renderEnvMiniGrid(); }
     }
     pushEnvironment(els.envSelect.value); // covers the plain-default case; redundant (harmless) if a branch above already pushed one
     if (requestedAction === 'start') setTimeout(() => startCamera(), 250);

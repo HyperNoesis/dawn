@@ -1,0 +1,1338 @@
+{
+ "total_controls_with_id": 222,
+ "candidate_dead": [],
+ "all": [
+  {
+   "id": "backHomeLink",
+   "tag": "link",
+   "inline_handler": false,
+   "js_refs": 0
+  },
+  {
+   "id": "quickRecordBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "quickLiveBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "settingsIconLink",
+   "tag": "link",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "startBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "previewEnvLink",
+   "tag": "link",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "flipCamBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "envSelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "uploadBg",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "sceneWizardBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "sceneDeskOn",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "sceneDeskY",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneTilt",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneBow",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneFeather",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneScale",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneX",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneY",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneLight",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneLightSide",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "sceneShadow",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneSoft",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "sceneAutoBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "sceneCopyPromptBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "genPrompt",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "genSceneMode",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "genBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "cameraSelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "micSelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "autoStartToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "zoomRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "panXRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "panYRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "resetPanBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "fitHeadBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "guidesToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "realismToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "realismIntensity",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "toneMatchToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "shadowToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "lightWrapToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "grainToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "abPreviewToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "batterySaverToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "modelSelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 5
+  },
+  {
+   "id": "rebenchBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "sharpMatteToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "sharpQuality",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 4
+  },
+  {
+   "id": "crispRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "despillRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "capturePlateBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "clearPlateBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "despeckleRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "featherRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "smoothingRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "lowLightBoostToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gestureToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "correctionToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "brushSizeRange",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "clearCorrectionsBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "audioPreset",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 3
+  },
+  {
+   "id": "audioNs",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "audioEc",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "mixMusicFile",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "mixPlay",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "mixStop",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "mixVol",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "mixDenoise",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "mixDuck",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "mixDuckDb",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "mixMonitor",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 3
+  },
+  {
+   "id": "audioTest",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "looksUndo",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gradeStrength",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "gradePhoto",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "autoAssist",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "smartLight",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "lutFile",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "lutAmount",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "lutClear",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "skinAmount",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "autoFrame",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gradeReset",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "showBack",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "showNext",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "showKeys",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "showAdd",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "showCapture",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "seLabel",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 3
+  },
+  {
+   "id": "seSay",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seLt",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seLtName",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seLtTitle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seLtSecs",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seBanner",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seBannerText",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seCard",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seCardTitle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seCardSub",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seTicker",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seTickerText",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seCount",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seLook",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seAudio",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "seScene",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 4
+  },
+  {
+   "id": "seSave",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "seCancel",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "showExport",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "showImport",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "showJson",
+   "tag": "textarea",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "showClear",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxName",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "gfxTitle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxAccent",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "gfxLtToggle",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxAddRundown",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxTickerOn",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "gfxTickerText",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxTickerSpeed",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxClock",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "gfxLive",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "gfxTemplate",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxBannerText",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxBannerToggle",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxCardTitle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxCardSub",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxCardQr",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxCardToggle",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxCdLabel",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxCdMin",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxCdStart",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxCdStop",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxSocialOn",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxSocialText",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxQrOn",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxQrText",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxQrCaption",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxBugOn",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxBugText",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxBugLogo",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "brandFromLogo",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "brandPrimary",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "brandSecondary",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "brandUse",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "brandOff",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxGuides",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxSafe",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scOn",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scHome",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scAway",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scPeriod",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scHPlus",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scAPlus",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scHMinus",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scAMinus",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scClockOn",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scClockStart",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scClockStop",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scClockReset",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "scReset",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "gfxClearAll",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterShow",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterScript",
+   "tag": "textarea",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterFile",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterSpeed",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterSlower",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterFaster",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterMode",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterLearn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterSize",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterMirror",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterToggle",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "prompterReset",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "remoteStart",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "remoteLink",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "captionsToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "layoutModeSelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "contentUpload",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "contentUploadPdf",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "camStart",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "camLink",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "camAccept",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "camDecline",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "directorAddCue",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "directorBack",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "directorNext",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "annotateToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "annotateClearBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "brandColorInput",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "logoUpload",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "watermarkToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "templateNameInput",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "saveTemplateBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "qualitySelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "keepRawToggle",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "bitrateSelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "framerateSelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "recMarkerBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "baBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "wizardStreamKey",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "wizardGenerateBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "wizardConfigOutput",
+   "tag": "textarea",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "wizardCopyBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "wizardToStep3FromRelay",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "whipEndpointInput",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "whipTokenInput",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "saveWhipBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "goLiveCheckBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "goLiveBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 3
+  },
+  {
+   "id": "rtmpPlatformSelect",
+   "tag": "select",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "rtmpYoutubeKeyInput",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "rtmpTwitchKeyInput",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "rtmpCustomUrlInput",
+   "tag": "input",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "generateRtmpConfigBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "rtmpConfigOutput",
+   "tag": "textarea",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "copyRtmpConfigBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "cameraBridgeToggle",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 1
+  },
+  {
+   "id": "stopBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "recordBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 3
+  },
+  {
+   "id": "transportLiveBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 2
+  },
+  {
+   "id": "focusModeBtn",
+   "tag": "button",
+   "inline_handler": false,
+   "js_refs": 2
+  }
+ ]
+}

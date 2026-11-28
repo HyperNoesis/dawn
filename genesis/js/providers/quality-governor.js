@@ -7,8 +7,11 @@
  * recording the ladder refused to act, so a slow phone stayed in a slideshow. This governor replaces those rules.
  *
  * Arrangement (best quality first). A CHAIN of matting engines, each with fine size steps (64 px), then the light model as an EMERGENCY rung only:
- *     PP-MattingV2 512 > 448 > 384 > 320   >   MODNet 512 > 448 > 384 > 320 > 256 > 224   >   (emergency) MediaPipe
- * Which engines are in the chain is the caller's decision (PP-Matting only when allowed by the flag + the device's own measured speed).
+ *     UltraMatte 512 > 448 > 384 > 320
+ *       > Hybrid 320 > PP-MattingV2 320 > MODNet 512 > 448 > 384 > 320 > 256 > 224
+ *       > (emergency) MediaPipe
+ * The caller supplies the chain for the active route. Engine boundaries are
+ * crossed only after the current route's resolution ladder is exhausted.
  *
  * Rules.
  *  - Pressure must be SUSTAINED and judged on a window (>= 85 % of the ticks bad), never on one slow second; the first SETTLE_MS after any change is ignored (warm-up).
@@ -60,8 +63,14 @@
   function create(cfg) {
     cfg = cfg || {};
     const K = Object.assign({}, C, cfg.constants || {});
-    const emergencyEngine = cfg.emergency === undefined ? 'mediapipe' : cfg.emergency;   // null = never fall to the light model
-    let rungs = buildRungs(cfg.chain, cfg.startEngine, cfg.startEdge);
+    const lockPre = cfg.lockEngine !== undefined ? !!cfg.lockEngine : (!!VS.Flags && VS.Flags.get('ultraDefault') === 1 && cfg.startEngine === 'genesis-hybrid-tam');
+    const emergencyEngine = lockPre ? null : (cfg.emergency === undefined ? 'mediapipe' : cfg.emergency);   // null = never fall to the light model
+    // v1.01 lock: when the flag is on (or cfg.lockEngine) and UltraMatte is running, the chain keeps ONLY UltraMatte's own size steps and there is no emergency rung.
+    // Under load the picture size comes down (512 > 320), the engine never changes, so the cut-out never turns into a blob or the light model.
+    const lockOn = cfg.lockEngine !== undefined ? !!cfg.lockEngine : (!!VS.Flags && VS.Flags.get('ultraDefault') === 1 && cfg.startEngine === 'genesis-hybrid-tam');
+    let chainIn = cfg.chain;
+    if (lockOn && cfg.startEngine && chainIn && chainIn.length) { const only = chainIn.filter((c) => c.engine === cfg.startEngine); if (only.length) chainIn = only; }
+    let rungs = buildRungs(chainIn, cfg.startEngine, cfg.startEdge);
     const emergencyRung = emergencyEngine ? { engine: emergencyEngine, edge: 0, emergency: true } : null;
     const eng0 = cfg.startEngine || rungs[0].engine;
     let cur = rungs.findIndex((r) => r.engine === eng0 && r.edge === cfg.startEdge);

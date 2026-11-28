@@ -4,8 +4,9 @@
 (function (root) {
   'use strict';
   const VS = root.VS = root.VS || {};
-  const DEFAULTS = { colourSnap: 0.8, ppmattingBeta: 1, promotePPMatting: 0 };   // v0.89 colour-line edge correction strength (0 = off); v0.94 ppmattingBeta: show the PP-MattingV2 beta engine in the picker (1) or hide it for everyone (0); promotePPMatting: 1 lets a PASSING release gate make it the default (stays 0)
-  const LIMITS = { colourSnap: [0, 1], ppmattingBeta: [0, 1], promotePPMatting: [0, 1] };
+  const DEFAULTS = { colourSnap: 0.8, ppmattingBeta: 1, promotePPMatting: 0, ultraDefault: 1 };   // v1.01 ultraDefault: 1 = Genesis UltraMatte is the default engine and the governor never leaves it (only the picture size steps down); 0 = old Automatic behaviour (kill switch)
+  //   // v0.89 colour-line edge correction strength (0 = off); v0.94 ppmattingBeta: show the PP-MattingV2 beta engine in the picker (1) or hide it for everyone (0); promotePPMatting: 1 lets a PASSING release gate make it the default (stays 0)
+  const LIMITS = { colourSnap: [0, 1], ppmattingBeta: [0, 1], promotePPMatting: [0, 1], ultraDefault: [0, 1] };
 
   /** Keep only known keys with finite numbers inside their limits. Anything else is ignored (never throws). */
   function sanitize(raw) {

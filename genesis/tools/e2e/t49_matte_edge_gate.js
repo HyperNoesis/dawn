@@ -121,6 +121,11 @@ const GATES = JSON.parse(fs.readFileSync(path.join(__dirname, 'matte_edge_gates.
           jSum += Math.abs(ex - e) + Math.abs(ey - e); jN += 2;
         }
         out[sc.name + '-' + MW] = { alphaMAE: aSum / n, jagged: jSum / jN, bleed: bN ? bSum / bN : 0, compMAE: cSum / n };
+        // The renderer uses this reset after a camera/engine transition; keep
+        // the GPU primitive's history invalidation covered by the browser gate.
+        const hadHistory = m._hasHistory;
+        m.reset();
+        if (hadHistory && m._hasHistory) throw new Error('GLMatte.reset did not clear temporal history');
       }
     }
     return out;
@@ -131,9 +136,14 @@ const GATES = JSON.parse(fs.readFileSync(path.join(__dirname, 'matte_edge_gates.
   for (const key of Object.keys(res)) {
     const r = res[key], G = GATES[key] || {};
     console.log(`${key.padEnd(10)} alphaMAE=${r.alphaMAE.toFixed(4)}  jagged=${r.jagged.toFixed(4)}  bleed=${r.bleed.toFixed(2)}  compMAE=${r.compMAE.toFixed(2)}`);
-    for (const k of Object.keys(G)) { const pass = r[k] <= G[k]; if (!pass) bad++; if (!pass || process.env.VERBOSE) console.log(`  ${pass ? 'PASS' : 'FAIL'} ${key} ${k} ${r[k].toFixed(4)} <= ${G[k]}`); }
+    for (const k of Object.keys(G)) {
+      const pass = r[k] <= G[k]; if (!pass) bad++;
+      const label = REPORT_ONLY ? (pass ? 'OBSERVED-PASS' : 'OBSERVED-OUTSIDE-THRESHOLD') : (pass ? 'PASS' : 'FAIL');
+      if (!pass || process.env.VERBOSE || REPORT_ONLY) console.log(`  ${label} ${key} ${k} ${r[k].toFixed(4)} <= ${G[k]}`);
+    }
   }
-  if (!REPORT_ONLY) console.log(bad ? `FAIL ${bad} gate(s)` : 'PASS all matte edge gates');
+  if (REPORT_ONLY) console.log(`REPORT ONLY: ${bad} experimental threshold miss(es); production defaults and blocking CI gates are unchanged.`);
+  else console.log(bad ? `FAIL ${bad} gate(s)` : 'PASS all matte edge gates');
   if (errs.length) console.log('page errors:', errs.slice(0, 3));
   process.exit(REPORT_ONLY || !bad ? 0 : 1);
 })();

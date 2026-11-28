@@ -29,9 +29,9 @@ create policy "profiles are insertable by owner"
   with check (auth.uid() = id);
 
 
--- Lets a signed-in user delete their OWN account (and everything cascades
--- via the "on delete cascade" foreign keys above — recordings, environments,
--- usage_events, profile all go with it). security definer so it can reach
+-- Lets a signed-in user delete their OWN account. The client first removes
+-- Storage objects through the authenticated Storage API because object bytes
+-- do not cascade with auth.users. SECURITY DEFINER lets this function reach
 -- auth.users, which a plain RLS policy can't touch — but it's hard-locked to
 -- auth.uid() internally, so it can never be used to delete anyone else.
 create or replace function public.delete_own_account()
@@ -41,6 +41,14 @@ security definer
 set search_path = public
 as $$
 begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  -- The client removes only this user's Storage objects through the Storage
+  -- API before calling this function. Do not delete storage.objects rows with
+  -- SQL: the object bytes are managed outside Postgres. Metadata tables below
+  -- cascade through their auth.users foreign keys.
   delete from auth.users where id = auth.uid();
 end;
 $$;

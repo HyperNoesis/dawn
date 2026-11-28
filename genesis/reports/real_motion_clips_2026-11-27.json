@@ -1,0 +1,186 @@
+{
+ "modnet": [
+  {
+   "id": "p_07141906",
+   "mae_x1000": 5.09,
+   "worst_frame_mae_x1000": 12.3,
+   "flicker_x1000": 7.19,
+   "gt_motion_x1000": 20.9,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 1348,
+   "ms_p95": 1658
+  },
+  {
+   "id": "p_514ca06a",
+   "mae_x1000": 7.01,
+   "worst_frame_mae_x1000": 8.2,
+   "flicker_x1000": 10.1,
+   "gt_motion_x1000": 22.59,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 1209,
+   "ms_p95": 1569
+  },
+  {
+   "id": "p_818e689d",
+   "mae_x1000": 2.93,
+   "worst_frame_mae_x1000": 3.2,
+   "flicker_x1000": 5.25,
+   "gt_motion_x1000": 24.02,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 843,
+   "ms_p95": 1185
+  },
+  {
+   "id": "p_bd6af989",
+   "mae_x1000": 6.49,
+   "worst_frame_mae_x1000": 7.7,
+   "flicker_x1000": 9.69,
+   "gt_motion_x1000": 21.87,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 965,
+   "ms_p95": 1181
+  }
+ ],
+ "ppmatting-v2": [
+  {
+   "id": "p_07141906",
+   "mae_x1000": 8.67,
+   "worst_frame_mae_x1000": 14.8,
+   "flicker_x1000": 11.54,
+   "gt_motion_x1000": 20.9,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 371,
+   "ms_p95": 482
+  },
+  {
+   "id": "p_514ca06a",
+   "mae_x1000": 7.37,
+   "worst_frame_mae_x1000": 8.4,
+   "flicker_x1000": 9.9,
+   "gt_motion_x1000": 22.59,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 382,
+   "ms_p95": 461
+  },
+  {
+   "id": "p_818e689d",
+   "mae_x1000": 6.41,
+   "worst_frame_mae_x1000": 13.1,
+   "flicker_x1000": 10.31,
+   "gt_motion_x1000": 24.02,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 213,
+   "ms_p95": 283
+  },
+  {
+   "id": "p_bd6af989",
+   "mae_x1000": 7.15,
+   "worst_frame_mae_x1000": 8.7,
+   "flicker_x1000": 10.46,
+   "gt_motion_x1000": 21.87,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 301,
+   "ms_p95": 368
+  }
+ ],
+ "genesis-hybrid": [
+  {
+   "id": "p_07141906",
+   "mae_x1000": 8.83,
+   "worst_frame_mae_x1000": 15,
+   "flicker_x1000": 11.82,
+   "gt_motion_x1000": 20.9,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 405,
+   "ms_p95": 671
+  },
+  {
+   "id": "p_514ca06a",
+   "mae_x1000": 7.54,
+   "worst_frame_mae_x1000": 8.6,
+   "flicker_x1000": 10.18,
+   "gt_motion_x1000": 22.59,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 358,
+   "ms_p95": 480
+  },
+  {
+   "id": "p_818e689d",
+   "mae_x1000": 6.71,
+   "worst_frame_mae_x1000": 13.4,
+   "flicker_x1000": 10.75,
+   "gt_motion_x1000": 24.02,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 240,
+   "ms_p95": 337
+  },
+  {
+   "id": "p_bd6af989",
+   "mae_x1000": 7.47,
+   "worst_frame_mae_x1000": 9,
+   "flicker_x1000": 10.93,
+   "gt_motion_x1000": 21.87,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 269,
+   "ms_p95": 394
+  }
+ ],
+ "genesis-hybrid-tam": [
+  {
+   "id": "p_07141906",
+   "mae_x1000": 8.85,
+   "worst_frame_mae_x1000": 15,
+   "flicker_x1000": 11.84,
+   "gt_motion_x1000": 20.9,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 472,
+   "ms_p95": 2765
+  },
+  {
+   "id": "p_514ca06a",
+   "mae_x1000": 7.25,
+   "worst_frame_mae_x1000": 8.2,
+   "flicker_x1000": 10.03,
+   "gt_motion_x1000": 22.59,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 418,
+   "ms_p95": 3153
+  },
+  {
+   "id": "p_818e689d",
+   "mae_x1000": 5.13,
+   "worst_frame_mae_x1000": 5.5,
+   "flicker_x1000": 8.85,
+   "gt_motion_x1000": 24.02,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 252,
+   "ms_p95": 2556
+  },
+  {
+   "id": "p_bd6af989",
+   "mae_x1000": 7.01,
+   "worst_frame_mae_x1000": 7.8,
+   "flicker_x1000": 10.42,
+   "gt_motion_x1000": 21.87,
+   "empty_frames": 0,
+   "best_lag_frames": 0,
+   "ms_p50": 302,
+   "ms_p95": 3070
+  }
+ ]
+}

@@ -1,0 +1,107 @@
+{
+ "label": "after",
+ "views": {
+  "phone": {
+   "viewport": [
+    390,
+    844
+   ],
+   "cameraStarted": true,
+   "idle": {
+    "overflowX": 0,
+    "controls": 26,
+    "unlabeled": [],
+    "tooSmall": [],
+    "h1": 1,
+    "lang": "en",
+    "title": "Genesis — Studio",
+    "liveRegions": 24
+   },
+   "live": {
+    "overflowX": 0,
+    "controls": 25,
+    "unlabeled": [],
+    "tooSmall": [],
+    "h1": 1,
+    "lang": "en",
+    "title": "Genesis — Studio",
+    "liveRegions": 24
+   },
+   "firstFocus": {
+    "tag": "BUTTON",
+    "id": "flipCamBtn",
+    "outline": "solid 2px",
+    "shadow": false
+   },
+   "errors": []
+  },
+  "tablet": {
+   "viewport": [
+    820,
+    1180
+   ],
+   "cameraStarted": true,
+   "idle": {
+    "overflowX": 0,
+    "controls": 29,
+    "unlabeled": [],
+    "tooSmall": [],
+    "h1": 1,
+    "lang": "en",
+    "title": "Genesis — Studio",
+    "liveRegions": 24
+   },
+   "live": {
+    "overflowX": 0,
+    "controls": 29,
+    "unlabeled": [],
+    "tooSmall": [],
+    "h1": 1,
+    "lang": "en",
+    "title": "Genesis — Studio",
+    "liveRegions": 24
+   },
+   "firstFocus": {
+    "tag": "BUTTON",
+    "id": "flipCamBtn",
+    "outline": "solid 2px",
+    "shadow": false
+   },
+   "errors": []
+  },
+  "desktop": {
+   "viewport": [
+    1440,
+    900
+   ],
+   "cameraStarted": true,
+   "idle": {
+    "overflowX": 0,
+    "controls": 34,
+    "unlabeled": [],
+    "tooSmall": [],
+    "h1": 1,
+    "lang": "en",
+    "title": "Genesis — Studio",
+    "liveRegions": 24
+   },
+   "live": {
+    "overflowX": 0,
+    "controls": 34,
+    "unlabeled": [],
+    "tooSmall": [],
+    "h1": 1,
+    "lang": "en",
+    "title": "Genesis — Studio",
+    "liveRegions": 24
+   },
+   "firstFocus": {
+    "tag": "BUTTON",
+    "id": "flipCamBtn",
+    "outline": "solid 2px",
+    "shadow": false
+   },
+   "errors": []
+  }
+ }
+}

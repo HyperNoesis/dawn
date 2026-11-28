@@ -9,18 +9,20 @@
  * at console.groq.com/keys, no card required at time of writing). This is
  * the one truly "free-tier paid API" in this app's provider list.
  *
- * The API key lives only in this browser's localStorage and is sent
- * directly to api.groq.com — never through any server of ours (there is
- * no server).
+ * A personal key can be stored in this browser's localStorage and is sent
+ * directly to api.groq.com. It is visible to same-origin JavaScript, so do
+ * not store a shared owner/provider credential here. Paid shared access
+ * requires a server-side authenticated proxy.
  */
 (function () {
   const ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
   const MODEL = 'whisper-large-v3-turbo';
 
+  // Only a personal per-device key is accepted. Do not bundle a shared
+  // owner/provider credential in config.js; static assets are public.
   function getApiKey() {
-    const configured = (window.VS && window.VS.config && window.VS.config.groqApiKey || '').trim();
-    if (configured) return configured;
-    return (localStorage.getItem('vs_groq_api_key') || '').trim();
+    try { return (localStorage.getItem('vs_groq_api_key') || '').trim(); }
+    catch (_) { return ''; }
   }
 
   class GroqTranscriptionProvider {

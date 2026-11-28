@@ -170,7 +170,9 @@
         return { status: j.status, resultUrl: j.resultUrl, error: j.error };
       },
       async fetchResult({ url, signal }) {
-        const res = await c.fetchImpl(url, { signal, headers: String(url).indexOf(base + '/') === 0 ? headers() : {} });   // token only to OUR relay, never to a vendor CDN
+        const absolute = new URL(String(url || ''), base + '/').toString();
+        const sameRelay = new URL(absolute).origin === new URL(base).origin;
+        const res = await c.fetchImpl(absolute, { signal, headers: sameRelay ? headers() : {} }); // never send a relay token to a vendor CDN
         if (!res.ok) throw Object.assign(new Error('Could not download the finished clip (HTTP ' + res.status + ').'), { status: res.status });
         return { blob: await res.blob() };
       },

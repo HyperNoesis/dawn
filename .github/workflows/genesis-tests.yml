@@ -1,7 +1,8 @@
-name: Genesis segmentation regression gates
+name: Genesis segmentation adaptive regression gates
 
 on:
   push:
+    branches: [main]
     paths:
       - "genesis/**"
       - ".github/workflows/genesis-tests.yml"
@@ -11,8 +12,9 @@ on:
       - ".github/workflows/genesis-tests.yml"
   workflow_dispatch:
 
-# Cancel superseded validation runs for the same branch; keep push and PR runs
-# on the same head ref from consuming the full browser/model matrix twice.
+# Cancel superseded runs within each event type. Feature branches are validated
+# by their pull_request event; only main gets a separate push-triggered run.
+# This avoids push/PR concurrency groups cancelling each other on the same commit.
 concurrency:
   group: genesis-segmentation-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
@@ -41,8 +43,20 @@ jobs:
       - name: Restore required model and runtime binaries
         run: sh scripts/restore-big-files.sh
 
+      - name: Fetch checksum-verified PP-MattingV2 and EdgeTAM browser models
+        run: node scripts/fetch-models.js --only edgetam,edgetam-fp32,ppmatting-v2
+
       - name: Install Python test dependencies
         run: python -m pip install -q pillow numpy opencv-python-headless scipy scikit-image imageio-ffmpeg fastapi httpx uvicorn
+
+      - name: Install and test protected signalling/render services
+        run: |
+          npm install --prefix server --no-audit --no-fund
+          npm test --prefix server
+
+      - name: Validate browser, worker, build and server JavaScript syntax
+        run: |
+          find js tools/e2e server scripts -type f -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Run provider and pure-logic unit suites
         run: |
@@ -70,6 +84,15 @@ jobs:
           node tools/e2e/t44_threads_gate.js
           node tools/e2e/t42_enhance.js
           node tools/e2e/t49_matte_edge_gate.js
+          # Diagnostic-only profile comparison across clean, noisy, low-contrast,
+          # dark, hair-strand and motion-lag synthetic edge cases. Keep production
+          # defaults unchanged until these profiles and real footage agree.
+          MATTE_PARAMS='{"edgeLo":0.15,"edgeHi":0.85}' node tools/e2e/t49_matte_edge_gate.js --report
+          MATTE_PARAMS='{"edgeLo":0.05,"edgeHi":0.95}' node tools/e2e/t49_matte_edge_gate.js --report
+          node tools/e2e/t50_ultramatte_gate.js
+          # Studio user journeys (record/save/reload/camera denied/Go Live failure) and responsive + accessibility audit (phone/tablet/desktop).
+          node tools/e2e/t61_studio_journeys.js
+          node tools/e2e/t60_studio_responsive_audit.js ci
 
       - name: Run export safety and API regression suites
         run: |
@@ -77,6 +100,7 @@ jobs:
           python server/studio-export/test_scene_logic.py
           python server/studio-export/test_export_safety.py
           python server/studio-export/test_export_e2e.py
+          python tools/matte-bench/test_metrics.py
           python gpu/test_export_api.py
 
       - name: Verify the deployable site builds
@@ -89,3 +113,6 @@ jobs:
           path: |
             genesis/gate_report.json
             genesis/gate_last_frame.png
+            genesis/ultramatte_gate_report.json
+            genesis/ultramatte_last_comparison.png
+            genesis/ultramatte_last_composite.png

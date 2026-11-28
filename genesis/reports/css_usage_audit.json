@@ -1,0 +1,246 @@
+{
+ "rules": 2240,
+ "provably_unused": 227,
+ "sample": [
+  [
+   131,
+   ".text-success"
+  ],
+  [
+   174,
+   ".badge-soon"
+  ],
+  [
+   214,
+   ".sidebar-user"
+  ],
+  [
+   223,
+   ".user-info"
+  ],
+  [
+   224,
+   ".user-name"
+  ],
+  [
+   275,
+   ".hero-visual"
+  ],
+  [
+   282,
+   ".hero-visual::before"
+  ],
+  [
+   285,
+   ".hero-visual .rig-floor"
+  ],
+  [
+   291,
+   ".hero-visual .rig-light"
+  ],
+  [
+   297,
+   ".hero-visual .rig-light.key"
+  ],
+  [
+   298,
+   ".hero-visual .rig-light.fill"
+  ],
+  [
+   299,
+   ".hero-visual .rig-light.rim"
+  ],
+  [
+   302,
+   ".hero-visual .viewfinder"
+  ],
+  [
+   303,
+   ".hero-visual .viewfinder i"
+  ],
+  [
+   304,
+   ".hero-visual .viewfinder i:nth-child(1)"
+  ],
+  [
+   305,
+   ".hero-visual .viewfinder i:nth-child(2)"
+  ],
+  [
+   306,
+   ".hero-visual .viewfinder i:nth-child(3)"
+  ],
+  [
+   307,
+   ".hero-visual .viewfinder i:nth-child(4)"
+  ],
+  [
+   308,
+   ".hero-visual .onair"
+  ],
+  [
+   313,
+   ".hero-visual .onair .dot"
+  ],
+  [
+   316,
+   ".hero-body"
+  ],
+  [
+   317,
+   ".hero-copy"
+  ],
+  [
+   326,
+   ".hero-visual"
+  ],
+  [
+   327,
+   ".hero-body"
+  ],
+  [
+   329,
+   ".hero-body"
+  ],
+  [
+   331,
+   ".hero-visual .rig-light"
+  ],
+  [
+   345,
+   ".first-creation"
+  ],
+  [
+   348,
+   ".first-creation .fc-icon"
+  ],
+  [
+   352,
+   ".first-creation .fc-body"
+  ],
+  [
+   353,
+   ".first-creation .fc-title"
+  ],
+  [
+   354,
+   ".first-creation .fc-sub"
+  ],
+  [
+   355,
+   ".first-creation .btn"
+  ],
+  [
+   356,
+   ".first-creation"
+  ],
+  [
+   356,
+   ".first-creation .fc-icon"
+  ],
+  [
+   358,
+   ".error-state"
+  ],
+  [
+   362,
+   ".error-state svg"
+  ],
+  [
+   363,
+   ".error-state .error-title"
+  ],
+  [
+   364,
+   ".error-state .error-sub"
+  ],
+  [
+   421,
+   ".auth-wrap"
+  ],
+  [
+   422,
+   ".auth-wrap::before"
+  ],
+  [
+   427,
+   ".auth-outer"
+  ],
+  [
+   428,
+   ".auth-outer::before"
+  ],
+  [
+   435,
+   ".auth-tabs"
+  ],
+  [
+   436,
+   ".auth-tabs button"
+  ],
+  [
+   438,
+   ".success-msg"
+  ],
+  [
+   440,
+   ".auth-honesty"
+  ],
+  [
+   442,
+   ".field-with-action"
+  ],
+  [
+   443,
+   ".field-with-action input"
+  ],
+  [
+   446,
+   ".field-hint"
+  ],
+  [
+   447,
+   ".field-hint.invalid"
+  ],
+  [
+   451,
+   ".auth-outer"
+  ],
+  [
+   452,
+   ".auth-outer::before"
+  ],
+  [
+   645,
+   ".focus-toggle-hint"
+  ],
+  [
+   821,
+   ".hero-copy"
+  ],
+  [
+   869,
+   ".create-kbd"
+  ],
+  [
+   871,
+   ".panel-eyebrow"
+  ],
+  [
+   879,
+   ".hero-visual"
+  ],
+  [
+   880,
+   ".hero-visual::before"
+  ],
+  [
+   881,
+   ".hero-body"
+  ],
+  [
+   885,
+   ".home-command"
+  ]
+ ]
+}

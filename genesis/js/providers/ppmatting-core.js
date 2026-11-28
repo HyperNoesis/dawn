@@ -42,7 +42,31 @@
     return buf;
   }
 
-  /** Model output floats -> Uint8 alpha. Clamps to [0,1]; NaN becomes 0. Writes into `dst` when given. */
+  /**
+   * Validate the model's declared alpha contract before lossy Uint8 conversion.
+   * Do not let NaN/Infinity silently become transparent pixels and masquerade
+   * as a healthy model result. Small floating-point overshoot is tolerated;
+   * toAlpha() performs the final [0,1] clamp.
+   */
+  function validateAlphaOutput(data, n, tolerance) {
+    const tol = tolerance == null ? 0.02 : Math.max(0, tolerance);
+    if (!data || !Number.isInteger(n) || n <= 0 || data.length !== n) {
+      return { ok: false, reason: 'alpha length mismatch', min: null, max: null };
+    }
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const v = data[i];
+      if (!Number.isFinite(v)) return { ok: false, reason: 'non-finite alpha at index ' + i, min, max };
+      if (v < min) min = v;
+      if (v > max) max = v;
+      if (v < -tol || v > 1 + tol) {
+        return { ok: false, reason: 'alpha outside [0,1] at index ' + i + ': ' + v, min, max };
+      }
+    }
+    return { ok: true, reason: null, min, max };
+  }
+
+  /** Model output floats -> Uint8 alpha. Clamps to [0,1]; NaN becomes 0 for non-model utility calls. */
   function toAlpha(data, n, dst) {
     const a = dst && dst.length === n ? dst : new Uint8Array(n);
     for (let i = 0; i < n; i++) { const v = data[i]; a[i] = !(v > 0) ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0; }
@@ -81,7 +105,7 @@
     return alpha.length ? s / (255 * alpha.length) : 0;
   }
 
-  const api = { MULT, MAX_SHORT, stillSize, liveSize, toTensor, toAlpha, resizeAlpha, applyAlphaToRGBA, coverage };
+  const api = { MULT, MAX_SHORT, stillSize, liveSize, toTensor, validateAlphaOutput, toAlpha, resizeAlpha, applyAlphaToRGBA, coverage };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.VS = root.VS || {};
   root.VS.PPMattingCore = api;

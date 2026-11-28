@@ -50,6 +50,23 @@
       li.innerHTML = '<a href="' + studioHref(r) + '"><span class="im"><img loading="lazy" decoding="async" width="640" height="400" alt="' + r.name + '" src="' + img(r) + '"></span><span><b>' + r.name + '</b><span class="u">' + r.use + '</span><span class="go">Open Studio with this room</span></span></a>';
       grid.appendChild(li);
     });
+    // Coming soon: any link into the studio shows a short message until config.studioOpen is true.
+    if (cfg().studioOpen !== true) {
+      let dlg = null;
+      const build = () => {
+        dlg = document.createElement('dialog'); dlg.id = 'lpSoon'; dlg.setAttribute('aria-labelledby', 'lpSoonT');
+        dlg.style.cssText = 'border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:30px 26px;max-width:340px;width:calc(100% - 40px);background:#12151f;color:#fff;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.55)';
+        dlg.innerHTML = '<h2 id="lpSoonT" style="margin:0 0 8px;font-size:26px">Coming soon</h2><p style="margin:0 0 20px;opacity:.75">The studio opens very soon. Be first in.</p><div style="display:grid;gap:10px"><a class="g-btn g-btn--primary" href="#pilot" id="lpSoonJoin">Join the early list</a><button type="button" class="g-btn g-btn--secondary" id="lpSoonClose">Close</button></div>';
+        document.body.appendChild(dlg);
+        dlg.querySelector('#lpSoonClose').addEventListener('click', () => dlg.close());
+        dlg.querySelector('#lpSoonJoin').addEventListener('click', () => dlg.close());
+        dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+      };
+      document.addEventListener('click', (e) => {
+        const a = e.target.closest && e.target.closest('a[href^="studio.html"]'); if (!a) return;
+        e.preventDefault(); if (!dlg) build(); if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+      }, true);
+    }
     const probe = pilotMessage({}, biz()), form = $('pilotForm');
     if (probe.href) { form.hidden = false; $('pHow').textContent = 'This opens ' + probe.how + ' with your message ready to send. Nothing is stored by this page.'; } else $('pilotOff').hidden = false;
     form.addEventListener('submit', (e) => { e.preventDefault(); const m = pilotMessage({ name: $('pName').value, use: $('pUse').value, phone: $('pPhone').value, note: $('pNote').value }, biz()); if (m.href) location.href = m.href; });

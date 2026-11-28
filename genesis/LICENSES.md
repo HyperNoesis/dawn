@@ -5,19 +5,20 @@ projects' own repos/model cards as found in research on 30 Sep 2026.
 
 | Component | Licence | OK for a paid product? |
 |---|---|---|
-| MODNet (portrait matting model, default quality tier) | Apache-2.0 | Yes, with attribution and the licence text if you redistribute the file |
+| MODNet (portrait matting model, bootstrap/fallback tier) | Apache-2.0 | Yes, with attribution and the licence text if you redistribute the file |
 | MediaPipe Selfie Segmentation (self-hosted in vendor/mediapipe/selfie, light tier) | Apache-2.0 (package @mediapipe/selfie_segmentation) | Yes, with attribution and the licence text. Keep the Apache-2.0 text with the app |
 | MediaPipe Hands + Face Mesh (self-hosted in vendor/mediapipe/hands and vendor/mediapipe/face_mesh) | Apache-2.0 (packages @mediapipe/hands 0.4.1675469240, @mediapipe/face_mesh 0.4.1633559619) | Yes, with attribution and the licence text |
 | RNNoise noise suppression (js/worklets/rnnoise-worklet.js, built from jitsi/rnnoise-wasm commit cb529a59, core xiph/rnnoise) | jitsi/rnnoise-wasm Apache-2.0 (vendor/rnnoise/LICENSE-...); rnnoise core BSD-3-Clause (xiph, verify text before redistribution) | Yes, with attribution |
-| Robust Video Matting (RVM) | GPL-3.0 | Risky. From v0.61 the RVM live tier (js/providers/rvm-lite-provider.js + rvm-worker.js + models/rvm_mobilenetv3_fp32.onnx) runs in Auto mode by the OWNER'S DECISION. To remove it without a rebuild set localStorage vs_live_engine to "modnet"; to remove it from a build delete those three files and the two script/SW entries. Get counsel's read before charging money |
+| Robust Video Matting (RVM) | GPL-3.0 | Explicit opt-in only; excluded from Advanced Adaptive. Its browser code and model remain in the public repository/site, so review GPL obligations before distributing a closed-source paid build; replace/remove it if those terms do not fit. |
+| PP-MattingV2 (live alpha model) | Apache-2.0 per upstream project/registry | Used by Advanced Adaptive; retain upstream notices and verify upstream/data terms before commercial redistribution |
+| EdgeTAM (subject tracker/gate) | Apache-2.0 per upstream project/registry | Used as an optional tracker stage in UltraMatte; retain upstream notices |
+
 | MatAnyone / MatAnyone 2 | S-Lab licence, non-commercial | No, unless you get written permission from the authors. NOT included in the app. v0.82: only reachable in server/studio-export as `--engine matanyone2` (fetch with WITH_MATANYONE2=1), labelled reference/benchmark only. Beeble (beeble.ai) states it runs MatAnyone under a direct licence agreement, so a commercial licence from the authors exists as a route. Do not use its output in a paid service without that |
 | onnxruntime-web | Not checked in this research | Verify before launch |
 | AI-generated scene images (Pollinations.ai "Create World") | Not checked | Read their terms for commercial use of generated images before you sell scenes |
 
 ## Why this matters
-As of v0.61 Auto tries RVM (live tier, GPL-3.0) first, then MODNet (Apache-2.0), then
-MediaPipe, each only if this phone runs it within the speed budget. The owner chose
-to ship RVM; the licence risk above still stands. Older manual option: js/providers/rvm-provider.js.
+Advanced Adaptive is the automatic route: it starts with a device-appropriate local matte, then benchmarks UltraMatte (PP-MattingV2 + EdgeTAM + boundary tiles), Hybrid, and PP-MattingV2. MODNet and MediaPipe remain bootstrap/fallback paths. RVM is not an automatic candidate; it is only selected explicitly, and its GPL-3.0 obligations still need review for a closed-source paid distribution. The live route does not include custom Genesis MatteNet weights: the MatteNet document is a specification only.
 
 ## Attribution to ship with the app
 - MODNet: Zhanghan Ke et al., "MODNet: Real-Time Trimap-Free Portrait Matting via
@@ -43,7 +44,7 @@ assets/fonts/SpaceGrotesk-Variable.woff2, from github.com/floriankarsten/space-g
 
 ## Added 30 Oct 2026 (Prompt 1 + 2)
 - webm-muxer 5.1.0 (Vanilagy), MIT: vendor/webm-muxer/ (licence file kept). Used by Enhance export.
-- BiRefNet (ZhengPeng7), MIT: https://github.com/ZhengPeng7/BiRefNet/blob/main/LICENSE. Registry entry only; NOT shipped, NOT enabled.
+- BiRefNet (ZhengPeng7), MIT: https://github.com/ZhengPeng7/BiRefNet/blob/main/LICENSE. Optional explicit WebGPU route; excluded from the Advanced Adaptive automatic chain. Its training-dataset terms still need independent commercial review.
 - BEN2 (PramaLLC), MIT: https://github.com/PramaLLC/BEN2/blob/main/LICENSE. Registry entry only; NOT shipped, NOT enabled.
 
 
@@ -64,5 +65,7 @@ models/modnet.onnx (Apache-2.0) and models/rvm_mobilenetv3_fp32.onnx (GPL-3.0) a
 
 ## Deployment notes (v0.83)
 - **Public repo:** everything committed here is public if the repo is public. No keys are committed (`js/config.js` ships blank; scan done 10 Nov 2026). Never put real secrets in `js/config.js`: every visitor can read it.
-- **GPU image:** `modal-deploy.yml` builds an image that contains BiRefNet (MIT) and, unless `GENESIS_INCLUDE_REFERENCE=0`, MatAnyone 2 (non-commercial). The reference engine is refused by the API unless `ALLOW_REFERENCE=1`.
+- **GPU image:** MatAnyone 2 is excluded by default. `GENESIS_INCLUDE_REFERENCE=1` is an explicit opt-in for permitted reference evaluation, and the API still refuses that engine unless `ALLOW_REFERENCE=1`. Do not enable either flag for a paid workflow without written commercial permission.
+- **BiRefNet:** code/weight licence labels do not settle every training dataset's terms. Obtain dataset-rights review before training or commercial deployment.
+- **RVM:** GPL-3.0 browser files remain in the public repository and site distribution even though the adaptive default route no longer probes RVM automatically. Review/replace them before a closed-source paid release.
 - **Website models:** `models/rvm_mobilenetv3_fp32.onnx` is RVM (GPL-3.0) and is served publicly with the site. Replace it before commercial use.
