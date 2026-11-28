@@ -1,0 +1,54 @@
+/* Genesis / Atelier v2.1 — Pass 1: explicit semantic tokens.
+   Loaded AFTER genesis-system.css. Applies only when the saved/default atmosphere is "atelier",
+   so Obsidian / Graphite / Daylight, every accent, mode and density keep working unchanged.
+   Contrast for each pair below was computed (WCAG 2.x) — see docs/ATELIER_PASS1.md. */
+
+/* ---- Atelier · dark ---- */
+:root[data-theme="dark"][data-style="atelier"]{
+  --g-canvas:#0F1114; --g-shell:#191C20; --g-panel:#23272B; --g-raised:#282D33; --g-hover:#30363D;
+  --g-border:#363B41;
+  --g-text:#F4F0E8; --g-muted:#B9B3A9; --g-quiet:#A69F95;
+  /* Brand "Key Light": fixed champagne, NOT recoloured by the user's accent */
+  --g-key:#D6AD70; --g-on-key:#17130D;
+  /* Recording status: fixed semantic red, never the user accent (always paired with the word "Recording") */
+  --g-record:#FF6B5E;
+  --g-shadow:0 18px 48px rgba(0,0,0,.28);
+}
+/* ---- Atelier · light ---- */
+:root[data-theme="light"][data-style="atelier"]{
+  --g-canvas:#F6F2EA; --g-shell:#FFFFFF; --g-panel:#FFFFFF; --g-raised:#EFE9DD; --g-hover:#E6DFD1;
+  --g-border:#D9D1C3;           /* decorative structure only — never the sole state cue */
+  --g-text:#1E1B16; --g-muted:#625C52; --g-quiet:#6B6458;
+  --g-key:#7A561F; --g-on-key:#FFFFFF;
+  --g-record:#B42318;
+  --g-shadow:0 16px 42px rgba(60,44,20,.10);
+}
+/* Safe defaults so the tokens exist for every atmosphere (used by later passes) */
+:root{ --g-key:var(--g-brand); --g-on-key:#fff; --g-record:#FF647C; }
+:root[data-theme="dark"]{ --g-key:#D6AD70; --g-on-key:#17130D; }
+
+/* Brand primary action = champagne (Atelier only). Accent still drives focus, selected tabs and secondary emphasis. */
+:root[data-style="atelier"] .g-btn--primary,
+:root[data-style="atelier"] .g-btn--primary:visited,
+:root[data-style="atelier"] .btn.primary,
+:root[data-style="atelier"] button.primary,
+:root[data-style="atelier"] #mainContent .g-btn--primary,
+:root[data-style="atelier"] .app-shell .stage .g-btn--primary{
+  background:var(--g-key)!important; border-color:var(--g-key)!important; color:var(--g-on-key)!important;
+  box-shadow:none!important;
+}
+:root[data-style="atelier"] .g-btn--primary:hover,
+:root[data-style="atelier"] .btn.primary:hover:not(:disabled),
+:root[data-style="atelier"] button.primary:hover:not(:disabled){
+  background:color-mix(in srgb,var(--g-key) 90%,#fff)!important; color:var(--g-on-key)!important;
+}
+:root[data-style="atelier"] .g-btn--primary:active,
+:root[data-style="atelier"] .btn.primary:active:not(:disabled){
+  background:color-mix(in srgb,var(--g-key) 88%,#000)!important;
+}
+/* Keep a visible focus ring on top of the champagne fill (accent-coloured ring, per spec: accent = focus) */
+:root[data-style="atelier"] .g-btn--primary:focus-visible,
+:root[data-style="atelier"] .btn.primary:focus-visible,
+:root[data-style="atelier"] button.primary:focus-visible{
+  outline:2px solid var(--g-brand); outline-offset:3px; box-shadow:0 0 0 5px var(--g-canvas)!important;
+}
