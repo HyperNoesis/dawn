@@ -3220,3 +3220,12 @@ input::placeholder,textarea::placeholder{color:var(--g-quiet)!important;opacity:
 @media (prefers-reduced-motion:reduce){.soon-tag{animation:none}}
 /* First-use studio: only "Start your camera" is visible (spec §12) */
 #previewOverlay[data-state="idle"] #overlaySub,#previewOverlay[data-state="idle"] #overlayTitle,#previewOverlay[data-state="idle"] #previewEnvLink{display:none!important}
+
+/* ATELIER combinations: text on a champagne/brown action fill must be the dedicated on-action colour (white on #D6AD70 is 2.1:1). */
+:root[data-accent="champagne"] :is(.g-btn--primary,.btn.primary,.btn-primary,button.primary,a.primary,.sidebar-create,.create-text,.create-mark,.lp-btn-lg.g-btn--primary,.seg-btn.active .seg-name),
+:root:not([data-accent]) :is(.g-btn--primary,.btn.primary,.btn-primary,button.primary,a.primary,.sidebar-create){color:var(--g-on-action)!important}
+:root[data-accent="champagne"] :is(.g-btn--primary,.btn.primary):hover{background:var(--g-action-hover)}
+:root[data-accent="champagne"] :is(.g-btn--primary,.btn.primary):active{background:var(--g-action-active)}
+.g-skip,.g-skip:focus{color:var(--g-on-action)!important}
+.ux-steps li.now .ux-num{color:var(--g-on-action)!important}
+.env-cat{background:rgba(12,12,14,.72)!important}

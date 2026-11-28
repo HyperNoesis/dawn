@@ -977,7 +977,7 @@
       }
       els.startBtn.style.display = 'inline-flex';
       els.startBtn.disabled = false;
-      els.startBtn.textContent = 'Start Camera';
+      els.startBtn.textContent = 'Start your camera';
       if (els.previewEnvLink) els.previewEnvLink.style.display = 'inline-block';
     } else if (state === 'preparing') {
       els.overlayTitle.textContent = opts.message || 'Starting...';
@@ -1149,6 +1149,7 @@
     }
 
     els.video.srcObject = stream;
+    setComingSoonTag(true); /* camera is rolling: teaser tag goes up even while the matte engine is still loading */
     await els.video.play();
     // A new stream may have the same dimensions as the previous camera. The
     // GPU compositor must still forget the previous subject/camera history.
@@ -1332,7 +1333,14 @@
     }
   }
 
+  /* Pre-launch teaser: the camera and the matte run for real, and a cinematic "Coming soon" tag sits over the preview (DOM only: never in recorded frames). */
+  function setComingSoonTag(on) {
+    const el = document.getElementById('comingSoonTag'); if (!el) return;
+    const cfg = (window.VS && window.VS.config) || {};
+    el.hidden = !(on && cfg.comingSoonTag !== false);
+  }
   function stopCamera() {
+    setComingSoonTag(false);
     hideStageLoading();
     clearInterval(blackWatchTimer);
     invalidateCleanPlate('Camera stopped; capture a new clean plate after restarting.');
