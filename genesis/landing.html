@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Genesis, your own virtual studio</title>
 <meta name="description" content="Choose a room, see yourself in it, and record. Free to try.">
-<meta name="theme-color" content="#0A0518">
+<meta name="theme-color" content="#0F1114">
 <link rel="icon" href="assets/genesis-logo-atelier.png"><link rel="manifest" href="manifest.json">
-<link rel="preload" href="assets/fonts/Anton-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/Lora-Variable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/SpaceGrotesk-Variable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/landing/person.webp" as="image">
 <link rel="stylesheet" href="css/landing-stage.css">
@@ -65,16 +65,29 @@
 
 <section class="sec" id="how" aria-labelledby="h-how"><div class="w">
 <h2 id="h-how">Three steps. Then you are on.</h2>
-<ol class="steps">
-<li class="glass"><span class="n" aria-hidden="true">1</span><h3>Pick a room</h3><p>Choose from the library, or bring your own picture.</p></li>
-<li class="glass"><span class="n" aria-hidden="true">2</span><h3>Find your frame</h3><p>Start your camera, check your light and sound, and step in.</p></li>
-<li class="glass"><span class="n" aria-hidden="true">3</span><h3>Record</h3><p>Hit record. A safety copy is kept as you go. Going live is in beta.</p></li>
-</ol></div></section>
+<div class="story">
+<div class="visual" aria-hidden="true">
+<div class="mon" id="mon" data-step="1">
+<img class="room" src="assets/environments/scene-premium-podcast.jpg" alt="" width="1280" height="720" loading="lazy">
+<img class="who" src="assets/landing/person.webp" alt="" width="736" height="977" loading="lazy">
+<div class="strip"><img src="assets/landing/room-podcast.webp" alt="" width="640" height="360" loading="lazy"><img src="assets/landing/room-talkshow.webp" alt="" width="640" height="360" loading="lazy"><img src="assets/landing/room-classroom.webp" alt="" width="640" height="360" loading="lazy"><img src="assets/landing/room-library.webp" alt="" width="640" height="360" loading="lazy"></div>
+<div class="frame"><i></i><i></i><i></i><i></i></div>
+<div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<div class="tally"><b></b>Recording <span id="time">00:00</span></div>
+</div>
+<p class="note">Illustration of the steps, not a screenshot.</p>
+</div>
+<ol class="beats">
+<li class="on"><span class="n" aria-hidden="true">1</span><h3>Pick a room</h3><p>Choose from the library, or bring your own picture.</p></li>
+<li><span class="n" aria-hidden="true">2</span><h3>Find your frame</h3><p>Start your camera, check your light and sound, and step in.</p></li>
+<li><span class="n" aria-hidden="true">3</span><h3>Record</h3><p>Hit record. A safety copy is kept as you go. Going live is in beta.</p></li>
+</ol>
+</div></div></section>
 
 <section class="sec" id="features" aria-labelledby="h-feat"><div class="w">
 <h2 id="h-feat">Everything for the show.</h2>
 <ul class="feat">
-<li class="glass wide" style="--img:url('../assets/landing/room-sports.webp')"><h3>Your name on screen</h3><p>Lower thirds, tickers, countdowns, scoreboards and QR codes in your colours.</p></li>
+<li class="glass wide" style="--img:url('../assets/landing/room-podcast.webp')"><h3>Your name on screen</h3><p>Lower thirds, tickers, countdowns, scoreboards and QR codes in your colours.</p></li>
 <li class="glass"><h3>Run the show</h3><p>One Next button moves graphics, scene and teleprompter, even from a second phone.</p></li>
 <li class="glass"><h3>Clean sound</h3><p>Voice polish, optional noise removal, and music that dips when you talk.</p></li>
 <li class="glass"><h3>Safe recording</h3><p>A safety copy is kept as you record.</p></li>

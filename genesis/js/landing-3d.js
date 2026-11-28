@@ -13,16 +13,16 @@ function renderer(canvas) {
 /* A tiny lit "studio" turned into a reflection map, so chrome has something to reflect. */
 function studioEnv(r) {
   const s = new THREE.Scene();
-  s.background = new THREE.Color(0x0b0620);
+  s.background = new THREE.Color(0x0f1114);
   const panel = (color, power, w, h, x, y, z) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(power), side: THREE.DoubleSide }));
     m.position.set(x, y, z); m.lookAt(0, 0, 0); s.add(m);
   };
-  panel(0xffffff, 3.2, 8, 2, 0, 7, 3);
-  panel(0x8a4dff, 2.6, 4, 9, -8, 0, 1);
-  panel(0x3ee6ff, 2.2, 3, 9, 8, 1, -1);
-  panel(0xff6a88, 1.8, 9, 3, 0, -7, 2);
-  panel(0xffffff, 1.4, 1, 8, 4, 0, 8);
+  panel(0xfff4e2, 3.0, 8, 2, 0, 7, 3);
+  panel(0xd6ad70, 2.4, 4, 9, -8, 0, 1);
+  panel(0xf4f0e8, 1.1, 2, 9, 8, 1, -1);
+  panel(0x8a6a3c, 1.4, 9, 3, 0, -7, 2);
+  panel(0xfff4e2, 1.2, 1, 8, 4, 0, 8);
   const p = new THREE.PMREMGenerator(r), t = p.fromScene(s, 0.02).texture;
   p.dispose(); return t;
 }
@@ -68,18 +68,13 @@ export async function hero({ canvas, rooms, onPick }) {
     fragmentShader: `uniform sampler2D map;uniform vec3 accent;uniform float reveal;varying vec2 vUv;
       void main(){
         vec4 c=texture2D(map,vUv);
-        float bottom=smoothstep(0.0,0.16,vUv.y);
-        float a=c.a*bottom;
-        float l=clamp(c.a-texture2D(map,vUv+vec2(-0.022,0.004)).a,0.,1.);
-        float rr=clamp(c.a-texture2D(map,vUv+vec2(0.022,0.004)).a,0.,1.);
-        vec3 col=c.rgb*vec3(0.97,0.95,1.04);
-        col+=vec3(0.24,0.80,1.0)*l*0.6+accent*rr*0.8;
-        float y=1.0-vUv.y;
-        float done=smoothstep(y-0.02,y+0.02,reveal);
-        float line=exp(-pow((y-reveal)*38.0,2.0))*step(reveal,1.05);
-        col=mix(col,vec3(0.45,0.92,1.0),line);
-        a*=max(done,line);
+        float a=c.a*smoothstep(0.0,0.16,vUv.y);
         if(a<0.02)discard;
+        float l=clamp(c.a-texture2D(map,vUv+vec2(-0.022,0.006)).a,0.,1.);
+        float rr=clamp(c.a-texture2D(map,vUv+vec2(0.022,0.004)).a,0.,1.);
+        float wipe=smoothstep(vUv.x-0.35,vUv.x+0.05,reveal*1.25-0.1);
+        vec3 col=c.rgb*mix(0.12,1.0,wipe)*vec3(1.03,0.99,0.93);
+        col+=accent*l*0.75*wipe+vec3(0.9,0.86,0.76)*rr*0.22;
         gl_FragColor=vec4(col,a);
         #include <colorspace_fragment>
       }`
@@ -88,26 +83,39 @@ export async function hero({ canvas, rooms, onPick }) {
 
   /* ---- ring light behind the head ---- */
   const ring = new THREE.Group();
-  const chrome = new THREE.MeshStandardMaterial({ color: 0xe9e4ff, metalness: 1, roughness: 0.12, envMapIntensity: 1.25 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, metalness: 1, roughness: 0.12, envMapIntensity: 1.25 });
   const outer = new THREE.Mesh(new THREE.TorusGeometry(2.75, 0.17, 32, 180), chrome);
   const tubeMat = new THREE.MeshBasicMaterial({ color: accent });
   const tube = new THREE.Mesh(new THREE.TorusGeometry(2.44, 0.045, 12, 180), tubeMat);
-  const thin = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.018, 8, 200), chrome);
+  const brass = new THREE.MeshStandardMaterial({ color: 0xd6ad70, metalness: 1, roughness: 0.22 });
+  const thin = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.018, 8, 200), brass);
   const haloMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { accent: { value: accent } }, vertexShader: NOISE_FREE_VERT,
-    fragmentShader: 'uniform vec3 accent;varying vec2 vUv;void main(){float d=length(vUv-0.5)*2.0;float g=exp(-pow((d-0.61)*7.0,2.0))*0.55+exp(-d*d*3.0)*0.28;gl_FragColor=vec4(accent,g*(1.0-smoothstep(0.85,1.0,d)));}'
+    fragmentShader: 'uniform vec3 accent;varying vec2 vUv;void main(){float d=length(vUv-0.5)*2.0;float g=exp(-pow((d-0.61)*7.0,2.0))*0.30+exp(-d*d*3.0)*0.17;gl_FragColor=vec4(accent,g*(1.0-smoothstep(0.85,1.0,d)));}'
   });
   const halo = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), haloMat); halo.position.z = -0.2;
   ring.add(halo, outer, tube, thin); world.add(ring);
 
   /* ---- studio microphone, chrome ---- */
   const mic = new THREE.Group();
-  const dark = new THREE.MeshStandardMaterial({ color: 0x2a1c55, metalness: 0.95, roughness: 0.28 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x23272b, metalness: 0.95, roughness: 0.28 });
   mic.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.36, 0.62, 12, 40), chrome));
   for (let i = -3; i <= 3; i++) { const b = new THREE.Mesh(new THREE.TorusGeometry(0.368, 0.016, 8, 48), dark); b.rotation.x = Math.PI / 2; b.position.y = i * 0.095; mic.add(b); }
   const yoke = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.045, 12, 64, Math.PI), chrome); yoke.rotation.z = Math.PI; yoke.position.y = -0.12; mic.add(yoke);
   const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.62, 24), dark); stem.position.y = -0.94; mic.add(stem);
   world.add(mic);
+
+  /* ---- the key light: one soft beam from the upper left, and the stage it lands on ---- */
+  const beamMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, uniforms: { accent: { value: accent }, on: { value: reduce ? 1 : 0 } }, vertexShader: NOISE_FREE_VERT,
+    fragmentShader: 'uniform vec3 accent;uniform float on;varying vec2 vUv;void main(){float y=1.0-vUv.y;float half_=0.04+y*0.40;float x=abs(vUv.x-0.5);float a=(1.0-smoothstep(half_*0.25,half_,x))*(1.0-smoothstep(0.35,1.0,y))*smoothstep(0.0,0.08,y);gl_FragColor=vec4(accent,a*0.20*on);}'
+  });
+  const beam = new THREE.Mesh(new THREE.PlaneGeometry(7, 12), beamMat); beam.position.set(-2.6, 2.2, 1.4); beam.rotation.z = 0.55; beam.renderOrder = 2; world.add(beam);
+  const floor = new THREE.Group(); floor.position.y = -3.15; world.add(floor);
+  [[2.7, 0.012, 0.9], [3.55, 0.007, 0.55], [4.6, 0.004, 0.3]].forEach(([rad, thick, op]) => {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(rad, thick, 6, 240), new THREE.MeshBasicMaterial({ color: 0xd6ad70, transparent: true, opacity: op }));
+    m.rotation.x = Math.PI / 2; floor.add(m);
+  });
 
   /* ---- room screens orbiting her ---- */
   const CW = 1.9, CH = CW * 9 / 16;
@@ -124,7 +132,7 @@ export async function hero({ canvas, rooms, onPick }) {
         if(a<0.02)discard;
         vec3 c=texture2D(map,uv).rgb*dim;
         float b=smoothstep(-0.034,-0.012,d);
-        c=mix(c,mix(vec3(0.55,0.5,0.85),edge*1.5,glow),b*(0.55+0.45*glow));
+        c=mix(c,mix(vec3(0.42,0.40,0.36),edge,glow),b*(0.45+0.55*glow));
         gl_FragColor=vec4(c,a);
         #include <colorspace_fragment>
       }`
@@ -141,7 +149,7 @@ export async function hero({ canvas, rooms, onPick }) {
   const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
   const dot = document.createElement('canvas'); dot.width = dot.height = 32;
   const cx = dot.getContext('2d'), gr = cx.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)'); cx.fillStyle = gr; cx.fillRect(0, 0, 32, 32);
-  const dust = new THREE.Points(dg, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(dot), size: 0.07, color: 0xbfaeff, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const dust = new THREE.Points(dg, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(dot), size: 0.07, color: 0xe8c690, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
   scene.add(dust);
 
   /* ---- layout ---- */
@@ -153,12 +161,14 @@ export async function hero({ canvas, rooms, onPick }) {
     cam.position.set(0, 0, 13); cam.updateProjectionMatrix();
     const vh = 2 * 13 * Math.tan(THREE.MathUtils.degToRad(17.5)), vw = vh * cam.aspect;
     if (!small()) {
+      floor.visible = true;
       baseS = Math.min(1.08, vw / 12.5);
       world.position.set(vw * 0.19, (-vh / 2) + PH * baseS / 2 - 0.2, 0);
       R = Math.min(3.55, vw * 0.27 / baseS); depth = 2.0; orbitY = -1.55;
     } else {
-      baseS = Math.min(1, vw / 5.2);
+      baseS = Math.min(1, vw / 5.2) * 0.93;
       world.position.set(0.1, (-vh / 2) + PH * baseS / 2 + 0.15, 0);
+      floor.visible = false;
       R = 2.6; depth = 2.0; orbitY = -1.7;
     }
     world.scale.setScalar(baseS);
@@ -212,7 +222,8 @@ export async function hero({ canvas, rooms, onPick }) {
   }
   function frame(dt, t) {
     if (!reduce) {
-      pm.uniforms.reveal.value = Math.min(1.2, pm.uniforms.reveal.value + dt * 0.75);
+      pm.uniforms.reveal.value = Math.min(1.2, pm.uniforms.reveal.value + dt * 0.55);
+      beamMat.uniforms.on.value = Math.min(1, pm.uniforms.reveal.value * 1.4);
       idle += dt;
       /* slow tour of the rooms while nobody is touching it */
       if (!drag && idle > 3.4) { idle = 0; const n = (active + 1) % rooms.length; target -= step; setActive(n, true); }
@@ -241,9 +252,9 @@ export async function coin(canvas) {
   const r = renderer(canvas), scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(35, 1, 0.1, 50);
   cam.position.z = 9; scene.environment = studioEnv(r);
   const tex = await loadTex(new THREE.TextureLoader(), 'assets/genesis-logo-atelier.png');
-  const chrome = new THREE.MeshStandardMaterial({ color: 0xe9e4ff, metalness: 1, roughness: 0.12 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xe8e2d6, metalness: 1, roughness: 0.12 });
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.34, 120), new THREE.MeshStandardMaterial({ color: 0x1a0f3d, metalness: 0.9, roughness: 0.2 }));
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.34, 120), new THREE.MeshStandardMaterial({ color: 0x191c20, metalness: 0.9, roughness: 0.2 }));
   body.rotation.x = Math.PI / 2; g.add(body, new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.17, 28, 160), chrome));
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
   [1, -1].forEach((s) => { const f = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 2.24), mat); f.position.z = 0.18 * s; if (s < 0) f.rotation.y = Math.PI; g.add(f); });

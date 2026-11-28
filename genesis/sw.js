@@ -6,11 +6,11 @@
 
 // Bump on every deploy that touches js/*, css/*, or SHELL_ASSETS — this is
 // what forces an already-installed client to drop stale cached files.
-const SHELL_CACHE = 'genesis-shell-v158';
+const SHELL_CACHE = 'genesis-shell-v159';
 const RUNTIME_CACHE = 'genesis-runtime-v10';
 
 const SHELL_ASSETS = [
-  'assets/fonts/Anton-Regular.woff2', 'assets/fonts/OFL-Anton.txt', 'assets/landing/person.webp', 'assets/landing/room-podcast.webp', 'assets/landing/room-talkshow.webp', 'assets/landing/room-classroom.webp', 'assets/landing/room-library.webp', 'assets/landing/room-tech.webp', 'assets/landing/room-terrace.webp', 'assets/landing/room-stage.webp', 'assets/landing/room-living.webp', 'assets/landing/room-sports.webp', 'assets/landing/room-minimal.webp', 'css/landing-stage.css', 'js/landing-page.js', 'js/landing-3d.js', 'vendor/three/three.module.min.js', 'assets/genesis-logo-atelier.png',
+  'assets/fonts/Lora-Variable.woff2', 'assets/fonts/OFL-Lora.txt', 'assets/landing/person.webp', 'assets/landing/room-podcast.webp', 'assets/landing/room-talkshow.webp', 'assets/landing/room-classroom.webp', 'assets/landing/room-library.webp', 'assets/landing/room-tech.webp', 'assets/landing/room-terrace.webp', 'assets/landing/room-stage.webp', 'assets/landing/room-living.webp', 'assets/landing/room-sports.webp', 'assets/landing/room-minimal.webp', 'css/landing-stage.css', 'js/landing-page.js', 'js/landing-3d.js', 'vendor/three/three.module.min.js', 'assets/genesis-logo-atelier.png',
   'assets/environments/brick-podcast-room.jpg', 'assets/environments/broadcast-wall.jpg', 'assets/environments/classroom.jpg', 'assets/environments/color-backdrop-studio.jpg',
   'assets/environments/concrete-studio.jpg', 'assets/environments/corporate-office.jpg', 'assets/environments/gear-room.jpg', 'assets/environments/interview-studio.jpg',
   'assets/environments/moody-blue-backdrop.jpg', 'assets/environments/newsroom.jpg', 'assets/environments/outdoor.jpg', 'assets/environments/podcast-studio.jpg',
