@@ -798,6 +798,7 @@
   let switchingMode = false;
   let autoPickedFast = false;      // true when FAST was preselected because the device looked low-powered (see below)
   let recordStartTime = null;
+  let savingTake = false;   // Atelier Pass 3: true from Stop until the take is durably stored (or the save fails)
   let recordTimerInterval = null;
   let currentFacingMode = 'user'; // mobile default: front camera. Ignored once a specific device is picked from the dropdown.
 
@@ -2746,7 +2747,8 @@
       const ts = new Date().toLocaleString();
       const cues = stopCaptionsIfNeeded(); // safe no-op if captions were never started for this session
       let ex = {}; try { ex = extras ? await extras.finish() : {}; } catch (e) {} window.VS.recLive = null;
-      await window.VS.storage.saveRecording(blob, {
+      let saveOk = true;
+      try { await window.VS.storage.saveRecording(blob, {
         createdAt: ts,
         environment: els.envSelect.value,
         quality: els.qualitySelect.value,
@@ -2755,13 +2757,14 @@
         bitrate: parseInt(els.bitrateSelect.value, 10),
         captions: cues && cues.length ? cues : undefined,
         thumb: ex.thumb || undefined, markers: ex.markers && ex.markers.length ? ex.markers : undefined,
-      });
-      window.VS.storage.clearDraft().catch(() => {});
+      }); } catch (saveErr) { saveOk = false; try { console.error('Genesis: take could not be saved', saveErr); } catch (e) {} }
+      savingTake = false;
+      if (saveOk) window.VS.storage.clearDraft().catch(() => {});   // keep draft chunks when the save failed so recovery stays possible
 
       const url = URL.createObjectURL(blob);
       const item = document.createElement('div');
       item.className = 'recording-item';
-      item.innerHTML = `<span>Saved &mdash; ${ts}</span>`;
+      item.innerHTML = saveOk ? `<span>Saved on this device &mdash; ${ts}</span>` : `<span>Save failed &mdash; download this copy now (${ts})</span>`;
       const link = document.createElement('a');
       link.href = url;
       link.download = `genesis-${Date.now()}.${window.VS.extForMime(recType)}`;
@@ -2782,16 +2785,18 @@
           try { await window.VS.storage.saveRecording(nb, { createdAt: new Date().toLocaleString(), environment: envNow, title: 'Enhanced quality', aspect: compositionEngine.aspectId }); } catch (e) {} });
       }
       els.recordingsList.prepend(item);
-      try { window.dispatchEvent(new CustomEvent('vs:recording-saved', { detail: { durationMs: uxDurMs, thumb: ex.thumb || '', mb: Math.max(0.1, Math.round(blob.size / 104857.6) / 10), link, item } })); } catch (e) {}   // v0.59 UI only
+      if (saveOk) try { window.dispatchEvent(new CustomEvent('vs:recording-saved', { detail: { durationMs: uxDurMs, thumb: ex.thumb || '', mb: Math.max(0.1, Math.round(blob.size / 104857.6) / 10), link, item } })); } catch (e) {}   // v0.59 UI only
 
       els.recordBtn.classList.remove('recording');
     updateStudioChrome();
       els.recordBtn.classList.add('saved');
-      els.recText.textContent = 'Saved';
+      els.recText.textContent = saveOk ? 'Saved' : 'Save failed';
+      if (els.saveState) els.saveState.textContent = saveOk ? 'Saved' : 'Save failed';
       setTimeout(() => {
         els.recordBtn.classList.remove('saved');
         els.recText.textContent = 'Record';
-      }, 1600);
+        if (els.saveState && !(recorder && recorder.state !== 'inactive')) els.saveState.textContent = 'Ready';
+      }, saveOk ? 1600 : 6000);
     };
     // Prompt 2: optional raw camera copy for "Enhance quality" (opt-in; a second encoder costs power, so default OFF and never on weak tiers by default).
     rawRecorder = null; rawChunks = [];
@@ -2823,6 +2828,11 @@
   }
 
   function stopRecording() {
+    if (recorder && recorder.state !== 'inactive' && !savingTake) {
+      savingTake = true;
+      try { els.recText.textContent = 'Saving\u2026'; if (els.saveState) els.saveState.textContent = 'Saving\u2026'; } catch (e) {}
+      setTimeout(() => { if (savingTake) { savingTake = false; try { if (els.recText.textContent === 'Saving\u2026') els.recText.textContent = 'Record'; } catch (e) {} } }, 120000);   // watchdog: never leave Record dead
+    }
     if (rawRecorder && rawRecorder.state !== 'inactive') { try { rawRecorder.stop(); } catch (e) {} }
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     clearInterval(recordTimerInterval);
@@ -2868,7 +2878,7 @@
   }
 
   els.recordBtn.addEventListener('click', () => {
-    if (els.recordBtn.disabled) return;
+    if (els.recordBtn.disabled || savingTake) return;   // no double taps while a take is being saved
     if (recorder && recorder.state === 'recording') {
       stopRecording();
     } else {
