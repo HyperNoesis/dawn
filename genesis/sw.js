@@ -6,7 +6,7 @@
 
 // Bump on every deploy that touches js/*, css/*, or SHELL_ASSETS — this is
 // what forces an already-installed client to drop stale cached files.
-const SHELL_CACHE = 'genesis-shell-v149';
+const SHELL_CACHE = 'genesis-shell-v150';
 const RUNTIME_CACHE = 'genesis-runtime-v10';
 
 const SHELL_ASSETS = [
@@ -37,7 +37,7 @@ const SHELL_ASSETS = [
   'assets/scenes/scene-premium-talkshow/scene.json', 'assets/scenes/scene-premium-tech/scene.json', 'assets/scenes/scene-premium-terrace/scene.json', 'assets/scenes/scene-sports-desk/scene.json',
   'assets/scenes/scene-stage-hall/scene.json', 'assets/scenes/scene-talk-show/scene.json', 'assets/scenes/scene-tech-review/scene.json', 'assets/scenes/scene-terrace/scene.json',
   'audio.html', 'auth.html', 'benchmark.html', 'blindtest.html',
-  'call.html', 'cam.html', 'components.html', 'css/genesis-system.css', 'css/atelier-tokens.css',
+  'call.html', 'cam.html', 'components.html', 'css/genesis-system.css', 'css/atelier-tokens.css', 'css/atelier-studio.css', 'js/studio-firstuse.js',
   'design.html', 'desklabel.html', 'docs/PRIVACY.md', 'docs/TERMS.md',
   'editor.html', 'environments.html', 'home.html', 'index.html',
   'js/app.js', 'js/audio-chain.js', 'js/audio-mix.js', 'js/audio-studio.js',

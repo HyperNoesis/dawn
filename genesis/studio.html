@@ -16,12 +16,14 @@
 
 <link rel="stylesheet" href="css/genesis-system.css">
 <link rel="stylesheet" href="css/atelier-tokens.css">
+<link rel="stylesheet" href="css/atelier-studio.css">
 <style>#overlayTitle:empty,#overlaySub:empty{display:none}</style>
 </head>
 <body>
   <div id="nav-root"></div>
   <a class="skip-link" href="#previewFrame">Skip to preview</a>
-  <div class="studio-shell" id="studioShell">
+  <div class="studio-shell" id="studioShell" data-fu="asleep">
+  <script>setTimeout(function(){if(!window.__fuReady){var e=document.getElementById("studioShell");if(e)e.setAttribute("data-fu","awake");}},4000);</script>
     <h1 class="sr-only">Genesis Studio</h1>
     <div class="studio-topbar">
       <a href="home.html" class="back-home" id="backHomeLink"><span id="backHomeIcon"></span><span>Home</span></a>
@@ -84,7 +86,7 @@
             <div id="overlayIris"></div>
             <h3 id="overlayTitle"></h3>
             <p id="overlaySub"></p>
-            <button class="btn primary" id="startBtn">Start Camera</button>
+            <button class="btn primary" id="startBtn">Start your camera</button>
           </div>
 
           <div class="rec-indicator" id="recIndicator"><span class="dot"></span><span id="recIndicatorTime">REC 0:00</span></div>
@@ -932,6 +934,7 @@
   <script src="js/seg-presets.js"></script>
   <script src="js/seg-diagnostics.js"></script>
   <script src="js/stage-calm.js"></script>
+  <script src="js/studio-firstuse.js"></script>
   <script src="js/camera-bridge-client.js"></script>
 <script src="js/genesis-design.js"></script>
 </body>

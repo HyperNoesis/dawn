@@ -977,7 +977,7 @@
       }
       els.startBtn.style.display = 'inline-flex';
       els.startBtn.disabled = false;
-      els.startBtn.textContent = 'Start Camera';
+      els.startBtn.textContent = 'Start your camera';
       if (els.previewEnvLink) els.previewEnvLink.style.display = 'inline-block';
     } else if (state === 'preparing') {
       els.overlayTitle.textContent = opts.message || 'Starting...';
