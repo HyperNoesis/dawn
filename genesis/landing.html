@@ -49,21 +49,12 @@
       </div>
 
       <div class="lp-stagecol">
-        <figure class="lp-stage" id="lpStage" aria-label="Scene preview">
-          <div class="lp-stage-img" id="lpStageImg" role="img" aria-label="Premium Podcast, a warm set for interviews and podcasts" style="background-image:url(assets/environments/scene-premium-podcast.jpg)"></div>
-          <span class="lp-corner tl" aria-hidden="true"></span><span class="lp-corner br" aria-hidden="true"></span>
-          <div class="lp-stage-cap">
-            <span class="lp-chip">Scene preview</span>
-            <span class="lp-chip lp-chip--quiet">Your camera is off</span>
-          </div>
+        <figure class="lp-stage lp-stage--photo" id="lpStage">
+          <picture>
+            <source type="image/webp" srcset="assets/hero/hero-480.webp 480w, assets/hero/hero.webp 736w" sizes="(max-width: 900px) 90vw, 520px">
+            <img id="lpStageImg" src="assets/hero/hero.jpg" width="736" height="977" fetchpriority="high" decoding="async" alt="A young woman in a VR headset looking up at city towers">
+          </picture>
         </figure>
-        <div class="lp-pick-row">
-          <div class="lp-pick-meta" aria-live="polite">
-            <b id="lpSceneName">Premium Podcast</b>
-            <span id="lpSceneUse">A warm set for interviews and podcasts.</span>
-          </div>
-          <div class="lp-picks" id="lpPicks" role="group" aria-label="Preview a room"></div>
-        </div>
       </div>
     </div>
   </section>

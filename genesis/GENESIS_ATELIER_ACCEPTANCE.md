@@ -9,7 +9,7 @@ Status per spec §32. "Verified" = measured here with a headless Chrome and the 
 | Brand and accent split; saved accents win | Verified | champagne default; violet/cyan/blue/rose/emerald/amber still selectable; storage key `genesis.appearance.v1` unchanged |
 | Contrast, 9 pages x dark/light x 7 accents | Partially verified | Primary buttons, skip link fixed. Open: step numbers on violet/blue accents; light-mode scene-label text over images (audit cannot see images) |
 | Real Genesis logo kept | Verified | no logo changed (orb gradient recoloured only) |
-| Hero uses own approved photo + real product proof | **Not done** | needs the owner's image and a real screenshot; current hero is a shipped scene asset |
+| Hero uses own approved photo | Done (owner-supplied, 28 Nov) | `assets/hero/`, responsive webp, fetchpriority high, set dimensions. Real product screenshot still missing; consent/rights for the image are the owner's to confirm |
 | Headline "Great video. Made easy." | Done as a candidate, not validated | needs user testing |
 | Unsupported claims removed (Free to try, no account) | Verified | landing.html |
 | First-use Studio: only "Start your camera" | Verified | overlay hides title, paragraph, env link |
