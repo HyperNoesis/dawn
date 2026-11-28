@@ -10,6 +10,8 @@
 <link rel="preload" href="assets/fonts/SpaceGrotesk-Variable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/environments/scene-premium-podcast.jpg" as="image" fetchpriority="high">
 
+<script src="js/theme-boot.js"></script>
+
 <link rel="stylesheet" href="css/genesis-system.css">
 </head>
 <body class="g-app lp">
@@ -23,7 +25,7 @@
     </nav>
     <div class="lp-top-act">
       <a class="g-btn g-btn--quiet lp-signin" href="auth.html">Sign in</a>
-      <a class="g-btn g-btn--primary" href="studio.html?guest=1" data-open-studio>Open Studio</a>
+      <a class="g-btn g-btn--primary" href="auth.html?next=home.html" data-open-studio>Get started</a>
     </div>
   </div>
 </header>
@@ -35,9 +37,9 @@
       <div class="lp-copy">
         <p class="lp-eyebrow"><span class="lp-dot" aria-hidden="true"></span>A virtual studio in your browser</p>
         <h1 id="hero-title" class="lp-h1">Step into your own studio.</h1>
-        <p class="lp-lead">Choose a room, see yourself in it, and record. Genesis runs in your browser, so there is nothing to install and no account to make.</p>
+        <p class="lp-lead">Choose a room, see yourself in it, and record. Genesis runs in your browser, so there is nothing to install. Sign up free to get started.</p>
         <div class="lp-cta">
-          <a class="g-btn g-btn--primary lp-btn-lg" href="studio.html?guest=1" data-open-studio id="heroOpen">Open Studio</a>
+          <a class="g-btn g-btn--primary lp-btn-lg" href="auth.html?next=home.html" data-open-studio id="heroOpen">Get started</a>
           <a class="g-btn g-btn--secondary lp-btn-lg" href="#how">See how it works</a>
         </div>
         <ul class="lp-assure" aria-label="What to expect">
@@ -189,7 +191,7 @@
         <a id="payBtn" class="g-btn g-btn--secondary" href="#pilot" hidden>Upgrade</a>
       </div>
       <div>
-        <div id="pilotOff" class="e-note" hidden>Pilot sign-up is not open yet. Check back soon, or open Studio as a guest in the meantime.</div>
+        <div id="pilotOff" class="e-note" hidden>Pilot sign-up is not open yet. Check back soon, or continue as a guest in the meantime.</div>
         <form id="pilotForm" class="lp-form" hidden>
           <div class="g-field"><label for="pName">Your name</label><input class="g-input" id="pName" type="text" autocomplete="name" required></div>
           <div class="g-field"><label for="pUse">What will you use it for?</label><select class="g-select" id="pUse"><option>Live streaming</option><option>Teaching or lessons</option><option>Church or community</option><option>Business videos</option><option>Podcast or interviews</option><option>Something else</option></select></div>
@@ -206,7 +208,7 @@
   <section class="lp-close" aria-labelledby="close-title">
     <div class="lp-wrap">
       <h2 id="close-title">Your studio is ready when you are.</h2>
-      <a class="g-btn g-btn--primary lp-btn-lg" href="studio.html?guest=1" data-open-studio>Open Studio</a>
+      <a class="g-btn g-btn--primary lp-btn-lg" href="auth.html?next=home.html" data-open-studio>Get started</a>
       <p class="lp-small">Free to try, no account needed.</p>
     </div>
   </section>
@@ -215,7 +217,7 @@
 <footer class="lp-foot">
   <div class="lp-wrap lp-foot-in">
     <a class="e-brand" href="landing.html" aria-label="Genesis home"><img src="assets/logo-mark.png" alt="">Genesis</a>
-    <nav aria-label="Footer"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="studio.html?guest=1">Open Studio</a><a href="auth.html">Sign in</a></nav>
+    <nav aria-label="Footer"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="auth.html?next=home.html">Get started</a><a href="auth.html">Sign in</a></nav>
     <span>Genesis by Rejuvini</span>
   </div>
 </footer>

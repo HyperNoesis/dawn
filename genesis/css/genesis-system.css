@@ -2283,7 +2283,7 @@ body.cmp{margin:0;background:var(--g-canvas);color:var(--g-text);font:400 16px/1
 /* ---- hero ---- */
 .lp-hero{position:relative;isolation:isolate;overflow:hidden}
 .lp-hero::before{content:"";position:absolute;inset:-10% -10% auto -10%;height:110%;z-index:-1;pointer-events:none;
-  background:radial-gradient(60% 55% at 78% 30%,rgba(110,82,224,.28),transparent 70%),radial-gradient(40% 40% at 96% 8%,rgba(70,217,232,.12),transparent 70%)}
+  background:radial-gradient(60% 55% at 78% 30%,rgba(214,173,112,.13),transparent 70%),radial-gradient(40% 40% at 96% 8%,rgba(214,173,112,.06),transparent 70%)}
 .lp-hero-in{display:grid;gap:var(--g-space-10);align-items:center}
 @media(min-width:1000px){.lp-hero{padding:var(--g-space-16) 0 var(--g-space-20)}.lp-hero-in{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:var(--g-space-12)}}
 .g-app .lp-eyebrow{display:inline-flex;align-items:center;gap:var(--g-space-2);margin:0 0 var(--g-space-5);font:600 13px var(--g-font-ui);letter-spacing:.02em;color:var(--g-text-2)}
@@ -2368,7 +2368,7 @@ body.cmp{margin:0;background:var(--g-canvas);color:var(--g-text);font:400 16px/1
 
 /* closing */
 .lp-close{overflow:hidden;padding:var(--g-space-20) 0;text-align:center;border-top:1px solid var(--g-border);position:relative;isolation:isolate}
-.lp-close::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(50% 70% at 50% 100%,rgba(110,82,224,.22),transparent 70%)}
+.lp-close::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(50% 70% at 50% 100%,rgba(214,173,112,.10),transparent 70%)}
 .g-app .lp-close h2{margin-bottom:var(--g-space-6)}
 
 /* footer */
@@ -2588,7 +2588,7 @@ dialog.g-dialog{font-family:var(--g-font-ui)}
 
 /* v0.71 polish */
 .hm{position:relative;isolation:isolate}
-.hm::before{content:"";position:absolute;inset:-40px -10% auto -10%;height:420px;z-index:-1;pointer-events:none;background:radial-gradient(55% 60% at 70% 0%,rgba(110,82,224,.2),transparent 70%)}
+.hm::before{content:"";position:absolute;inset:-40px -10% auto -10%;height:420px;z-index:-1;pointer-events:none;background:radial-gradient(55% 60% at 70% 0%,rgba(214,173,112,.2),transparent 70%)}
 
 
 
@@ -3170,3 +3170,53 @@ input::placeholder,textarea::placeholder{color:var(--g-quiet)!important;opacity:
 #previewFrame[data-stage-msg]:not([data-stage-msg="none"]) .preview-hint { opacity: 0; transition: opacity .2s; }
 /* chips: only what needs attention; "Good" and "Measuring" are noise */
 .ux-chip[data-tone="good"], .ux-chip[data-tone="idle"] { display: none; }
+
+/* ============================================================
+   ATELIER — charcoal, warm ivory, restrained champagne (spec v2.1 §08–09).
+   Applies to the default style and, before JS runs, to pages with no style set. Obsidian/Graphite/Daylight stay available.
+   A user's saved accent (violet, cyan, blue, rose, emerald, amber) still wins over the champagne brand colour.
+   ============================================================ */
+:root:not([data-style]):not([data-theme="light"]),
+:root[data-style="atelier"]:not([data-theme="light"]){
+ color-scheme:dark;
+ --g-canvas:#0F1114;--g-shell:#191C20;--g-panel:#23272B;--g-raised:#282D33;--g-hover:#30353C;
+ --g-border:#363B41;--g-border-strong:#6B6459;
+ --g-text:#F4F0E8;--g-text-2:#B9B3A9;--g-text-quiet:#A59F95;--g-text-disabled:#6F6A62;--g-muted:#B9B3A9;--g-quiet:#A59F95;
+ --g-info:#D6AD70;--g-intelligence:#CDB68F;--g-cyan:#CDB68F;--g-human:#E3B98A;
+ --g-overlay:rgba(8,8,9,.66);--g-stage:#08090A;--g-shadow:0 18px 48px rgba(0,0,0,.34);--g-shadow-2:0 8px 24px rgba(0,0,0,.38);--g-shadow-3:0 20px 56px rgba(0,0,0,.52);
+ --border-strong:#4A4740;
+}
+:root[data-style="atelier"][data-theme="light"],
+:root:not([data-style])[data-theme="light"]{
+ color-scheme:light;
+ --g-canvas:#F6F2EA;--g-shell:#FFFFFF;--g-panel:#FFFFFF;--g-raised:#EFE9DD;--g-hover:#E7E0D1;
+ --g-border:#D9D1C3;--g-border-strong:#8C8474;
+ --g-text:#1E1B16;--g-text-2:#625C52;--g-text-quiet:#665F55;--g-text-disabled:#8F887C;--g-muted:#625C52;--g-quiet:#665F55;
+ --g-info:#7A561F;--g-intelligence:#7A561F;--g-cyan:#7A561F;--g-human:#7A561F;
+ --g-overlay:rgba(30,27,22,.45);--g-shadow:0 16px 42px rgba(60,45,20,.10);--g-shadow-2:0 8px 24px rgba(60,45,20,.12);--g-shadow-3:0 20px 56px rgba(60,45,20,.2);
+}
+/* champagne brand + action (default accent) */
+:root:not([data-accent]):not([data-theme="light"]),
+:root[data-accent="champagne"]:not([data-theme="light"]){
+ --g-brand:#D6AD70;--g-action:#D6AD70;--g-action-hover:#E2BC84;--g-action-active:#C49A5C;--g-on-action:#17130D;--g-focus:#EBCB96;
+ --border-accent:rgba(214,173,112,.55);
+}
+:root:not([data-accent])[data-theme="light"],
+:root[data-accent="champagne"][data-theme="light"]{
+ --g-brand:#7A561F;--g-action:#7A561F;--g-action-hover:#694A19;--g-action-active:#583C12;--g-on-action:#FFFFFF;--g-focus:#7A561F;
+ --border-accent:rgba(122,86,31,.5);
+}
+:root[data-style="atelier"] body,:root:not([data-style]) body{background:var(--g-canvas);color:var(--g-text)}
+:root[data-style="atelier"] .g-btn--primary,:root[data-style="atelier"] .btn.primary{color:var(--g-on-action)}
+
+/* Pre-launch "Coming soon" tag over the live preview (DOM only, never part of the recorded frame) */
+.soon-tag{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:12;pointer-events:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;padding:22px 34px;
+ background:rgba(10,10,11,.52);border:1px solid rgba(214,173,112,.55);border-radius:4px;color:#F4F0E8;animation:soonIn .9s cubic-bezier(.2,.7,.2,1) both}
+.soon-tag[hidden]{display:none}
+.soon-tag .soon-kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#D6AD70}
+.soon-tag strong{font-family:"Lora","Iowan Old Style",Georgia,serif;font-weight:500;font-size:clamp(28px,6vw,52px);letter-spacing:.14em;text-transform:uppercase;line-height:1.05}
+.soon-tag .soon-dot{width:6px;height:6px;border-radius:50%;background:#D6AD70;box-shadow:0 0 14px 3px rgba(214,173,112,.7)}
+@keyframes soonIn{from{opacity:0;transform:translate(-50%,-46%) scale(.98);letter-spacing:.3em}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@media (prefers-reduced-motion:reduce){.soon-tag{animation:none}}
+/* First-use studio: only "Start your camera" is visible (spec §12) */
+#previewOverlay[data-state="idle"] #overlaySub,#previewOverlay[data-state="idle"] #overlayTitle,#previewOverlay[data-state="idle"] #previewEnvLink{display:none!important}

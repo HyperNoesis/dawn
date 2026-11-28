@@ -21,7 +21,7 @@
     { id: 'scene-premium-terrace', file: 'terrace', name: 'Outdoor Terrace', use: 'An open-air setting for relaxed updates.' }
   ];
   const img = (r) => 'assets/environments/scene-premium-' + r.file + '.jpg';
-  const studioHref = (r) => 'studio.html?guest=1' + (r ? '&env=' + encodeURIComponent(r.id) : '');
+  const studioHref = (r) => 'auth.html?next=home.html';
   function init() {
     // header border once scrolled
     const top = $('lpTop'); if (top) { const f = () => top.classList.toggle('is-scrolled', window.scrollY > 8); f(); addEventListener('scroll', f, { passive: true }); }
@@ -36,7 +36,7 @@
       const my = ++tok, im = new Image();
       im.onload = () => { if (my !== tok) return; stage.classList.add('is-swap'); setTimeout(() => { if (my !== tok) return; stage.style.backgroundImage = 'url(' + im.src + ')'; stage.classList.remove('is-swap'); }, 120); };
       im.onerror = () => {}; im.src = img(r);
-      if (userInitiated) { const h = $('heroOpen'); if (h) { h.href = studioHref(r); h.textContent = 'Open Studio with ' + r.name; } }
+      if (userInitiated) { const h = $('heroOpen'); if (h) { h.href = studioHref(r); h.textContent = 'Get started with ' + r.name; } }
     }
     if (picks) ROOMS.forEach((r, i) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'lp-pick'; b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');

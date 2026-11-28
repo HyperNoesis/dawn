@@ -13,6 +13,7 @@ window.VS = window.VS || {};
 window.VS.config = {
   business: { name: '', email: '', jurisdiction: 'Nigeria', effectiveDate: '', whatsapp: '' },   // fills Privacy/Terms pages + pilot contact
   payLinks: { pro: '' },                                                                          // optional hosted payment link
+  comingSoonTag: true,
   supabaseUrl: '',      // e.g. 'https://xxxxx.supabase.co'
   supabaseAnonKey: ''   // the "anon public" key from Project Settings > API
 };

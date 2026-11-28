@@ -14,6 +14,8 @@
   #nav-root .sidebar, #nav-root .mobile-topbar, #nav-root .bottom-tabbar { display: none; }
 </style>
 
+<script src="js/theme-boot.js"></script>
+
 <link rel="stylesheet" href="css/genesis-system.css">
 <style>#overlayTitle:empty,#overlaySub:empty{display:none}</style>
 </head>
@@ -83,9 +85,10 @@
             <div id="overlayIris"></div>
             <h3 id="overlayTitle"></h3>
             <p id="overlaySub"></p>
-            <button class="btn primary" id="startBtn">Start Camera</button>
+            <button class="btn primary" id="startBtn">Start your camera</button>
           </div>
 
+          <div class="soon-tag" id="comingSoonTag" role="status" hidden><span class="soon-dot" aria-hidden="true"></span><span class="soon-kicker">Genesis Studio</span><strong>Coming soon</strong></div>
           <div class="rec-indicator" id="recIndicator"><span class="dot"></span><span id="recIndicatorTime">REC 0:00</span></div>
           <div id="prompter" aria-live="off" style="display:none; position:absolute; left:6%; right:6%; top:4%; height:46%; overflow:hidden; z-index:8; background:rgba(0,0,0,0.62); color:#fff; border-radius:12px; padding:10px 14px; pointer-events:none; line-height:1.35; font-family:system-ui,sans-serif; text-align:center;"><div id="prompterBody" style="white-space:pre-wrap; padding:20% 0 60%;"></div></div>
           <p class="preview-hint" id="previewHint">Camera off · Start when you're ready</p>

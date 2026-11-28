@@ -15,12 +15,12 @@
       <svg class="iris${spinClass}" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="irisGradA" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#4f7cff"/>
-            <stop offset="100%" stop-color="#9061f9"/>
+            <stop offset="0%" stop-color="#F0D3A0"/>
+            <stop offset="100%" stop-color="#B8884A"/>
           </linearGradient>
           <linearGradient id="irisGradB" x1="0" y1="1" x2="1" y2="0">
-            <stop offset="0%" stop-color="#2fd4e8"/>
-            <stop offset="100%" stop-color="#4f7cff"/>
+            <stop offset="0%" stop-color="#E8C58E"/>
+            <stop offset="100%" stop-color="#D6AD70"/>
           </linearGradient>
         </defs>
         <circle class="iris-ring" cx="100" cy="100" r="94"/>

@@ -17,6 +17,8 @@ window.VS.config = {
   business: { name: '', email: '', jurisdiction: 'Nigeria', effectiveDate: '', whatsapp: '' },
   // Optional hosted payment links (e.g. a Paystack payment page). Empty = the pricing buttons say "Join the pilot" instead.
   payLinks: { pro: '' },
+  // Pre-launch teaser: show a "Coming soon" tag over the live preview once the camera starts. Set false at launch.
+  comingSoonTag: true,
   supabaseUrl: '',      // e.g. 'https://xxxxx.supabase.co'
   supabaseAnonKey: '',  // the "anon public" key from Project Settings > API
 

@@ -1,11 +1,11 @@
 /* Genesis Appearance Studio — persistent, user-controlled themes */
 (()=>{'use strict';
  const root=document.documentElement, KEY='genesis.appearance.v1';
- const defaults={mode:'system',accent:'violet',style:'atelier',density:'creator'};
+ const defaults={mode:'system',accent:'champagne',style:'atelier',density:'creator'};
  let state={...defaults};
  try{state={...defaults,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{}
  if(!['system','dark','light'].includes(state.mode))state.mode=defaults.mode;
- if(!['violet','cyan','blue','rose','emerald','amber'].includes(state.accent))state.accent=defaults.accent;
+ if(!['champagne','violet','cyan','blue','rose','emerald','amber'].includes(state.accent))state.accent=defaults.accent;
  if(!['atelier','obsidian','graphite','daylight'].includes(state.style))state.style=defaults.style;
  if(!['beginner','creator','professional'].includes(state.density))state.density=defaults.density;
  const systemDark=()=>window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -17,7 +17,7 @@
    const shell=document.getElementById('studioShell');if(shell)shell.dataset.density=state.density;
    root.style.colorScheme=dark?'dark':'light';
    const meta=document.querySelector('meta[name="theme-color"]');
-   if(meta)meta.content=dark?'#0B0E14':'#F5F7FB';
+   if(meta)meta.content=dark?'#0F1114':'#F6F2EA';
  }
  function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{}apply();renderChoices()}
  function renderChoices(){
@@ -34,6 +34,7 @@
  <strong style="font-size:12px">Appearance</strong><div class="g-theme-row" role="group" aria-label="Appearance">
  <button class="g-theme-choice" data-g-mode="system" aria-pressed="false">System</button><button class="g-theme-choice" data-g-mode="dark" aria-pressed="false">Dark</button><button class="g-theme-choice" data-g-mode="light" aria-pressed="false">Light</button></div>
  <strong style="font-size:12px">Accent colour</strong><div class="g-theme-row" role="group" aria-label="Accent colour">
+ <button class="g-theme-choice" data-g-accent="champagne"><i class="g-swatch" style="background:#D6AD70"></i>Champagne</button>
  <button class="g-theme-choice" data-g-accent="violet"><i class="g-swatch" style="background:#9A7BFF"></i>Violet</button>
  <button class="g-theme-choice" data-g-accent="cyan"><i class="g-swatch" style="background:#46D9E8"></i>Cyan</button>
  <button class="g-theme-choice" data-g-accent="blue"><i class="g-swatch" style="background:#76A9FF"></i>Blue</button>
