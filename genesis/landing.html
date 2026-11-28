@@ -1,229 +1,252 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Genesis, a virtual studio in your browser</title>
-<meta name="description" content="Create polished recordings with a live camera preview, virtual environments and a simple production workspace. Free to try, nothing to install.">
-<link rel="icon" href="assets/logo.png"><link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0B0E14">
-<link rel="preload" href="assets/fonts/SpaceGrotesk-Variable.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="assets/environments/scene-premium-podcast.jpg" as="image" fetchpriority="high">
-
-<link rel="stylesheet" href="css/genesis-system.css">
-<link rel="stylesheet" href="css/atelier-tokens.css">
-<script>(function(){try{var d=document.documentElement,s={};try{s=JSON.parse(localStorage.getItem('genesis.appearance.v1')||'{}')}catch(e){}var m=s.mode||'system',k=m==='system'?(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches):m==='dark',a=s.accent;if(!a||(a==='violet'&&!localStorage.getItem('genesis.atelier.v2')))a='amber';d.dataset.theme=k?'dark':'light';d.dataset.style=s.style||'atelier';d.dataset.accent=a;d.dataset.density=s.density||'creator';d.style.colorScheme=k?'dark':'light'}catch(e){}})()</script>
+<meta name="description" content="Pick a room, see yourself in it, and record. Free to try, nothing to install.">
+<meta name="theme-color" content="#0a0713">
+<link rel="icon" href="assets/genesis-logo.png"><link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0a0713;--ink2:#130d22;--line:rgba(255,255,255,.12);--txt:#f4eefb;--mut:#b4a9c7;--teal:#33e0d6;--coral:#ff7a6b;--pink:#ff3d8b;--hue:#ff3d8b;--hue2:#33e0d6;
+--d:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;--b:'Manrope',system-ui,sans-serif;box-sizing:border-box;color-scheme:dark;
+padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*,*::before,*::after{box-sizing:inherit}html{scroll-behavior:smooth;scroll-padding-top:80px}
+body{margin:0;background:var(--ink);color:var(--txt);font:400 16px/1.6 var(--b);overflow-x:hidden}
+a{color:inherit}img{max-width:100%;display:block}
+.w{width:min(1180px,100% - 40px);margin-inline:auto}
+:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:6px}
+.top{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);background:rgba(10,7,19,.72);border-bottom:1px solid var(--line)}
+.top .w{display:flex;align-items:center;justify-content:space-between;height:64px;gap:16px}
+.brand{font:900 28px/1 var(--d);letter-spacing:.02em;text-decoration:none;display:flex;gap:10px;align-items:center}
+.brand img{width:28px;height:30px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(255,61,139,.55))}
+.nav{display:flex;gap:26px;font-size:14px;color:var(--mut)}.nav a{text-decoration:none}.nav a:hover{color:var(--txt)}
+.act{display:flex;gap:10px;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 26px;border-radius:999px;font:700 15px var(--b);text-decoration:none;border:1px solid var(--line);transition:transform .2s,box-shadow .2s}
+.btn:hover{transform:translateY(-2px)}
+.btn-p{background:linear-gradient(120deg,var(--pink),var(--coral));border:0;color:#190712;box-shadow:0 10px 34px -8px var(--pink)}
+.btn-g{background:rgba(255,255,255,.05)}
+.top .btn{min-height:40px;padding:0 18px;font-size:14px}
+.hero{position:relative;overflow:hidden;padding:56px 0 96px;isolation:isolate}
+.hero::before{content:"";position:absolute;inset:-20% -10% auto auto;width:900px;height:900px;background:radial-gradient(closest-side,var(--hue) 0,transparent 70%);opacity:.34;z-index:-1;transition:background .6s}
+.hero::after{content:"";position:absolute;left:-15%;bottom:-30%;width:800px;height:800px;background:radial-gradient(closest-side,var(--hue2) 0,transparent 70%);opacity:.18;z-index:-1;transition:background .6s}
+.hero .w{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center}
+h1{font:900 clamp(64px,11.5vw,168px)/.84 var(--d);letter-spacing:-.005em;margin:0 0 26px;text-transform:uppercase}
+h1 span{display:block}
+h1 .o{color:transparent;-webkit-text-stroke:2px var(--txt)}
+.lead{font-size:18px;color:var(--mut);max-width:46ch;margin:0 0 30px}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:28px}
+.assure{display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0;list-style:none}
+.assure li{font-size:13px;padding:7px 14px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.04)}
+.stage{position:relative;max-width:470px;margin-inline:auto;width:100%}
+.stage canvas{position:absolute;left:-28%;top:-12%;width:156%;height:124%;z-index:0;pointer-events:none}
+.frame{position:relative;z-index:1;border-radius:240px 240px 28px 28px;overflow:hidden;aspect-ratio:3/4;border:1px solid rgba(255,255,255,.22);box-shadow:0 40px 90px -20px var(--hue),0 0 0 10px rgba(255,255,255,.03)}
+.frame img{width:100%;height:100%;object-fit:cover;object-position:50% 30%}
+.frame::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(10,7,19,.7));mix-blend-mode:multiply}
+.rec{position:absolute;top:22px;left:50%;transform:translateX(-50%);z-index:3;display:flex;gap:8px;align-items:center;padding:7px 14px;border-radius:999px;background:rgba(10,7,19,.6);backdrop-filter:blur(8px);border:1px solid var(--line);font:700 13px var(--b)}
+.rec b{width:9px;height:9px;border-radius:50%;background:#ff3b3b;animation:bl 1.4s infinite}
+@keyframes bl{50%{opacity:.25}}
+.glass{position:absolute;z-index:3;padding:14px 18px;border-radius:18px;background:rgba(20,12,36,.62);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.2);box-shadow:0 18px 40px -16px #000}
+.glass b{display:block;font:900 34px/1 var(--d);letter-spacing:.01em}
+.glass span{font-size:12.5px;color:var(--mut)}
+.g1{left:-38px;bottom:92px}.g2{right:-30px;top:34%}.g3{right:10px;bottom:-24px;display:flex;gap:10px;align-items:center}
+.g3 i{width:10px;height:10px;border-radius:50%;background:var(--teal);box-shadow:0 0 12px var(--teal)}
+.picks{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:46px}
+.picks button{cursor:pointer;font:600 13px var(--b);color:var(--txt);background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:9px 16px;min-height:40px}
+.picks button[aria-pressed=true]{background:var(--txt);color:var(--ink);border-color:var(--txt)}
+.pm{text-align:center;font-size:13px;color:var(--mut);margin:10px 0 0;min-height:20px}
+.sec{padding:96px 0}.alt{background:linear-gradient(180deg,var(--ink2),var(--ink))}
+h2{font:900 clamp(40px,6vw,76px)/.92 var(--d);text-transform:uppercase;margin:0 0 16px;max-width:15ch}
+.sub{color:var(--mut);max-width:56ch;margin:0 0 44px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin:0;padding:0;list-style:none}
+.steps li{position:relative;border:1px solid var(--line);border-radius:26px;padding:22px;background:rgba(255,255,255,.03)}
+.art{height:180px;border-radius:18px;margin-bottom:20px;position:relative;overflow:hidden}
+.art svg{position:absolute;inset:0;width:100%;height:100%}
+.n{position:absolute;top:34px;left:36px;font:900 54px/1 var(--d);color:#fff;mix-blend-mode:overlay;opacity:.9}
+h3{font:800 28px/1 var(--d);text-transform:uppercase;letter-spacing:.01em;margin:0 0 8px}
+.steps p,.feat p,.panel li{color:var(--mut);margin:0;font-size:15px}
+.rooms{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:0;padding:0;list-style:none;perspective:1100px}
+.room{position:relative;min-height:230px;border-radius:24px;padding:20px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;border:1px solid var(--line);text-decoration:none;transform-style:preserve-3d;transition:transform .25s ease-out,box-shadow .25s;will-change:transform}
+.room:hover{box-shadow:0 30px 60px -24px var(--c)}
+.room::before{content:"";position:absolute;inset:0;background:var(--bg);z-index:-1}
+.room::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at var(--mx,50%) var(--my,0%),rgba(255,255,255,.28),transparent 55%);opacity:0;transition:opacity .25s}
+.room:hover::after{opacity:1}
+.room svg{position:absolute;right:-10px;top:-10px;width:62%;opacity:.55;transform:translateZ(40px)}
+.room b,.room span{transform:translateZ(30px)}
+.room b{font:800 30px/1 var(--d);text-transform:uppercase}.room span{font-size:13.5px;color:rgba(255,255,255,.8)}
+.feat{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--line);border-radius:28px;overflow:hidden}
+.feat div{padding:30px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.feat div:nth-child(3n){border-right:0}.feat div:nth-child(n+4){border-bottom:0}
+.feat h3{font-size:24px}
+.trust{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.panel{border:1px solid var(--line);border-radius:26px;padding:30px;background:rgba(255,255,255,.03)}
+.panel ul{margin:12px 0 0;padding-left:20px;display:grid;gap:10px}
+.panel a{color:var(--teal)}
+.close{position:relative;overflow:hidden;text-align:center;padding:90px 0 110px;isolation:isolate}
+.close::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 80% at 50% 100%,var(--pink),transparent 70%);opacity:.4;z-index:-1}
+.coin{position:relative;height:340px;max-width:520px;margin:0 auto 6px}
+.coin canvas{position:absolute;inset:0;width:100%;height:100%}
+.close h2{max-width:12ch;margin:0 auto 28px}
+.close p{color:var(--mut);margin:18px 0 0;font-size:14px}
+footer{border-top:1px solid var(--line);padding:28px 0;font-size:14px;color:var(--mut)}
+footer .w{display:flex;flex-wrap:wrap;gap:16px 28px;justify-content:space-between;align-items:center}
+footer nav{display:flex;gap:22px}footer a{text-decoration:none}footer a:hover{color:var(--txt)}
+@media(max-width:900px){
+.nav{display:none}.hero .w{grid-template-columns:1fr}.hero{padding-top:36px}
+.g1{left:-6px}.g2{right:-6px}.steps,.rooms,.trust{grid-template-columns:1fr}
+.feat{grid-template-columns:1fr}.feat div{border-right:0!important;border-bottom:1px solid var(--line)!important}.feat div:last-child{border-bottom:0!important}
+.sec{padding:68px 0}.stage{max-width:380px}.coin{height:280px}.top .btn-g{display:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
 </head>
-<body class="g-app lp">
-<a class="g-skip" href="#main">Skip to main content</a>
+<body>
+<header class="top"><div class="w">
+<a class="brand" href="landing.html" aria-label="Genesis home"><img src="assets/genesis-logo.png" alt="">Genesis</a>
+<nav class="nav" aria-label="Page"><a href="#how">How it works</a><a href="#rooms">Rooms</a><a href="#privacy">Privacy</a><a href="#pilot">Join the pilot</a></nav>
+<div class="act"><a class="btn btn-g" href="auth.html">Sign in</a><a class="btn btn-p" href="studio.html?guest=1">Open Studio</a></div>
+</div></header>
 
-<header class="lp-top" id="lpTop">
-  <div class="lp-wrap lp-top-in">
-    <a class="e-brand" href="landing.html" aria-label="Genesis home"><img src="assets/logo-mark.png" alt="">Genesis</a>
-    <nav class="lp-nav" aria-label="Page">
-      <a href="#rooms">Rooms</a><a href="#how">How it works</a><a href="#privacy">Privacy</a><a href="#pilot">Join the pilot</a>
-    </nav>
-    <div class="lp-top-act">
-      <a class="g-btn g-btn--quiet lp-signin" href="auth.html">Sign in</a>
-      <a class="g-btn g-btn--primary" href="studio.html?guest=1" data-open-studio>Open Studio</a>
-    </div>
-  </div>
-</header>
+<main>
+<section class="hero" aria-labelledby="t"><div class="w">
+<div>
+<h1 id="t"><span>Step into</span><span class="o">your own</span><span>studio.</span></h1>
+<p class="lead">Choose a room, see yourself in it, and record. Genesis runs in your browser, so there is nothing to install and no account to make.</p>
+<div class="cta"><a class="btn btn-p" href="studio.html?guest=1">Open Studio</a><a class="btn btn-g" href="#how">See how it works</a></div>
+<ul class="assure"><li>Free to try</li><li>Recordings stay on your device</li><li>Camera starts only when you say so</li></ul>
+</div>
+<div>
+<div class="stage">
+<canvas id="c3d" aria-hidden="true"></canvas>
+<div class="frame"><img src="assets/hero-vr.jpg" alt="A person in a mixed-reality headset looking up at a glass city" width="736" height="977" fetchpriority="high"></div>
+<div class="rec"><b></b><span id="recLbl">Premium Podcast</span></div>
+<div class="glass g1"><b>0</b><span>installs needed</span></div>
+<div class="glass g2"><b>100%</b><span>on your device</span></div>
+<div class="glass g3"><i></i><span>Scene preview, camera off</span></div>
+</div>
+<div class="picks" id="picks" role="group" aria-label="Preview a room"></div>
+<p class="pm" id="pm" aria-live="polite"></p>
+</div>
+</div></section>
 
-<main id="main">
-  <!-- ============ HERO: the first-frame promise ============ -->
-  <section class="lp-hero" aria-labelledby="hero-title">
-    <div class="lp-wrap lp-hero-in">
-      <div class="lp-copy">
-        <p class="lp-eyebrow"><span class="lp-dot" aria-hidden="true"></span>A virtual studio in your browser</p>
-        <h1 id="hero-title" class="lp-h1">Step into your own studio.</h1>
-        <p class="lp-lead">Choose a room, see yourself in it, and record. Genesis runs in your browser, so there is nothing to install and no account to make.</p>
-        <div class="lp-cta">
-          <a class="g-btn g-btn--primary lp-btn-lg" href="studio.html?guest=1" data-open-studio id="heroOpen">Open Studio</a>
-          <a class="g-btn g-btn--secondary lp-btn-lg" href="#how">See how it works</a>
-        </div>
-        <ul class="lp-assure" aria-label="What to expect">
-          <li>Free to try</li>
-          <li>Camera and mic start only when you choose Start camera, or explicitly opt into auto-start</li>
-          <li>Recordings stay on your device</li>
-        </ul>
-      </div>
+<section class="sec alt" id="how" aria-labelledby="h2"><div class="w">
+<h2 id="h2">Three steps to your first recording</h2>
+<p class="sub">Genesis explains camera and microphone access before you start. Auto-start is off by default.</p>
+<ol class="steps">
+<li><div class="art" style="background:linear-gradient(135deg,#3b1d6e,#ff3d8b)"><svg viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="2"><rect x="150" y="30" width="110" height="120" rx="14"/><rect x="40" y="60" width="90" height="90" rx="14"/><circle cx="205" cy="90" r="26"/></g></svg><span class="n">1</span></div><h3>Pick a room</h3><p>Choose a studio from the library, or use your own picture. Each room shows a real preview first.</p></li>
+<li><div class="art" style="background:linear-gradient(135deg,#0f4c5c,#33e0d6)"><svg viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice"><g fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2"><path d="M60 40h40M60 40v40M240 40h-40M240 40v40M60 140h40M60 140v-40M240 140h-40M240 140v-40"/><circle cx="150" cy="90" r="30"/><circle cx="150" cy="90" r="6" fill="#fff"/></g></svg><span class="n">2</span></div><h3>Find your frame</h3><p>Start your camera, check the light and your microphone, and step in.</p></li>
+<li><div class="art" style="background:linear-gradient(135deg,#7a1f2b,#ff7a6b)"><svg viewBox="0 0 300 180" preserveAspectRatio="xMidYMid slice"><circle cx="150" cy="90" r="34" fill="#fff" fill-opacity=".9"/><circle cx="150" cy="90" r="52" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="2"/><circle cx="150" cy="90" r="72" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="2"/></svg><span class="n">3</span></div><h3>Record or go live</h3><p>Record with a safety copy saved as you go. Going live is in beta.</p></li>
+</ol></div></section>
 
-      <div class="lp-stagecol">
-        <figure class="lp-stage" id="lpStage" aria-label="Scene preview">
-          <div class="lp-stage-img" id="lpStageImg" role="img" aria-label="Premium Podcast, a warm set for interviews and podcasts" style="background-image:url(assets/environments/scene-premium-podcast.jpg)"></div>
-          <span class="lp-corner tl" aria-hidden="true"></span><span class="lp-corner br" aria-hidden="true"></span>
-          <div class="lp-stage-cap">
-            <span class="lp-chip">Scene preview</span>
-            <span class="lp-chip lp-chip--quiet">Your camera is off</span>
-          </div>
-        </figure>
-        <div class="lp-pick-row">
-          <div class="lp-pick-meta" aria-live="polite">
-            <b id="lpSceneName">Premium Podcast</b>
-            <span id="lpSceneUse">A warm set for interviews and podcasts.</span>
-          </div>
-          <div class="lp-picks" id="lpPicks" role="group" aria-label="Preview a room"></div>
-        </div>
-      </div>
-    </div>
-  </section>
+<section class="sec" id="rooms" aria-labelledby="h3"><div class="w">
+<h2 id="h3">Spaces for every kind of recording</h2>
+<p class="sub">Newsroom to classroom to podcast set. Pick one and Studio opens with it ready.</p>
+<ul class="rooms" id="rooms-list"></ul>
+</div></section>
 
-  <!-- ============ HOW IT WORKS: three editorial steps ============ -->
-  <section class="lp-sec" id="how" aria-labelledby="how-title">
-    <div class="lp-wrap">
-      <header class="lp-sec-head">
-        <p class="lp-kicker">How it works</p>
-        <h2 id="how-title">Three steps to your first recording</h2>
-        <p class="lp-sub">Genesis explains camera and microphone access before you start. Optional auto-start is off by default and requires a separate opt-in.</p>
-      </header>
-      <ol class="lp-steps">
-        <li>
-          <span class="lp-step-n" aria-hidden="true">01</span>
-          <div class="lp-step-img" style="background-image:url(assets/environments/scene-premium-library.jpg)" role="img" aria-label="A library room"></div>
-          <h3>Pick a room</h3>
-          <p>Choose a studio from the library, or use your own picture. Each room shows a real preview first.</p>
-        </li>
-        <li>
-          <span class="lp-step-n" aria-hidden="true">02</span>
-          <div class="lp-step-img" style="background-image:url(assets/environments/scene-premium-talkshow.jpg)" role="img" aria-label="A talk show set"></div>
-          <h3>Find your frame</h3>
-          <p>Start your camera, check the light and your microphone, and step in.</p>
-        </li>
-        <li>
-          <span class="lp-step-n" aria-hidden="true">03</span>
-          <div class="lp-step-img" style="background-image:url(assets/environments/scene-premium-tech.jpg)" role="img" aria-label="A tech review studio"></div>
-          <h3>Record or go live</h3>
-          <p>Record with a safety copy saved as you go. Going live is in beta.</p>
-        </li>
-      </ol>
-    </div>
-  </section>
+<section class="sec alt" aria-labelledby="h4"><div class="w">
+<h2 id="h4">What you get today</h2>
+<p class="sub">Everything listed works now. Anything still experimental is labelled inside the app.</p>
+<div class="feat">
+<div><h3>Professional rooms</h3><p>Newsroom, podcast, classroom, office, library and more, or your own picture.</p></div>
+<div><h3>Your name on screen</h3><p>Lower thirds, tickers, countdowns, scoreboard and QR codes in your colours.</p></div>
+<div><h3>Run a whole show</h3><p>One Next button moves graphics, scene and teleprompter, even from a second phone.</p></div>
+<div><h3>Clean sound</h3><p>Voice polish, optional noise removal, and music that lowers when you talk.</p></div>
+<div><h3>Record safely</h3><p>Recordings keep a safety copy as you go and are saved on your device.</p></div>
+<div><h3>A second phone as a camera</h3><p>Scan a code and another phone becomes a second camera angle.</p></div>
+</div></div></section>
 
-  <!-- ============ ROOMS: editorial scene discovery ============ -->
-  <section class="lp-sec lp-sec--alt" id="rooms" aria-labelledby="rooms-title">
-    <div class="lp-wrap">
-      <header class="lp-sec-head lp-sec-head--row">
-        <div>
-          <p class="lp-kicker">The rooms</p>
-          <h2 id="rooms-title">Spaces for every kind of recording</h2>
-          <p class="lp-sub">Newsroom to classroom to podcast set. Pick one and Studio opens with it ready.</p>
-        </div>
-      </header>
-      <ul class="lp-rooms" id="lpRooms"></ul>
-    </div>
-  </section>
+<section class="sec" id="privacy" aria-labelledby="h5"><div class="w">
+<h2 id="h5">Privacy and honest limits</h2>
+<div class="trust" style="margin-top:36px">
+<div class="panel"><h3>Your picture stays with you</h3><ul><li>Your camera picture is processed on your device.</li><li>Recordings are saved on your device. Nothing is uploaded unless you choose to go live.</li><li>Use Studio as a guest with no account. Guest work stays on this device.</li></ul><p style="margin-top:16px;font-size:14px;color:var(--mut)"><a href="privacy.html">Privacy policy</a> and <a href="terms.html">terms</a>.</p></div>
+<div class="panel"><h3>What it is not</h3><ul><li>The background is a picture, so it looks best with the camera held still.</li><li>Older phones may need effects turned down. The built-in speed test tells you.</li><li>A phone browser cannot act as a camera for Zoom or Meet. Use Genesis to record or go live.</li><li>Going live needs a free relay set up once. We walk you through it.</li></ul></div>
+</div></div></section>
 
-  <!-- ============ USE CASES ============ -->
-  <section class="lp-sec" aria-labelledby="use-title">
-    <div class="lp-wrap">
-      <header class="lp-sec-head">
-        <p class="lp-kicker">What people make</p>
-        <h2 id="use-title">One workspace, a few different jobs</h2>
-      </header>
-      <div class="lp-use">
-        <div><h3>Podcasts and interviews</h3><p>Sit in a proper set with clean sound and a name on screen.</p></div>
-        <div><h3>Presentations</h3><p>Put the focus on your message, with a teleprompter if you need one.</p></div>
-        <div><h3>Teaching</h3><p>Record lessons in a classroom setting with steady audio.</p></div>
-        <div><h3>Business videos</h3><p>Record updates and announcements with your brand colours on screen.</p></div>
-        <div><h3>Live streams</h3><p>Go live to YouTube or Twitch through a free relay, with a checklist first.</p></div>
-      </div>
-    </div>
-  </section>
+<section class="sec alt" id="pilot" aria-labelledby="h6"><div class="w">
+<h2 id="h6">Help us make it better</h2>
+<p class="sub">We are looking for creators, teachers, churches and small businesses to use Genesis for real and tell us what breaks. It is free during the pilot, and your recordings stay yours either way. Paid plans will be announced here before anything is charged.</p>
+<a class="btn btn-p" href="studio.html?guest=1">Open Studio as a guest</a>
+</div></section>
 
-  <!-- ============ WHAT'S IN THE STUDIO ============ -->
-  <section class="lp-sec lp-sec--alt" aria-labelledby="feat-title">
-    <div class="lp-wrap">
-      <header class="lp-sec-head">
-        <p class="lp-kicker">Inside the studio</p>
-        <h2 id="feat-title">What you get today</h2>
-        <p class="lp-sub">Everything listed works now. Anything still experimental is labelled inside the app.</p>
-      </header>
-      <div class="lp-feat">
-        <div><span class="ic" data-ic="environments"></span><h3>Professional rooms</h3><p>Newsroom, podcast, classroom, office, library and more, or your own picture.</p></div>
-        <div><span class="ic" data-ic="captions"></span><h3>Your name on screen</h3><p>Lower thirds, tickers, countdowns, scoreboard and QR codes in your colours.</p></div>
-        <div><span class="ic" data-ic="layers"></span><h3>Run a whole show</h3><p>One Next button moves graphics, scene and teleprompter, even from a second phone.</p></div>
-        <div><span class="ic" data-ic="audio"></span><h3>Clean sound</h3><p>Voice polish, optional noise removal, and music that lowers when you talk.</p></div>
-        <div><span class="ic" data-ic="live"></span><h3>Record safely</h3><p>Recordings keep a safety copy as you go and are saved on your device.</p></div>
-        <div><span class="ic" data-ic="video"></span><h3>A second phone as a camera</h3><p>Scan a code and another phone becomes a second camera angle.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ TRUST ============ -->
-  <section class="lp-sec" id="privacy" aria-labelledby="priv-title">
-    <div class="lp-wrap">
-      <header class="lp-sec-head">
-        <p class="lp-kicker">Trust</p>
-        <h2 id="priv-title">Privacy and honest limits</h2>
-      </header>
-      <div class="lp-trust">
-        <div class="lp-panel">
-          <h3>Your picture stays with you</h3>
-          <ul class="lp-list">
-            <li>Your camera picture is processed on your device.</li>
-            <li>Recordings are saved on your device. Nothing is uploaded unless you choose to go live.</li>
-            <li>You can use Studio as a guest with no account. Guest work stays on this device.</li>
-          </ul>
-          <p class="lp-small"><a href="privacy.html">Read the privacy policy</a> and the <a href="terms.html">terms</a>.</p>
-        </div>
-        <div class="lp-panel">
-          <h3>What it is not</h3>
-          <ul class="lp-list">
-            <li>The background is a picture, so it looks best with the camera held still.</li>
-            <li>Older phones may need effects turned down. The built-in speed test tells you.</li>
-            <li>A phone browser cannot act as a camera for Zoom or Meet. Use Genesis to record or go live, or use OBS on a computer.</li>
-            <li>Going live needs a free relay set up once. We walk you through it.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ PILOT + PRICE ============ -->
-  <section class="lp-sec lp-sec--alt" id="pilot" aria-labelledby="pilot-title">
-    <div class="lp-wrap lp-pilot">
-      <div>
-        <p class="lp-kicker">Join the pilot</p>
-        <h2 id="pilot-title">Help us make it better</h2>
-        <p class="lp-sub">We are looking for creators, teachers, churches and small businesses to use Genesis for real and tell us what breaks. It is free during the pilot, and your recordings stay yours either way.</p>
-        <p class="lp-small" id="pricing">Paid plans will be announced here before anything is charged.</p>
-        <a id="payBtn" class="g-btn g-btn--secondary" href="#pilot" hidden>Upgrade</a>
-      </div>
-      <div>
-        <div id="pilotOff" class="e-note" hidden>Pilot sign-up is not open yet. Check back soon, or open Studio as a guest in the meantime.</div>
-        <form id="pilotForm" class="lp-form" hidden>
-          <div class="g-field"><label for="pName">Your name</label><input class="g-input" id="pName" type="text" autocomplete="name" required></div>
-          <div class="g-field"><label for="pUse">What will you use it for?</label><select class="g-select" id="pUse"><option>Live streaming</option><option>Teaching or lessons</option><option>Church or community</option><option>Business videos</option><option>Podcast or interviews</option><option>Something else</option></select></div>
-          <div class="g-field"><label for="pPhone">Your phone model, if you know it</label><input class="g-input" id="pPhone" type="text" placeholder="For example, Redmi 14C"></div>
-          <div class="g-field"><label for="pNote">Anything else?</label><textarea class="g-textarea" id="pNote" rows="3"></textarea></div>
-          <button class="g-btn g-btn--primary" type="submit" id="pSend">Send my request</button>
-          <p class="lp-small" id="pHow"></p>
-        </form>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============ CLOSING CTA ============ -->
-  <section class="lp-close" aria-labelledby="close-title">
-    <div class="lp-wrap">
-      <h2 id="close-title">Your studio is ready when you are.</h2>
-      <a class="g-btn g-btn--primary lp-btn-lg" href="studio.html?guest=1" data-open-studio>Open Studio</a>
-      <p class="lp-small">Free to try, no account needed.</p>
-    </div>
-  </section>
+<section class="close" aria-labelledby="h7"><div class="w">
+<div class="coin"><canvas id="coin" aria-hidden="true"></canvas></div>
+<h2 id="h7">Your studio is ready when you are.</h2>
+<a class="btn btn-p" href="studio.html?guest=1">Open Studio</a>
+<p>Free to try, no account needed.</p>
+</div></section>
 </main>
 
-<footer class="lp-foot">
-  <div class="lp-wrap lp-foot-in">
-    <a class="e-brand" href="landing.html" aria-label="Genesis home"><img src="assets/logo-mark.png" alt="">Genesis</a>
-    <nav aria-label="Footer"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="studio.html?guest=1">Open Studio</a><a href="auth.html">Sign in</a></nav>
-    <span>Genesis by Rejuvini</span>
-  </div>
-</footer>
+<footer><div class="w"><a class="brand" href="landing.html"><img src="assets/genesis-logo.png" alt="">Genesis</a><nav aria-label="Footer"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="auth.html">Sign in</a></nav><span>Genesis by Rejuvini</span></div></footer>
 
-<script src="js/config.js"></script><script src="js/icons.js"></script><script src="js/landing.js"></script>
-<script>(function(){var ic=window.VS&&window.VS.icon;if(ic)document.querySelectorAll('[data-ic]').forEach(function(e){e.innerHTML=ic(e.dataset.ic,22)});})();</script>
-<script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
-<script src="js/genesis-design.js"></script>
-</body></html>
+<script>
+var R=[
+["Premium Podcast","A warm set for interviews and podcasts.","#ff3d8b","#33e0d6","linear-gradient(140deg,#4a1238,#ff7a6b)"],
+["Newsroom","A clean desk for updates and announcements.","#4d7cff","#33e0d6","linear-gradient(140deg,#0e1c4d,#4d7cff)"],
+["Classroom","A calm space for lessons and tutorials.","#35d6a0","#ffd24d","linear-gradient(140deg,#0b4033,#35d6a0)"],
+["Tech Review","A dark bench for gadgets and demos.","#9b5cff","#ff3d8b","linear-gradient(140deg,#25104d,#9b5cff)"],
+["Library","A quiet backdrop for talks and reading.","#ffb347","#ff7a6b","linear-gradient(140deg,#4d2c0a,#ffb347)"],
+["Talk Show","A lively set with room to host.","#ff5a5a","#ffd24d","linear-gradient(140deg,#4d0f16,#ff5a5a)"]];
+var s=document.documentElement.style,p=document.getElementById('picks'),pm=document.getElementById('pm'),rl=document.getElementById('recLbl');
+function pick(i){s.setProperty('--hue',R[i][2]);s.setProperty('--hue2',R[i][3]);rl.textContent=R[i][0];pm.textContent=R[i][1];
+[].forEach.call(p.children,function(b,j){b.setAttribute('aria-pressed',j==i)});window.__hue&&window.__hue(R[i][2],R[i][3])}
+R.slice(0,4).forEach(function(r,i){var b=document.createElement('button');b.textContent=r[0];b.onclick=function(){pick(i)};p.appendChild(b)});
+pick(0);
+var L=document.getElementById('rooms-list');
+R.forEach(function(r){var li=document.createElement('li');
+li.innerHTML='<a class="room" style="--bg:'+r[4]+';--c:'+r[2]+'" href="studio.html?guest=1"><svg viewBox="0 0 120 120" fill="none" stroke="#fff" stroke-width="1.5"><circle cx="70" cy="50" r="38"/><circle cx="70" cy="50" r="22"/><path d="M10 110L70 50"/></svg><b>'+r[0]+'</b><span>'+r[1]+'</span></a>';L.appendChild(li);
+var a=li.firstChild;
+a.addEventListener('pointermove',function(e){var b=a.getBoundingClientRect(),x=(e.clientX-b.left)/b.width,y=(e.clientY-b.top)/b.height;
+a.style.transform='rotateY('+((x-.5)*14)+'deg) rotateX('+((.5-y)*14)+'deg) translateZ(8px)';a.style.setProperty('--mx',x*100+'%');a.style.setProperty('--my',y*100+'%')});
+a.addEventListener('pointerleave',function(){a.style.transform=''})});
+if('serviceWorker' in navigator)addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
+</script>
+<script type="module">
+import * as THREE from './vendor/three/three.module.min.js';
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches,m={x:0,y:0};
+addEventListener('pointermove',e=>{m.x=e.clientX/innerWidth-.5;m.y=e.clientY/innerHeight-.5});
+function stage(el,build){
+  try{
+    const r=new THREE.WebGLRenderer({canvas:el,alpha:true,antialias:true,powerPreference:'low-power'});
+    r.setPixelRatio(Math.min(devicePixelRatio,1.75));
+    const sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,100);cam.position.z=8;
+    const upd=build(sc);
+    const size=()=>{const b=el.getBoundingClientRect();if(!b.width)return;r.setSize(b.width,b.height,false);cam.aspect=b.width/b.height;cam.updateProjectionMatrix()};
+    size();addEventListener('resize',size);
+    let vis=true;new IntersectionObserver(e=>{vis=e[0].isIntersecting}).observe(el);
+    const clk=new THREE.Clock();
+    const loop=()=>{requestAnimationFrame(loop);if(vis)upd(clk.getElapsedTime());if(vis)r.render(sc,cam)};
+    if(reduce){upd(2);r.render(sc,cam)}else loop();
+  }catch(e){el.remove()}
+}
+const metal=c=>new THREE.MeshStandardMaterial({color:c,metalness:.7,roughness:.25});
+function lights(s){s.add(new THREE.AmbientLight(0xffffff,.7));
+  const a=new THREE.PointLight(0xff3d8b,90,40);a.position.set(-5,4,6);const b=new THREE.PointLight(0x33e0d6,90,40);b.position.set(5,-3,6);s.add(a,b);return [a,b]}
+stage(document.getElementById('c3d'),s=>{
+  const L=lights(s),g=new THREE.Group();s.add(g);
+  const rings=[[2.9,.07,0xff3d8b,.5],[3.3,.05,0x33e0d6,1.1],[3.7,.04,0xff7a6b,-.7]].map(([R,t,c,tl])=>{
+    const k=new THREE.Mesh(new THREE.TorusGeometry(R,t,24,160),metal(c));k.rotation.x=Math.PI/2+tl*.5;k.rotation.y=tl;g.add(k);return k});
+  const orbs=[0xff3d8b,0x33e0d6,0xffd24d,0xff7a6b].map((c,i)=>{const o=new THREE.Mesh(new THREE.SphereGeometry(.22+i*.05,32,32),metal(c));g.add(o);return o});
+  const N=240,pos=new Float32Array(N*3);
+  for(let i=0;i<N;i++){const a=Math.random()*6.28,r=3.3+Math.random()*2.4;pos[i*3]=Math.cos(a)*r;pos[i*3+1]=(Math.random()-.5)*6;pos[i*3+2]=Math.sin(a)*r*.6-1}
+  const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const pts=new THREE.Points(pg,new THREE.PointsMaterial({size:.05,color:0xffffff,transparent:true,opacity:.7}));s.add(pts);
+  window.__hue=(a,b)=>{L[0].color.set(a);L[1].color.set(b);rings[0].material.color.set(a);rings[1].material.color.set(b);orbs[0].material.color.set(a);orbs[1].material.color.set(b)};
+  window.__hue(getComputedStyle(document.documentElement).getPropertyValue('--hue').trim()||'#ff3d8b',getComputedStyle(document.documentElement).getPropertyValue('--hue2').trim()||'#33e0d6');
+  return t=>{g.rotation.y=t*.18+m.x*.9;g.rotation.x=m.y*.6;rings.forEach((k,i)=>k.rotation.z=t*(.2+i*.12));
+    orbs.forEach((o,i)=>{const a=t*(.5+i*.15)+i*1.6,R=2.9+i*.25;o.position.set(Math.cos(a)*R,Math.sin(a*1.3)*1.1,Math.sin(a)*R)});pts.rotation.y=t*.03}
+});
+stage(document.getElementById('coin'),s=>{
+  lights(s);
+  const tex=new THREE.TextureLoader().load('assets/genesis-logo.png');tex.colorSpace=THREE.SRGBColorSpace;
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(2,2,.36,96),new THREE.MeshStandardMaterial({color:0x1a1030,metalness:.8,roughness:.3}));body.rotation.x=Math.PI/2;
+  const mt=new THREE.MeshBasicMaterial({map:tex,transparent:true}),f=new THREE.Mesh(new THREE.PlaneGeometry(2.1,2.24),mt);f.position.z=.19;
+  const b=new THREE.Mesh(new THREE.PlaneGeometry(2.1,2.24),mt);b.position.z=-.19;b.rotation.y=Math.PI;
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(2,.09,24,128),metal(0xff3d8b));
+  const g=new THREE.Group();g.add(body,f,b,rim);s.add(g);
+  return t=>{g.rotation.y=Math.sin(t*.6)*.9+m.x*1.2;g.rotation.x=m.y*.6;g.position.y=Math.sin(t*1.2)*.12}
+});
+</script>
+</body>
+</html>
