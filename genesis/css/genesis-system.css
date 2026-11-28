@@ -3229,3 +3229,16 @@ input::placeholder,textarea::placeholder{color:var(--g-quiet)!important;opacity:
 .g-skip,.g-skip:focus{color:var(--g-on-action)!important}
 .ux-steps li.now .ux-num{color:var(--g-on-action)!important}
 .env-cat{background:rgba(12,12,14,.72)!important}
+
+/* KEY LIGHT (spec §11): a static warm radial behind the preview, opacity-animated, outside the video canvas (never in recorded frames).
+   Recording: fixed semantic red tally frame, always with the visible "REC" label. Off for reduced motion and when the quality governor is shedding load. */
+.preview-area{position:relative}
+.preview-area::before{content:"";position:absolute;inset:-6% -4%;z-index:0;pointer-events:none;border-radius:32px;opacity:0;
+ background:radial-gradient(60% 55% at 50% 50%,rgba(214,173,112,.20),transparent 72%);transition:opacity .6s ease}
+.preview-area:has(#previewFrame[data-key="ready"])::before{opacity:1}
+.preview-area .preview-frame{position:relative;z-index:1}
+#previewFrame[data-key="ready"]{box-shadow:0 0 0 1px rgba(214,173,112,.55)}
+.preview-area:has(.rec-indicator.live) .preview-frame{box-shadow:0 0 0 2px #E5484D;transition:box-shadow .12s}
+.preview-area:has(.rec-indicator.live)::before{opacity:0}
+@media (prefers-reduced-motion:reduce){.preview-area::before{transition:none}.preview-area:has(.rec-indicator.live) .preview-frame{transition:none}}
+:root[data-quality-shed] .preview-area::before{display:none}

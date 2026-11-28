@@ -1338,6 +1338,7 @@
     const el = document.getElementById('comingSoonTag'); if (!el) return;
     const cfg = (window.VS && window.VS.config) || {};
     el.hidden = !(on && cfg.comingSoonTag !== false);
+    const pf = document.getElementById('previewFrame'); if (pf) pf.dataset.key = on ? 'ready' : 'asleep'; /* Key Light: set when a stream is attached */
   }
   function stopCamera() {
     setComingSoonTag(false);
