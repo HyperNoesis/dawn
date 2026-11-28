@@ -1,0 +1,13 @@
+/* Pre-launch teaser tag — cinematic, quiet, sits over the live picture (never inside the recorded canvas). */
+.pl-tag{position:absolute;inset:0;z-index:12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  pointer-events:none;opacity:0;visibility:hidden;text-align:center;color:#F4F0E8;
+  background:radial-gradient(ellipse at center,rgba(15,17,20,.10) 0%,rgba(15,17,20,.55) 70%,rgba(15,17,20,.78) 100%);
+  transition:opacity .45s ease,visibility 0s linear .45s}
+.pl-tag.on{opacity:1;visibility:visible;transition:opacity .45s ease}
+.pl-kicker{font-size:11px;letter-spacing:.42em;text-indent:.42em;font-weight:600;color:#D6AD70}
+.pl-title{font-family:"Space Grotesk",Inter,system-ui,sans-serif;font-weight:700;font-size:clamp(26px,6.2vw,56px);letter-spacing:.22em;text-indent:.22em;line-height:1.05;
+  text-shadow:0 2px 24px rgba(0,0,0,.65)}
+.pl-line{display:block;width:clamp(72px,18vw,180px);height:2px;background:linear-gradient(90deg,transparent,#D6AD70,transparent)}
+.pl-tag.pulse .pl-title{animation:plPulse .6s ease}
+@keyframes plPulse{0%{transform:scale(1)}40%{transform:scale(1.04)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.pl-tag,.pl-tag.on{transition:none}.pl-tag.pulse .pl-title{animation:none}}

@@ -4,7 +4,8 @@
    Contrast for each pair below was computed (WCAG 2.x) — see docs/ATELIER_PASS1.md. */
 
 /* ---- Atelier · dark ---- */
-:root[data-theme="dark"][data-style="atelier"]{
+:root[data-theme="dark"][data-style="atelier"],
+:root:not([data-style]){
   --g-canvas:#0F1114; --g-shell:#191C20; --g-panel:#23272B; --g-raised:#282D33; --g-hover:#30363D;
   --g-border:#363B41;
   --g-text:#F4F0E8; --g-muted:#B9B3A9; --g-quiet:#A69F95;

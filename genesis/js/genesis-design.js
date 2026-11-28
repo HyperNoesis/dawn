@@ -1,11 +1,12 @@
 /* Genesis Appearance Studio — persistent, user-controlled themes */
 (()=>{'use strict';
  const root=document.documentElement, KEY='genesis.appearance.v1';
- const defaults={mode:'system',accent:'violet',style:'atelier',density:'creator'};
+ const defaults={mode:'system',accent:'amber',style:'atelier',density:'creator'};
  let state={...defaults};
  try{state={...defaults,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{}
  if(!['system','dark','light'].includes(state.mode))state.mode=defaults.mode;
  if(!['violet','cyan','blue','rose','emerald','amber'].includes(state.accent))state.accent=defaults.accent;
+ try{if(!localStorage.getItem('genesis.atelier.v2')){localStorage.setItem('genesis.atelier.v2','1');if(state.accent==='violet'){state.accent='amber';localStorage.setItem(KEY,JSON.stringify(state))}}}catch{}   // Atelier is warm: the old default violet is moved to amber once; choosing violet again afterwards sticks
  if(!['atelier','obsidian','graphite','daylight'].includes(state.style))state.style=defaults.style;
  if(!['beginner','creator','professional'].includes(state.density))state.density=defaults.density;
  const systemDark=()=>window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -17,7 +18,7 @@
    const shell=document.getElementById('studioShell');if(shell)shell.dataset.density=state.density;
    root.style.colorScheme=dark?'dark':'light';
    const meta=document.querySelector('meta[name="theme-color"]');
-   if(meta)meta.content=dark?'#0B0E14':'#F5F7FB';
+   if(meta)meta.content=state.style==='atelier'?(dark?'#0F1114':'#F6F2EA'):(dark?'#0B0E14':'#F5F7FB');
  }
  function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{}apply();renderChoices()}
  function renderChoices(){

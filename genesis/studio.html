@@ -16,14 +16,14 @@
 
 <link rel="stylesheet" href="css/genesis-system.css">
 <link rel="stylesheet" href="css/atelier-tokens.css">
-<link rel="stylesheet" href="css/atelier-studio.css">
+<script>(function(){try{var d=document.documentElement,s={};try{s=JSON.parse(localStorage.getItem('genesis.appearance.v1')||'{}')}catch(e){}var m=s.mode||'system',k=m==='system'?(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches):m==='dark',a=s.accent;if(!a||(a==='violet'&&!localStorage.getItem('genesis.atelier.v2')))a='amber';d.dataset.theme=k?'dark':'light';d.dataset.style=s.style||'atelier';d.dataset.accent=a;d.dataset.density=s.density||'creator';d.style.colorScheme=k?'dark':'light'}catch(e){}})()</script>
+<link rel="stylesheet" href="css/prelaunch.css">
 <style>#overlayTitle:empty,#overlaySub:empty{display:none}</style>
 </head>
 <body>
   <div id="nav-root"></div>
   <a class="skip-link" href="#previewFrame">Skip to preview</a>
-  <div class="studio-shell" id="studioShell" data-fu="asleep">
-  <script>setTimeout(function(){if(!window.__fuReady){var e=document.getElementById("studioShell");if(e)e.setAttribute("data-fu","awake");}},4000);</script>
+  <div class="studio-shell" id="studioShell">
     <h1 class="sr-only">Genesis Studio</h1>
     <div class="studio-topbar">
       <a href="home.html" class="back-home" id="backHomeLink"><span id="backHomeIcon"></span><span>Home</span></a>
@@ -934,7 +934,7 @@
   <script src="js/seg-presets.js"></script>
   <script src="js/seg-diagnostics.js"></script>
   <script src="js/stage-calm.js"></script>
-  <script src="js/studio-firstuse.js"></script>
+  <script src="js/prelaunch.js"></script>
   <script src="js/camera-bridge-client.js"></script>
 <script src="js/genesis-design.js"></script>
 </body>
