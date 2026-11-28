@@ -6,7 +6,7 @@
 <title>Genesis, a virtual studio in your browser</title>
 <meta name="description" content="Pick a room, see yourself in it, and record. Free to try, nothing to install.">
 <meta name="theme-color" content="#0F1114">
-<link rel="icon" href="assets/genesis-logo.png"><link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/genesis-logo-atelier.png"><link rel="manifest" href="manifest.json">
 <link rel="preload" href="assets/fonts/SpaceGrotesk-Variable.woff2" as="font" type="font/woff2" crossorigin>
 <style>:root{--ink:#0F1114;--ink2:#191C20;--panel:#23272B;--line:rgba(244,240,232,.13);--txt:#F4F0E8;--mut:#B9B3A9;
 --key:#D6AD70;--on-key:#17130D;--hue:#D6AD70;--hue2:#8A5A3C;
@@ -44,8 +44,8 @@ h1 .o{color:var(--key)}
 .stage{position:relative;max-width:470px;margin-inline:auto;width:100%}
 .stage canvas{position:absolute;left:-28%;top:-12%;width:156%;height:124%;z-index:0;pointer-events:none}
 .frame{position:relative;z-index:1;border-radius:240px 240px 28px 28px;overflow:hidden;aspect-ratio:3/4;border:1px solid rgba(244,240,232,.2);box-shadow:0 40px 90px -30px rgba(214,173,112,.35),0 0 0 10px rgba(244,240,232,.03)}
-.frame img{width:100%;height:100%;object-fit:cover;object-position:50% 30%}
-.frame::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(15,17,20,.75));mix-blend-mode:multiply}
+.frame img{width:100%;height:100%;object-fit:cover;object-position:50% 30%;filter:sepia(.55) saturate(.8) hue-rotate(-12deg) contrast(1.03) brightness(.96)}
+.frame::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(214,173,112,.10),transparent 30%),linear-gradient(180deg,transparent 55%,rgba(15,17,20,.78))}
 .rec{position:absolute;top:22px;left:50%;transform:translateX(-50%);z-index:3;display:flex;gap:8px;align-items:center;padding:7px 14px;border-radius:999px;background:rgba(15,17,20,.66);backdrop-filter:blur(8px);border:1px solid var(--line);font:600 13px var(--b)}
 .rec b{width:9px;height:9px;border-radius:50%;background:var(--key);box-shadow:0 0 10px rgba(214,173,112,.6);animation:bl 2.4s infinite}
 @keyframes bl{50%{opacity:.25}}
@@ -104,7 +104,7 @@ footer nav{display:flex;gap:22px}footer a{text-decoration:none}footer a:hover{co
 </head>
 <body>
 <header class="top"><div class="w">
-<a class="brand" href="landing.html" aria-label="Genesis home"><img src="assets/genesis-logo.png" alt="">Genesis</a>
+<a class="brand" href="landing.html" aria-label="Genesis home"><img src="assets/genesis-logo-atelier.png" alt="">Genesis</a>
 <nav class="nav" aria-label="Page"><a href="#how">How it works</a><a href="#rooms">Rooms</a><a href="#privacy">Privacy</a><a href="#pilot">Join the pilot</a></nav>
 <div class="act"><a class="btn btn-g" href="auth.html">Sign in</a><a class="btn btn-p" href="studio.html?guest=1">Open Studio</a></div>
 </div></header>
@@ -179,7 +179,7 @@ footer nav{display:flex;gap:22px}footer a{text-decoration:none}footer a:hover{co
 </div></section>
 </main>
 
-<footer><div class="w"><a class="brand" href="landing.html"><img src="assets/genesis-logo.png" alt="">Genesis</a><nav aria-label="Footer"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="auth.html">Sign in</a></nav><span>Genesis by Rejuvini</span></div></footer>
+<footer><div class="w"><a class="brand" href="landing.html"><img src="assets/genesis-logo-atelier.png" alt="">Genesis</a><nav aria-label="Footer"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="auth.html">Sign in</a></nav><span>Genesis by Rejuvini</span></div></footer>
 
 <script>
 var R=[
@@ -241,7 +241,7 @@ stage(document.getElementById('c3d'),s=>{
 });
 stage(document.getElementById('coin'),s=>{
   lights(s);
-  const tex=new THREE.TextureLoader().load('assets/genesis-logo.png');tex.colorSpace=THREE.SRGBColorSpace;
+  const tex=new THREE.TextureLoader().load('assets/genesis-logo-atelier.png');tex.colorSpace=THREE.SRGBColorSpace;
   const body=new THREE.Mesh(new THREE.CylinderGeometry(2,2,.36,96),new THREE.MeshStandardMaterial({color:0x191C20,metalness:.8,roughness:.3}));body.rotation.x=Math.PI/2;
   const mt=new THREE.MeshBasicMaterial({map:tex,transparent:true}),f=new THREE.Mesh(new THREE.PlaneGeometry(2.1,2.24),mt);f.position.z=.19;
   const b=new THREE.Mesh(new THREE.PlaneGeometry(2.1,2.24),mt);b.position.z=-.19;b.rotation.y=Math.PI;
