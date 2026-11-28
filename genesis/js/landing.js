@@ -56,10 +56,9 @@
       const build = () => {
         dlg = document.createElement('dialog'); dlg.id = 'lpSoon'; dlg.setAttribute('aria-labelledby', 'lpSoonT');
         dlg.style.cssText = 'border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:30px 26px;max-width:340px;width:calc(100% - 40px);background:#12151f;color:#fff;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.55)';
-        dlg.innerHTML = '<h2 id="lpSoonT" style="margin:0 0 8px;font-size:26px">Coming soon</h2><p style="margin:0 0 20px;opacity:.75">The studio opens very soon. Be first in.</p><div style="display:grid;gap:10px"><a class="g-btn g-btn--primary" href="#pilot" id="lpSoonJoin">Join the early list</a><button type="button" class="g-btn g-btn--secondary" id="lpSoonClose">Close</button></div>';
+        dlg.innerHTML = '<h2 id="lpSoonT" style="margin:0 0 8px;font-size:26px">Coming soon</h2><div style="display:grid;gap:10px;margin-top:18px"><button type="button" class="g-btn g-btn--primary" id="lpSoonClose">Close</button></div>';
         document.body.appendChild(dlg);
         dlg.querySelector('#lpSoonClose').addEventListener('click', () => dlg.close());
-        dlg.querySelector('#lpSoonJoin').addEventListener('click', () => dlg.close());
         dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
       };
       document.addEventListener('click', (e) => {

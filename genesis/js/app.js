@@ -1017,7 +1017,7 @@
 
     localStorage.setItem('vs_seen_camera_explainer', '1');
     if (window.__vsT) { window.__vsT.camStart = performance.now(); window.__vsT.cameraVisible = 0; window.__vsT.cutoutVisible = 0; }
-    showOverlay('preparing', { message: 'Preparing your studio...' });
+    showOverlay('preparing', { message: 'Starting\u2026' });
     setCanvasSize(quality);
 
     // v0.13: ask for 30 fps explicitly. A phone report showed 9 fps with only 39 ms of work per frame: the camera itself was
